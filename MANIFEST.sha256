@@ -20,7 +20,7 @@ b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/pac
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
 a88cd7e5e382695f8ed061b4b7fc466130a5a0b545affec751975147f0df78a8  ./apps/web/src/api.ts
 55e7e5641372537674488911520a519c9a6f957e30f915d3c0651cb91523d586  ./apps/web/src/app.tsx
-973d3741637f907db226ebad9dfb8afcf9e0aed33a0409ba053b1b6630a08258  ./apps/web/src/components/layout.tsx
+8a80f1b197870c08781b14d6ee6c624fd916bf120c6cd6ab08b544192b43f41e  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
@@ -31,7 +31,7 @@ fe5acd1e584f66388dd3d95f2471a8067621d8895f78ef563a2b507a9d5a9d2d  ./apps/web/src
 f629b227e2d85d5130553bd07f15032451a1b0eef380e602c42073204beccfbc  ./apps/web/src/pages/operations.tsx
 dd8359908113841b26a056e5409f293b7c134eaf288c018a47d4424219b99133  ./apps/web/src/pages/providers.tsx
 7a91e78375783ed1c961078c78c12f3eceabc382c6537da5484795da7358fc90  ./apps/web/src/pages/settings.tsx
-1aea3f35331f58bbd9d0e33eac03b1d88f93b0a8e22402fd4405f646660c122d  ./apps/web/src/styles.css
+5830169fda729ed575645bd7dd6b9d9ee1385a3a497771d76d7c398d79595055  ./apps/web/src/styles.css
 53fee6a96fb76fca823f68daf0259e2b4efa539ca1cde367a37802d5399470a3  ./apps/web/tests/api.test.ts
 2de3927eeddf59433f1aed40f474eefacadca0c22ab3252df70264387e7788ff  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
@@ -41,7 +41,7 @@ a6bef364ffb75c3758c569e02e1962c61e3d03e7bf33c0fe7f8d9ae0c12ddf1a  ./apps/web/tes
 2df8d574801a176559d6c13b93bd9395dea4c181bc97be89e9b77856d8417a74  ./apps/web/tests/providers.test.tsx
 d9b596054ded66f36e4a0352294ac01353c68fb57c114640699987034c46f25e  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
-051887038a68330b4e809bdf36b7e57460a50c5afefeab977dea6f0d51e46276  ./apps/web/tests/visual/current-mvp.mjs
+09916aec99f972cca2d1d668dc916781bdd6e6ae1eb1b43501b2980a92b1109c  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml

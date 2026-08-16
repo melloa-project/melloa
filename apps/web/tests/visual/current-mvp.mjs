@@ -66,8 +66,18 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
     path: `${outputDirectory}/providers-mobile.png`,
-    fullPage: true,
   });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const providerFootnoteBox = await page.locator(".page-footnote").boundingBox();
+  const mobileNavBox = await page.locator(".mobile-nav").boundingBox();
+  if (
+    providerFootnoteBox === null ||
+    mobileNavBox === null ||
+    providerFootnoteBox.y + providerFootnoteBox.height > mobileNavBox.y - 8
+  ) {
+    throw new Error("Provider mobile content does not clear the bottom navigation");
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("heading", { name: "Settings" }).waitFor();
@@ -76,7 +86,6 @@ try {
   await telegramCard.evaluate((element) => element.scrollIntoView({ block: "start" }));
   await page.screenshot({
     path: `${outputDirectory}/settings-mobile.png`,
-    fullPage: true,
   });
 
   await page.setViewportSize({ width: 1440, height: 1100 });

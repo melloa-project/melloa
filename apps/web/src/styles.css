@@ -590,7 +590,7 @@ pre {
 
 .authority-bar {
   align-items: center;
-  background: rgb(255 255 255 / 94%);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   height: 60px;
@@ -1430,6 +1430,7 @@ pre {
 .operations-panel,
 .telegram-card {
   padding: 20px;
+  scroll-margin-top: 74px;
 }
 
 .activity-list {
@@ -2952,11 +2953,19 @@ pre {
   }
 
   .page-shell {
+    height: auto;
+    min-height: calc(100svh - 58px);
+    overflow: visible;
+  }
+
+  .page-shell-conversation {
     height: calc(100svh - 124px);
+    min-height: 0;
+    overflow: hidden;
   }
 
   .standard-page {
-    padding: 22px 17px 38px;
+    padding: 22px 17px calc(104px + env(safe-area-inset-bottom));
   }
 
   .section-header {

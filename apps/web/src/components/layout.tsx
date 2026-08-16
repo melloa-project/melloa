@@ -45,6 +45,9 @@ export function AppLayout() {
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthenticating, setReauthenticating] = useState(false);
   const page = navigation.find((item) => location.pathname.startsWith(item.to));
+  const pageShellClassName = page?.to === "/conversation"
+    ? "page-shell page-shell-conversation"
+    : "page-shell page-shell-standard";
 
   async function reauthenticate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -136,7 +139,7 @@ export function AppLayout() {
           </div>
         </header>
 
-        <main className="page-shell"><Outlet /></main>
+        <main className={pageShellClassName}><Outlet /></main>
       </div>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
