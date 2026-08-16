@@ -2006,6 +2006,51 @@ pre {
   margin-bottom: 14px;
 }
 
+.export-summary-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.export-capability-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.export-capability-grid > div,
+.export-command-grid > div {
+  background: var(--surface-soft);
+  border: 1px solid #edf0ed;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.export-capability-grid span,
+.export-command-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.66rem;
+  margin-bottom: 5px;
+}
+
+.export-capability-grid strong {
+  font-size: 0.78rem;
+}
+
+.export-command-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.export-command-grid code {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .tab-list {
   align-items: center;
   border-bottom: 1px solid var(--border);
@@ -2055,6 +2100,47 @@ pre {
 
 .component-row:last-child {
   border-bottom: 0;
+}
+
+.export-coverage-list {
+  margin-top: 16px;
+}
+
+.export-coverage-row {
+  align-items: center;
+  border-bottom: 1px solid #edf0ed;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  min-height: 74px;
+  padding: 11px 1px;
+}
+
+.export-coverage-row:last-child {
+  border-bottom: 0;
+}
+
+.export-coverage-row > div {
+  min-width: 0;
+}
+
+.export-coverage-row strong {
+  font-size: 0.75rem;
+}
+
+.export-coverage-row p {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.export-coverage-row code {
+  color: var(--ink-soft);
+  display: block;
+  font-size: 0.62rem;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
 }
 
 .component-state {
@@ -3088,6 +3174,19 @@ pre {
 
   .component-row > .badge:last-child {
     display: none;
+  }
+
+  .export-capability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .export-coverage-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .export-coverage-row > .badge {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .inventory-row {

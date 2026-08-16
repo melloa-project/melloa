@@ -190,6 +190,59 @@ class OwnerMediaCatalog(ContractModel):
         return self
 
 
+class ExportCoverageItem(ContractModel):
+    group_id: QualifiedName
+    included: bool
+    artifact_path: str | None = Field(default=None, min_length=1, max_length=256)
+    summary: str = Field(min_length=1, max_length=512)
+    status_reason: QualifiedName
+
+    @model_validator(mode="after")
+    def validate_item(self) -> ExportCoverageItem:
+        if self.artifact_path is None:
+            return self
+        if self.artifact_path.startswith("/") or ".." in self.artifact_path.split("/"):
+            raise ValueError("export artifact paths must be relative and contained")
+        return self
+
+
+class OwnerExportReadinessReport(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    owner_id: RecordId
+    generated_at: AwareDatetime
+    format_id: QualifiedName = "melloa.canonical-owner-export"
+    cli_command: str = Field(min_length=1, max_length=512)
+    validation_command: str = Field(min_length=1, max_length=256)
+    encrypted: bool
+    includes_sql_snapshot: bool
+    includes_blobs: bool
+    coverage: tuple[ExportCoverageItem, ...] = Field(min_length=1)
+    limitations: tuple[QualifiedName, ...]
+
+    @model_validator(mode="after")
+    def validate_report(self) -> OwnerExportReadinessReport:
+        group_ids = tuple(item.group_id for item in self.coverage)
+        if len(set(group_ids)) != len(group_ids):
+            raise ValueError("export coverage groups must be unique")
+        if self.coverage != tuple(sorted(self.coverage, key=lambda item: item.group_id)):
+            raise ValueError("export coverage must use deterministic group order")
+        if not any(item.included for item in self.coverage):
+            raise ValueError("export readiness must include at least one covered group")
+        if len(set(self.limitations)) != len(self.limitations):
+            raise ValueError("export limitations must be unique")
+        if self.limitations != tuple(sorted(self.limitations)):
+            raise ValueError("export limitations must use deterministic order")
+        if not self.encrypted and "export.preview-unencrypted" not in self.limitations:
+            raise ValueError("unencrypted exports must disclose the preview limitation")
+        if not self.includes_sql_snapshot and (
+            "export.sql-snapshot-not-included" not in self.limitations
+        ):
+            raise ValueError("exports without SQL snapshots must disclose that limitation")
+        if not self.includes_blobs and "export.blobs-not-included" not in self.limitations:
+            raise ValueError("exports without blobs must disclose that limitation")
+        return self
+
+
 def aggregate_health_state(components: tuple[ComponentHealth, ...]) -> HealthState:
     if any(
         component.required and component.state is HealthState.UNAVAILABLE

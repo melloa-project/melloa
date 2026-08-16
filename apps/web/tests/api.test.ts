@@ -101,16 +101,18 @@ describe("MelloaApi", () => {
     await api.healthDetail();
     await api.mediaCatalog();
     await api.retentionReport();
+    await api.exportReadiness();
     await api.modelActivity(new Date("2026-08-10T00:00:00Z"), new Date("2026-08-17T00:00:00Z"));
 
-    expect(requested.slice(0, 4)).toEqual([
+    expect(requested.slice(0, 5)).toEqual([
       "/api/v1/providers/routes",
       "/api/v1/inspection/health",
       "/api/v1/inspection/media",
       "/api/v1/retention",
+      "/api/v1/inspection/export",
     ]);
-    expect(requested[4]).toContain("from=2026-08-10T00%3A00%3A00.000Z");
-    expect(requested[4]).toContain("to=2026-08-17T00%3A00%3A00.000Z");
+    expect(requested[5]).toContain("from=2026-08-10T00%3A00%3A00.000Z");
+    expect(requested[5]).toContain("to=2026-08-17T00%3A00%3A00.000Z");
   });
 
   it("deletes assertion content through a CSRF-bound memory route", async () => {

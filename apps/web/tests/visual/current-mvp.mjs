@@ -63,7 +63,24 @@ try {
     path: `${outputDirectory}/providers-desktop.png`,
     fullPage: true,
   });
+
+  await page.getByRole("link", { name: "Operations" }).click();
+  await page.getByRole("heading", { name: "Operations" }).waitFor();
+  await page.getByRole("tab", { name: "Export" }).click();
+  await page.getByText("melloa.canonical-owner-export", { exact: true }).waitFor();
+  await page.getByText("Unencrypted preview", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/operations-export-desktop.png`,
+    fullPage: true,
+  });
+
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: `${outputDirectory}/operations-export-mobile.png`,
+  });
+
+  await page.getByRole("link", { name: "Providers" }).click();
+  await page.getByRole("heading", { name: "Providers" }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/providers-mobile.png`,
   });

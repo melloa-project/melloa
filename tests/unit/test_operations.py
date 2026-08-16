@@ -23,6 +23,7 @@ from melloa.domain.operations import (
     MediaRetentionState,
     MediaSourceStatus,
     MissingMediaInterval,
+    OwnerExportReadinessReport,
     OwnerHealthReport,
     OwnerMediaCatalog,
     aggregate_health_state,
@@ -233,6 +234,72 @@ def test_health_and_media_contracts_reject_inconsistent_metadata(fixed_time) -> 
         )
 
 
+def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None:
+    report = OwnerExportReadinessReport(
+        owner_id=record_id("owner", 1),
+        generated_at=fixed_time,
+        cli_command="melloa export-mvp --output-dir <export-dir>",
+        validation_command="melloa import-validate --bundle-dir <export-dir>",
+        encrypted=False,
+        includes_sql_snapshot=False,
+        includes_blobs=False,
+        coverage=(
+            {
+                "group_id": "export.conversation-records",
+                "included": True,
+                "artifact_path": "conversations/*.jsonl",
+                "summary": "Canonical conversation records.",
+                "status_reason": "export.coverage.conversation-jsonl",
+            },
+        ),
+        limitations=(
+            "export.blobs-not-included",
+            "export.preview-unencrypted",
+            "export.sql-snapshot-not-included",
+        ),
+    )
+    assert report.format_id == "melloa.canonical-owner-export"
+
+    with pytest.raises(ValidationError, match="relative and contained"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "coverage": (
+                    {
+                        **report.coverage[0].model_dump(),
+                        "artifact_path": "../secret",
+                    },
+                ),
+            }
+        )
+    with pytest.raises(ValidationError, match="preview limitation"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "limitations": (
+                    "export.blobs-not-included",
+                    "export.sql-snapshot-not-included",
+                ),
+            }
+        )
+    with pytest.raises(ValidationError, match="deterministic group order"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "coverage": (
+                    {
+                        "group_id": "export.model-activity",
+                        "included": True,
+                        "artifact_path": "inspection/model-activity.jsonl",
+                        "summary": "Model activity evidence.",
+                        "status_reason": "export.coverage.model-activity",
+                    },
+                    report.coverage[0].model_dump(),
+                ),
+            }
+        )
+
+
 def test_health_aggregation_distinguishes_required_optional_and_disabled(fixed_time) -> None:
     unavailable = _component(fixed_time).model_copy(
         update={"state": HealthState.UNAVAILABLE}
@@ -276,10 +343,18 @@ def test_owner_operations_service_sorts_and_scopes_reports(fixed_time) -> None:
     assert media.capture_enabled is True
     assert media.content_endpoint_available is False
     assert media.items[0].disclosure_record_ids == (record_id("disclosure", 1),)
+    export = service.export_readiness(_principal(fixed_time))
+    assert export.encrypted is False
+    assert export.includes_sql_snapshot is False
+    assert export.includes_blobs is False
+    assert export.coverage[0].group_id == "export.assertion-inspections"
+    assert "export.preview-unencrypted" in export.limitations
     assert reader.media_sources(record_id("owner", 2)) == ()
     assert reader.media_items(record_id("owner", 2)) == ()
     with pytest.raises(InspectionOwnershipError):
         service.health(_principal(fixed_time, 2))
+    with pytest.raises(InspectionOwnershipError):
+        service.export_readiness(_principal(fixed_time, 2))
     with pytest.raises(ValueError, match="another owner's records"):
         InMemoryOperationsReader(
             record_id("owner", 2),
@@ -313,14 +388,19 @@ def test_operational_inspection_api_is_authenticated_and_fail_closed(fixed_time)
 
     health_endpoint = "/api/v1/inspection/health"
     media_endpoint = "/api/v1/inspection/media"
+    export_endpoint = "/api/v1/inspection/export"
     assert client.get(health_endpoint).status_code == 401
     assert client.get(media_endpoint).status_code == 401
+    assert client.get(export_endpoint).status_code == 401
     assert client.post(
         "/api/v1/auth/session",
         json={"credential": _BOOTSTRAP_TOKEN},
     ).status_code == 200
     assert client.get(health_endpoint).json()["overall_state"] == "healthy"
     assert client.get(media_endpoint).json()["items"][0]["media_id"] == record_id("media", 1)
+    export_payload = client.get(export_endpoint).json()
+    assert export_payload["encrypted"] is False
+    assert export_payload["coverage"][0]["group_id"] == "export.assertion-inspections"
 
     absent = TestClient(
         create_app(_guardian(fixed_time), sessions),
@@ -329,6 +409,7 @@ def test_operational_inspection_api_is_authenticated_and_fail_closed(fixed_time)
     absent.cookies.update(client.cookies)
     unavailable = absent.get(health_endpoint)
     assert unavailable.status_code == 503
+    assert absent.get(export_endpoint).status_code == 503
     assert unavailable.json()["detail"] == (
         "Owner health and media inspection are not configured."
     )
@@ -347,3 +428,4 @@ def test_operational_inspection_api_is_authenticated_and_fail_closed(fixed_time)
     )
     concealed.cookies.update(client.cookies)
     assert concealed.get(media_endpoint).status_code == 404
+    assert concealed.get(export_endpoint).status_code == 404

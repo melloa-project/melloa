@@ -75,7 +75,11 @@ from melloa.domain.memory import (
     MemoryInspection,
 )
 from melloa.domain.models import OwnerModelRouteReport
-from melloa.domain.operations import OwnerHealthReport, OwnerMediaCatalog
+from melloa.domain.operations import (
+    OwnerExportReadinessReport,
+    OwnerHealthReport,
+    OwnerMediaCatalog,
+)
 from melloa.domain.retention import OwnerRetentionReport
 from melloa.domain.telegram import (
     TelegramChatId,
@@ -1293,6 +1297,16 @@ def create_app(
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
     ) -> OwnerMediaCatalog:
         return _configured_operations(request).media(principal)
+
+    @app.get(
+        "/api/v1/inspection/export",
+        response_model=OwnerExportReadinessReport,
+    )
+    async def inspect_export_readiness(
+        request: Request,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+    ) -> OwnerExportReadinessReport:
+        return _configured_operations(request).export_readiness(principal)
 
     @app.get(
         "/api/v1/retention",

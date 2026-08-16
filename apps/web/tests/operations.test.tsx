@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   healthDetail: vi.fn(),
   mediaCatalog: vi.fn(),
   retentionReport: vi.fn(),
+  exportReadiness: vi.fn(),
 }));
 
 vi.mock("../src/app", () => ({
@@ -16,6 +17,7 @@ vi.mock("../src/app", () => ({
       healthDetail: mocks.healthDetail,
       mediaCatalog: mocks.mediaCatalog,
       retentionReport: mocks.retentionReport,
+      exportReadiness: mocks.exportReadiness,
     },
   }),
 }));
@@ -74,6 +76,38 @@ describe("OperationsPage retention view", () => {
         },
       ],
     });
+    mocks.exportReadiness.mockResolvedValue({
+      contract_version: "1.0.0",
+      owner_id: "owner_01",
+      generated_at: "2026-08-16T12:00:00Z",
+      format_id: "melloa.canonical-owner-export",
+      cli_command: "melloa export-mvp --output-dir <export-dir>",
+      validation_command: "melloa import-validate --bundle-dir <export-dir>",
+      encrypted: false,
+      includes_sql_snapshot: false,
+      includes_blobs: false,
+      coverage: [
+        {
+          group_id: "export.conversation-records",
+          included: true,
+          artifact_path: "conversations/*.jsonl",
+          summary: "Canonical conversation records.",
+          status_reason: "export.coverage.conversation-jsonl",
+        },
+        {
+          group_id: "export.logical-sql",
+          included: false,
+          artifact_path: null,
+          summary: "Logical SQL snapshots remain pending.",
+          status_reason: "export.coverage.sql-snapshot-not-included",
+        },
+      ],
+      limitations: [
+        "export.blobs-not-included",
+        "export.preview-unencrypted",
+        "export.sql-snapshot-not-included",
+      ],
+    });
   });
 
   it("renders canonical retention bytes and deletion receipt evidence", async () => {
@@ -87,5 +121,19 @@ describe("OperationsPage retention view", () => {
     expect(within(retention).getByText("Deletion receipts")).toBeInTheDocument();
     expect(within(retention).getByText("Owner Request")).toBeInTheDocument();
     expect(within(retention).getByText("Oldest retained")).toBeInTheDocument();
+  });
+
+  it("renders export coverage and validation commands without claiming backup coverage", async () => {
+    render(<OperationsPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
+
+    const commands = screen.getByLabelText("Export commands");
+    expect(within(commands).getByText("melloa export-mvp --output-dir <export-dir>")).toBeInTheDocument();
+    expect(within(commands).getByText("melloa import-validate --bundle-dir <export-dir>")).toBeInTheDocument();
+    expect(screen.getByText("Unencrypted preview")).toBeInTheDocument();
+    expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();
+    expect(screen.getByText("Logical SQL snapshots remain pending.")).toBeInTheDocument();
+    expect(screen.getByText("Excluded")).toBeInTheDocument();
   });
 });

@@ -5,6 +5,8 @@ import {
   CheckCircle2,
   CircleAlert,
   Database,
+  Download,
+  FileCheck2,
   HardDrive,
   RefreshCw,
   ServerCog,
@@ -13,20 +15,31 @@ import {
   WifiOff,
 } from "lucide-react";
 
-import type { OwnerHealthReport, OwnerMediaCatalog, OwnerRetentionReport } from "../api";
+import type {
+  OwnerExportReadinessReport,
+  OwnerHealthReport,
+  OwnerMediaCatalog,
+  OwnerRetentionReport,
+} from "../api";
 import { errorMessage, useMelloa } from "../app";
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Metric, SectionHeader } from "../components/ui";
 import { formatCount, formatInstant, titleCase } from "../lib/format";
 
-type OperationsTab = "health" | "media" | "retention";
+type OperationsTab = "health" | "media" | "retention" | "export";
 
 type OperationsSnapshot = {
   readonly health: OwnerHealthReport | null;
   readonly media: OwnerMediaCatalog | null;
   readonly retention: OwnerRetentionReport | null;
+  readonly exportReadiness: OwnerExportReadinessReport | null;
 };
 
-const emptySnapshot: OperationsSnapshot = { health: null, media: null, retention: null };
+const emptySnapshot: OperationsSnapshot = {
+  health: null,
+  media: null,
+  retention: null,
+  exportReadiness: null,
+};
 
 export function OperationsPage() {
   const { api } = useMelloa();
@@ -37,17 +50,19 @@ export function OperationsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [health, media, retention] = await Promise.allSettled([
+    const [health, media, retention, exportReadiness] = await Promise.allSettled([
       api.healthDetail(),
       api.mediaCatalog(),
       api.retentionReport(),
+      api.exportReadiness(),
     ]);
     setSnapshot({
       health: health.status === "fulfilled" ? health.value : null,
       media: media.status === "fulfilled" ? media.value : null,
       retention: retention.status === "fulfilled" ? retention.value : null,
+      exportReadiness: exportReadiness.status === "fulfilled" ? exportReadiness.value : null,
     });
-    const firstFailure = [health, media, retention].find((result) => result.status === "rejected");
+    const firstFailure = [health, media, retention, exportReadiness].find((result) => result.status === "rejected");
     setError(firstFailure?.status === "rejected" ? errorMessage(firstFailure.reason) : null);
     setLoading(false);
   }, [api]);
@@ -58,6 +73,7 @@ export function OperationsPage() {
 
   const degradedComponents = snapshot.health?.components.filter((component) => component.state !== "healthy" && component.state !== "disabled").length ?? 0;
   const retainedObjects = snapshot.retention?.inventory.reduce((sum, item) => sum + (item.retained_objects ?? 0), 0) ?? 0;
+  const includedExportGroups = snapshot.exportReadiness?.coverage.filter((item) => item.included).length ?? 0;
 
   return (
     <div className="standard-page operations-page">
@@ -75,18 +91,20 @@ export function OperationsPage() {
         <Metric label="Overall health" value={titleCase(snapshot.health?.overall_state ?? "unknown")} detail={`${degradedComponents} degraded components`} />
         <Metric label="Capture" value={snapshot.media?.capture_enabled === true ? "Enabled" : "Disabled"} detail={`${snapshot.media?.items.length ?? 0} metadata records`} />
         <Metric label="Retained objects" value={formatCount(retainedObjects)} detail={`${snapshot.retention?.policies.length ?? 0} explicit policies`} />
-        <Metric label="Public ingress" value="None" detail="Private owner surface only" />
+        <Metric label="Export" value={snapshot.exportReadiness === null ? "Unknown" : "Preview"} detail={`${includedExportGroups} covered record groups`} />
       </section>
 
       <div className="tab-list" role="tablist" aria-label="Operations views">
         <button aria-selected={tab === "health"} className={tab === "health" ? "active" : ""} onClick={() => setTab("health")} role="tab" type="button"><ServerCog size={16} /> Health</button>
         <button aria-selected={tab === "media"} className={tab === "media" ? "active" : ""} onClick={() => setTab("media")} role="tab" type="button"><HardDrive size={16} /> Media & gaps</button>
         <button aria-selected={tab === "retention"} className={tab === "retention" ? "active" : ""} onClick={() => setTab("retention")} role="tab" type="button"><Archive size={16} /> Retention</button>
+        <button aria-selected={tab === "export"} className={tab === "export" ? "active" : ""} onClick={() => setTab("export")} role="tab" type="button"><Download size={16} /> Export</button>
       </div>
 
       {tab === "health" ? <HealthView report={snapshot.health} /> : null}
       {tab === "media" ? <MediaView report={snapshot.media} /> : null}
       {tab === "retention" ? <RetentionView report={snapshot.retention} /> : null}
+      {tab === "export" ? <ExportView report={snapshot.exportReadiness} /> : null}
     </div>
   );
 }
@@ -204,6 +222,59 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
           );
         })}
       </section>
+    </div>
+  );
+}
+
+function ExportView({ report }: { readonly report: OwnerExportReadinessReport | null }) {
+  if (report === null) {
+    return <Card><EmptyState icon={Download} title="Export report unavailable" description="The private core did not return owner export readiness." /></Card>;
+  }
+  return (
+    <div className="operations-stack">
+      <Card className="operations-panel export-summary-panel">
+        <div className="card-heading-row">
+          <div>
+            <h2>Canonical owner export</h2>
+            <p>{report.format_id}</p>
+          </div>
+          <Badge tone={report.encrypted ? "positive" : "warning"}>{report.encrypted ? "Encrypted" : "Unencrypted preview"}</Badge>
+        </div>
+        <div className="export-capability-grid">
+          <div><span>SQL snapshot</span><strong>{report.includes_sql_snapshot ? "Included" : "Not included"}</strong></div>
+          <div><span>Blobs</span><strong>{report.includes_blobs ? "Included" : "Not included"}</strong></div>
+          <div><span>Validation</span><strong>Checksums and schemas</strong></div>
+        </div>
+        <div className="export-command-grid" aria-label="Export commands">
+          <div><span>Export command</span><code>{report.cli_command}</code></div>
+          <div><span>Validation command</span><code>{report.validation_command}</code></div>
+        </div>
+      </Card>
+      <Card className="operations-panel">
+        <div className="card-heading-row"><div><h2>Coverage</h2><p>Included records and explicit gaps stay visible before a bundle is created.</p></div><Badge>{report.coverage.filter((item) => item.included).length} included</Badge></div>
+        <div className="export-coverage-list">
+          {report.coverage.map((item) => (
+            <article className="export-coverage-row" key={item.group_id}>
+              <span className={`component-state ${item.included ? "healthy" : "disabled"}`}>
+                {item.included ? <FileCheck2 size={17} /> : <WifiOff size={17} />}
+              </span>
+              <div>
+                <strong>{titleCase(item.group_id.replace(/^export[.-]/, ""))}</strong>
+                <p>{item.summary}</p>
+                {item.artifact_path === null || item.artifact_path === undefined ? null : (
+                  <code>{item.artifact_path}</code>
+                )}
+              </div>
+              <Badge tone={item.included ? "positive" : "neutral"}>{item.included ? "Included" : "Excluded"}</Badge>
+            </article>
+          ))}
+        </div>
+      </Card>
+      <Card className="backup-disclosure">
+        <span className="summary-icon"><ShieldCheck size={18} /></span>
+        <div><h2>Limitations</h2><p>{report.limitations.map(titleCase).join(" · ")}</p></div>
+        <Badge tone="warning">Preview</Badge>
+      </Card>
     </div>
   );
 }

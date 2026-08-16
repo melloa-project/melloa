@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "ExportCoverageItem": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Path"
+        },
+        "group_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Group Id",
+          "type": "string"
+        },
+        "included": {
+          "title": "Included",
+          "type": "boolean"
+        },
+        "status_reason": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Status Reason",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "included",
+        "summary",
+        "status_reason"
+      ],
+      "title": "ExportCoverageItem",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/owner-export-readiness.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cli_command": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Cli Command",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "coverage": {
+      "items": {
+        "$ref": "#/$defs/ExportCoverageItem"
+      },
+      "minItems": 1,
+      "title": "Coverage",
+      "type": "array"
+    },
+    "encrypted": {
+      "title": "Encrypted",
+      "type": "boolean"
+    },
+    "format_id": {
+      "default": "melloa.canonical-owner-export",
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Format Id",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "includes_blobs": {
+      "title": "Includes Blobs",
+      "type": "boolean"
+    },
+    "includes_sql_snapshot": {
+      "title": "Includes Sql Snapshot",
+      "type": "boolean"
+    },
+    "limitations": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 2,
+        "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "validation_command": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Validation Command",
+      "type": "string"
+    }
+  },
+  "required": [
+    "owner_id",
+    "generated_at",
+    "cli_command",
+    "validation_command",
+    "encrypted",
+    "includes_sql_snapshot",
+    "includes_blobs",
+    "coverage",
+    "limitations"
+  ],
+  "title": "OwnerExportReadinessReport",
+  "type": "object"
+}

@@ -436,6 +436,28 @@ export type OwnerRetentionReport = {
   readonly backup_expiry: BackupExpiryDisclosure;
 };
 
+export type ExportCoverageItem = {
+  readonly group_id: string;
+  readonly included: boolean;
+  readonly artifact_path?: string | null;
+  readonly summary: string;
+  readonly status_reason: string;
+};
+
+export type OwnerExportReadinessReport = {
+  readonly contract_version: "1.0.0";
+  readonly owner_id: string;
+  readonly generated_at: string;
+  readonly format_id: string;
+  readonly cli_command: string;
+  readonly validation_command: string;
+  readonly encrypted: boolean;
+  readonly includes_sql_snapshot: boolean;
+  readonly includes_blobs: boolean;
+  readonly coverage: readonly ExportCoverageItem[];
+  readonly limitations: readonly string[];
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -509,6 +531,10 @@ export class MelloaApi {
 
   async retentionReport(): Promise<OwnerRetentionReport> {
     return this.#request<OwnerRetentionReport>("/api/v1/retention");
+  }
+
+  async exportReadiness(): Promise<OwnerExportReadinessReport> {
+    return this.#request<OwnerExportReadinessReport>("/api/v1/inspection/export");
   }
 
   async modelRoutes(): Promise<OwnerModelRouteReport> {

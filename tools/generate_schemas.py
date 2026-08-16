@@ -56,7 +56,11 @@ from melloa.domain.models import (
     OwnerModelRouteReport,
     RegisteredModelRoute,
 )
-from melloa.domain.operations import OwnerHealthReport, OwnerMediaCatalog
+from melloa.domain.operations import (
+    OwnerExportReadinessReport,
+    OwnerHealthReport,
+    OwnerMediaCatalog,
+)
 from melloa.domain.policy import AuthorizationRequest, PolicyDecision
 from melloa.domain.retention import OwnerRetentionReport, RetentionDeletionReceipt
 from melloa.domain.retrieval import MemoryCitation, RetrievalManifest
@@ -143,6 +147,10 @@ REGISTRY: dict[str, tuple[str, type[BaseModel]]] = {
     "inspection/owner-media-catalog-v1.json": (
         "owner-media-catalog",
         OwnerMediaCatalog,
+    ),
+    "inspection/owner-export-readiness-v1.json": (
+        "owner-export-readiness",
+        OwnerExportReadinessReport,
     ),
     "memory/assertion-v1.json": ("assertion", Assertion),
     "memory/assertion-metadata-v1.json": ("assertion-metadata", AssertionMetadata),
