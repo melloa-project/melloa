@@ -1,0 +1,111 @@
+{
+  "$id": "https://schemas.melloa.dev/v1/assertion-content-deletion-tombstone.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Content-free evidence that one assertion value was intentionally removed.",
+  "properties": {
+    "assertion_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Assertion Id",
+      "type": "string"
+    },
+    "content_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "deleted_at": {
+      "format": "date-time",
+      "title": "Deleted At",
+      "type": "string"
+    },
+    "deleted_by_record_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Deleted By Record Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "reason_code": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "rebuild_work_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Rebuild Work Id",
+      "type": "string"
+    },
+    "retained_at": {
+      "format": "date-time",
+      "title": "Retained At",
+      "type": "string"
+    },
+    "retention_policy": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Retention Policy",
+      "type": "string"
+    },
+    "size_bytes": {
+      "exclusiveMinimum": 0,
+      "title": "Size Bytes",
+      "type": "integer"
+    },
+    "tombstone_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Tombstone Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tombstone_id",
+    "assertion_id",
+    "owner_id",
+    "deleted_by_record_id",
+    "content_hash",
+    "size_bytes",
+    "retention_policy",
+    "retained_at",
+    "deleted_at",
+    "reason_code",
+    "rebuild_work_id"
+  ],
+  "title": "AssertionContentDeletionTombstone",
+  "type": "object"
+}

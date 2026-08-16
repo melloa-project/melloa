@@ -335,10 +335,15 @@ def build_synthetic_runtime(
         guardian_reader=guardian_reader,
         clock=clock,
     )
+    backup_expiry = BackupExpiryDisclosure(
+        state=BackupExpiryState.NOT_CONFIGURED,
+        status_reason="retention.backup.not_configured",
+    )
     memory = MemoryService(
         owner_id=SYNTHETIC_OWNER_ID,
         store=memory_store,
         guardian_reader=guardian_reader,
+        backup_expiry=backup_expiry,
         clock=clock,
         id_factory=id_factory,
     )
@@ -496,10 +501,7 @@ def build_synthetic_runtime(
             SYNTHETIC_OWNER_ID,
             policies=_synthetic_retention_policies(),
             inventory=_synthetic_retention_inventory(),
-            backup_expiry=BackupExpiryDisclosure(
-                state=BackupExpiryState.NOT_CONFIGURED,
-                status_reason="retention.backup.not_configured",
-            ),
+            backup_expiry=backup_expiry,
         ),
         clock=clock,
     )

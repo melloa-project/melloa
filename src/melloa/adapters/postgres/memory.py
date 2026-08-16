@@ -11,7 +11,9 @@ from psycopg.types.json import Jsonb
 from melloa.domain.base import JsonObject, RecordId, canonical_json_bytes
 from melloa.domain.memory import (
     Assertion,
+    AssertionContentDeletionTombstone,
     AssertionCorrectionResult,
+    AssertionMetadata,
     AssertionStateChange,
     AssertionStateProjection,
     AssertionStateTransitionResult,
@@ -20,6 +22,8 @@ from melloa.domain.memory import (
     ProvenanceRelation,
 )
 from melloa.ports.memory import (
+    AssertionContentDeletionStoreResult,
+    AssertionContentDeletionWrite,
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
@@ -49,6 +53,22 @@ class PostgresMemoryRepository:
         if row[1] is None:
             raise MemoryNotFoundError(f"assertion content not found: {assertion_id}")
         return self._parse_assertion(row[0], row[1])
+
+    def get_assertion_metadata(self, assertion_id: RecordId) -> AssertionMetadata:
+        row = self._connection.execute(
+            "SELECT document FROM melloa.assertions WHERE assertion_id = %s",
+            (assertion_id,),
+        ).fetchone()
+        if row is None:
+            raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
+        return self._parse_metadata(row[0])
+
+    def get_assertion_content_deletion(
+        self,
+        assertion_id: RecordId,
+    ) -> AssertionContentDeletionTombstone | None:
+        self.get_assertion_metadata(assertion_id)
+        return None
 
     def list_assertions(self, subject_id: RecordId) -> tuple[Assertion, ...]:
         rows = self._connection.execute(
@@ -212,6 +232,13 @@ class PostgresMemoryRepository:
         except (SerializationFailure, UniqueViolation) as error:
             raise MemoryConflictError("transition conflicts with durable memory state") from error
 
+    def delete_assertion_content(
+        self,
+        write: AssertionContentDeletionWrite,
+    ) -> AssertionContentDeletionStoreResult:
+        del write
+        raise MemoryConflictError("durable assertion content deletion is not installed")
+
     def _insert_assertion(self, assertion: Assertion) -> None:
         self._connection.execute(
             """
@@ -352,6 +379,16 @@ class PostgresMemoryRepository:
     def _parse_assertion(cls, document: object, value: object) -> Assertion:
         return Assertion.model_validate_json(
             canonical_json_bytes(cls._assertion_document(document, value))
+        )
+
+    @staticmethod
+    def _parse_metadata(document: object) -> AssertionMetadata:
+        if not isinstance(document, dict):
+            raise ValueError("persisted assertion metadata document is not an object")
+        if "value" in document:
+            raise ValueError("persisted assertion metadata contains content")
+        return AssertionMetadata.model_validate_json(
+            canonical_json_bytes(cast(JsonObject, document))
         )
 
     @staticmethod

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from threading import RLock
 
-from melloa.domain.base import RecordId, sha256_digest
+from melloa.domain.base import JsonObject, RecordId, canonical_json_bytes, sha256_digest
 from melloa.domain.memory import (
     Assertion,
+    AssertionContentDeletionTombstone,
     AssertionCorrectionResult,
+    AssertionDerivedRebuildWork,
+    AssertionMetadata,
     AssertionStateChange,
     AssertionStateProjection,
     AssertionStateTransitionResult,
@@ -15,11 +18,16 @@ from melloa.domain.memory import (
     ProvenanceEdge,
 )
 from melloa.ports.memory import (
+    AssertionContentDeletionStoreResult,
+    AssertionContentDeletionWrite,
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
+    MemoryContentDeletedError,
     MemoryNotFoundError,
 )
+
+_ASSERTION_RETENTION_POLICY = "memory.assertion-owner-lifecycle"
 
 
 class InMemoryMemoryRepository:
@@ -33,7 +41,16 @@ class InMemoryMemoryRepository:
         if len({edge.edge_id for edge in provenance_edges}) != len(provenance_edges):
             raise ValueError("provenance edge IDs must be unique")
         self._lock = RLock()
-        self._assertions = {assertion.assertion_id: assertion for assertion in assertions}
+        self._metadata = {
+            assertion.assertion_id: self._metadata_from_assertion(assertion)
+            for assertion in assertions
+        }
+        self._contents = {
+            assertion.assertion_id: assertion.value for assertion in assertions
+        }
+        self._content_deletions: dict[RecordId, AssertionContentDeletionTombstone] = {}
+        self._deletion_ids: set[RecordId] = set()
+        self._rebuild_work: dict[RecordId, AssertionDerivedRebuildWork] = {}
         self._edges = {edge.edge_id: edge for edge in provenance_edges}
         self._states = {
             assertion.assertion_id: self._initial_state(assertion)
@@ -55,21 +72,35 @@ class InMemoryMemoryRepository:
 
     def get_assertion(self, assertion_id: RecordId) -> Assertion:
         with self._lock:
-            assertion = self._assertions.get(assertion_id)
-            if assertion is None:
+            return self._get_assertion_unlocked(assertion_id)
+
+    def get_assertion_metadata(self, assertion_id: RecordId) -> AssertionMetadata:
+        with self._lock:
+            metadata = self._metadata.get(assertion_id)
+            if metadata is None:
                 raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
-            return assertion
+            return metadata
+
+    def get_assertion_content_deletion(
+        self,
+        assertion_id: RecordId,
+    ) -> AssertionContentDeletionTombstone | None:
+        with self._lock:
+            if assertion_id not in self._metadata:
+                raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
+            return self._content_deletions.get(assertion_id)
 
     def list_assertions(self, subject_id: RecordId) -> tuple[Assertion, ...]:
         with self._lock:
             assertions = (
-                assertion.model_copy(
+                self._get_assertion_unlocked(assertion.assertion_id).model_copy(
                     update={
                         "status": self._states[assertion.assertion_id].current_status,
                     }
                 )
-                for assertion in self._assertions.values()
+                for assertion in self._metadata.values()
                 if assertion.subject_id == subject_id
+                and assertion.assertion_id in self._contents
             )
             return tuple(
                 sorted(
@@ -116,13 +147,11 @@ class InMemoryMemoryRepository:
             target_id = correction.correction_target_id
             if target_id is None:
                 raise MemoryConflictError("correction does not identify a target assertion")
-            target = self._assertions.get(target_id)
-            if target is None:
-                raise MemoryNotFoundError(f"correction target not found: {target_id}")
+            target = self._get_assertion_unlocked(target_id)
             current_state = self._states[target_id]
             if current_state != write.expected_target_state:
                 raise MemoryConflictError("assertion state changed before correction")
-            if correction.assertion_id in self._assertions:
+            if correction.assertion_id in self._metadata:
                 raise MemoryConflictError(
                     f"assertion ID conflicts with immutable data: {correction.assertion_id}"
                 )
@@ -147,7 +176,8 @@ class InMemoryMemoryRepository:
                 target_change=write.target_change,
             )
 
-            self._assertions[correction.assertion_id] = correction
+            self._metadata[correction.assertion_id] = self._metadata_from_assertion(correction)
+            self._contents[correction.assertion_id] = correction.value
             self._edges[write.provenance_edge.edge_id] = write.provenance_edge
             self._states[target_id] = write.target_state
             self._states[correction.assertion_id] = correction_state
@@ -164,9 +194,7 @@ class InMemoryMemoryRepository:
     ) -> AssertionStateTransitionResult:
         with self._lock:
             assertion_id = write.expected_state.assertion_id
-            assertion = self._assertions.get(assertion_id)
-            if assertion is None:
-                raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
+            assertion = self._get_assertion_unlocked(assertion_id)
             current_state = self._states[assertion_id]
             if current_state != write.expected_state:
                 raise MemoryConflictError("assertion state changed before transition")
@@ -183,8 +211,93 @@ class InMemoryMemoryRepository:
             self._change_ids.add(write.change.change_id)
             return result
 
+    def delete_assertion_content(
+        self,
+        write: AssertionContentDeletionWrite,
+    ) -> AssertionContentDeletionStoreResult:
+        with self._lock:
+            metadata = self._metadata.get(write.assertion_id)
+            if metadata is None:
+                raise MemoryNotFoundError(f"assertion not found: {write.assertion_id}")
+            if (
+                metadata.subject_id != write.owner_id
+                or write.deleted_by_record_id != write.owner_id
+            ):
+                raise MemoryNotFoundError(f"assertion not found: {write.assertion_id}")
+            existing = self._content_deletions.get(write.assertion_id)
+            if existing is not None:
+                return AssertionContentDeletionStoreResult(
+                    tombstone=existing,
+                    rebuild_work=self._rebuild_work[existing.rebuild_work_id],
+                    created=False,
+                )
+            value = self._contents.get(write.assertion_id)
+            if value is None:
+                raise MemoryConflictError("assertion content is absent without deletion evidence")
+            if write.tombstone_id in self._deletion_ids:
+                raise MemoryConflictError("assertion content tombstone ID conflicts")
+            if write.rebuild_work_id in self._rebuild_work:
+                raise MemoryConflictError("assertion rebuild work ID conflicts")
+
+            encoded = canonical_json_bytes(value)
+            tombstone = AssertionContentDeletionTombstone(
+                tombstone_id=write.tombstone_id,
+                assertion_id=write.assertion_id,
+                owner_id=write.owner_id,
+                deleted_by_record_id=write.deleted_by_record_id,
+                content_hash=sha256_digest(encoded),
+                size_bytes=len(encoded),
+                retention_policy=_ASSERTION_RETENTION_POLICY,
+                retained_at=metadata.observed_at,
+                deleted_at=write.deleted_at,
+                reason_code=write.reason_code,
+                rebuild_work_id=write.rebuild_work_id,
+            )
+            rebuild_work = AssertionDerivedRebuildWork(
+                work_id=write.rebuild_work_id,
+                assertion_id=write.assertion_id,
+                tombstone_id=write.tombstone_id,
+                requested_by_record_id=write.deleted_by_record_id,
+                requested_at=write.deleted_at,
+            )
+            del self._contents[write.assertion_id]
+            self._content_deletions[write.assertion_id] = tombstone
+            self._deletion_ids.add(tombstone.tombstone_id)
+            self._rebuild_work[rebuild_work.work_id] = rebuild_work
+            return AssertionContentDeletionStoreResult(
+                tombstone=tombstone,
+                rebuild_work=rebuild_work,
+                created=True,
+            )
+
+    def _get_assertion_unlocked(self, assertion_id: RecordId) -> Assertion:
+        metadata = self._metadata.get(assertion_id)
+        if metadata is None:
+            raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
+        value = self._contents.get(assertion_id)
+        if value is None:
+            if assertion_id in self._content_deletions:
+                raise MemoryContentDeletedError(f"assertion content deleted: {assertion_id}")
+            raise MemoryNotFoundError(f"assertion content not found: {assertion_id}")
+        return self._assertion_from_parts(metadata, value)
+
     @staticmethod
-    def _initial_state(assertion: Assertion) -> AssertionStateProjection:
+    def _metadata_from_assertion(assertion: Assertion) -> AssertionMetadata:
+        return AssertionMetadata.model_validate(
+            assertion.model_dump(mode="python", exclude={"value"})
+        )
+
+    @staticmethod
+    def _assertion_from_parts(
+        metadata: AssertionMetadata,
+        value: JsonObject,
+    ) -> Assertion:
+        document = metadata.model_dump(mode="python")
+        document["value"] = value
+        return Assertion.model_validate(document)
+
+    @staticmethod
+    def _initial_state(assertion: AssertionMetadata) -> AssertionStateProjection:
         return AssertionStateProjection(
             assertion_id=assertion.assertion_id,
             current_status=assertion.status,
@@ -194,7 +307,7 @@ class InMemoryMemoryRepository:
         )
 
     @staticmethod
-    def _initial_change(assertion: Assertion) -> AssertionStateChange:
+    def _initial_change(assertion: AssertionMetadata) -> AssertionStateChange:
         digest = sha256_digest(f"{assertion.assertion_id}:initial".encode())
         return AssertionStateChange(
             change_id=f"state_change_{digest.removeprefix('sha256:')[:32]}",

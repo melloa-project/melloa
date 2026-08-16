@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -13,9 +13,11 @@ from melloa.domain.base import (
     JsonObject,
     QualifiedName,
     RecordId,
+    Sha256Digest,
 )
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.events import Confidence
+from melloa.domain.retention import BackupExpiryDisclosure
 
 
 class AssertionStatus(StrEnum):
@@ -28,6 +30,11 @@ class AssertionStatus(StrEnum):
     EXPIRED = "expired"
 
 
+class AssertionContentState(StrEnum):
+    RETAINED = "retained"
+    DELETED = "deleted"
+
+
 class ProvenanceRelation(StrEnum):
     DERIVED_FROM = "derived_from"
     SUPPORTS = "supports"
@@ -37,12 +44,11 @@ class ProvenanceRelation(StrEnum):
     CITES = "cites"
 
 
-class Assertion(ContractModel):
+class AssertionMetadata(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     assertion_id: RecordId
     subject_id: RecordId
     predicate: QualifiedName
-    value: JsonObject
     epistemic_status: EpistemicStatus
     status: AssertionStatus
     confidence: Confidence
@@ -54,7 +60,7 @@ class Assertion(ContractModel):
     correction_target_id: RecordId | None = None
 
     @model_validator(mode="after")
-    def validate_semantics(self) -> Assertion:
+    def validate_semantics(self) -> Self:
         if self.valid_from is not None and self.valid_to is not None:
             if self.valid_to <= self.valid_from:
                 raise ValueError("assertion validity must end after it starts")
@@ -67,6 +73,50 @@ class Assertion(ContractModel):
             if self.source_authority is not TrustLabel.OWNER_AUTHORED:
                 raise ValueError("owner-confirmed assertions require owner authority")
         return self
+
+
+class Assertion(AssertionMetadata):
+    value: JsonObject
+
+
+class AssertionContentDeletionTombstone(ContractModel):
+    """Content-free evidence that one assertion value was intentionally removed."""
+
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    tombstone_id: RecordId
+    assertion_id: RecordId
+    owner_id: RecordId
+    deleted_by_record_id: RecordId
+    content_hash: Sha256Digest
+    size_bytes: Annotated[int, Field(gt=0)]
+    retention_policy: QualifiedName
+    retained_at: AwareDatetime
+    expires_at: AwareDatetime | None = None
+    deleted_at: AwareDatetime
+    reason_code: QualifiedName
+    rebuild_work_id: RecordId
+
+    @model_validator(mode="after")
+    def validate_chronology(self) -> AssertionContentDeletionTombstone:
+        if self.expires_at is not None and self.expires_at <= self.retained_at:
+            raise ValueError("assertion content expiry must follow initial retention")
+        if self.deleted_at < self.retained_at:
+            raise ValueError("assertion content deletion cannot precede initial retention")
+        return self
+
+
+class AssertionDerivedRebuildWork(ContractModel):
+    """Content-free work request to purge and rebuild assertion-derived data."""
+
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    work_id: RecordId
+    work_type: Literal["memory.assertion-derived-rebuild"] = (
+        "memory.assertion-derived-rebuild"
+    )
+    assertion_id: RecordId
+    tombstone_id: RecordId
+    requested_by_record_id: RecordId
+    requested_at: AwareDatetime
 
 
 class ProvenanceEdge(ContractModel):
@@ -104,6 +154,37 @@ class AssertionStateProjection(ContractModel):
             and self.preferred_assertion_id is None
         ):
             raise ValueError("superseded assertions require a preferred replacement")
+        return self
+
+
+class AssertionContentDeletionResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    assertion: AssertionMetadata
+    current_state: AssertionStateProjection
+    tombstone: AssertionContentDeletionTombstone
+    rebuild_work: AssertionDerivedRebuildWork
+    backup_expiry: BackupExpiryDisclosure
+    created: bool
+
+    @model_validator(mode="after")
+    def validate_links(self) -> AssertionContentDeletionResult:
+        assertion_id = self.assertion.assertion_id
+        if (
+            self.current_state.assertion_id != assertion_id
+            or self.tombstone.assertion_id != assertion_id
+            or self.rebuild_work.assertion_id != assertion_id
+        ):
+            raise ValueError("assertion content deletion references another assertion")
+        if self.tombstone.owner_id != self.assertion.subject_id:
+            raise ValueError("assertion content deletion owner does not match its subject")
+        if (
+            self.tombstone.rebuild_work_id != self.rebuild_work.work_id
+            or self.tombstone.tombstone_id != self.rebuild_work.tombstone_id
+            or self.tombstone.deleted_by_record_id
+            != self.rebuild_work.requested_by_record_id
+            or self.tombstone.deleted_at != self.rebuild_work.requested_at
+        ):
+            raise ValueError("assertion content deletion rebuild work is inconsistent")
         return self
 
 
@@ -194,8 +275,11 @@ class AssertionStateTransitionResult(ContractModel):
 
 
 class MemoryInspection(ContractModel):
-    contract_version: Literal["1.0.0"] = "1.0.0"
-    assertion: Assertion
+    contract_version: Literal["1.1.0"] = "1.1.0"
+    content_state: AssertionContentState
+    assertion: Assertion | AssertionMetadata
+    deletion_tombstone: AssertionContentDeletionTombstone | None = None
+    backup_expiry: BackupExpiryDisclosure | None = None
     current_state: AssertionStateProjection
     provenance_edges: tuple[ProvenanceEdge, ...]
     state_changes: tuple[AssertionStateChange, ...] = Field(min_length=1)
@@ -203,6 +287,21 @@ class MemoryInspection(ContractModel):
     @model_validator(mode="after")
     def validate_inspection(self) -> MemoryInspection:
         assertion_id = self.assertion.assertion_id
+        if self.content_state is AssertionContentState.RETAINED:
+            if not isinstance(self.assertion, Assertion):
+                raise ValueError("retained memory inspection requires assertion content")
+            if self.deletion_tombstone is not None or self.backup_expiry is not None:
+                raise ValueError("retained memory inspection cannot include deletion evidence")
+        else:
+            if isinstance(self.assertion, Assertion):
+                raise ValueError("deleted memory inspection cannot include assertion content")
+            if self.deletion_tombstone is None or self.backup_expiry is None:
+                raise ValueError("deleted memory inspection requires deletion evidence")
+            if (
+                self.deletion_tombstone.assertion_id != assertion_id
+                or self.deletion_tombstone.owner_id != self.assertion.subject_id
+            ):
+                raise ValueError("memory deletion evidence does not match the assertion")
         if self.current_state.assertion_id != assertion_id:
             raise ValueError("memory projection does not match the assertion")
         if any(

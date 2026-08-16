@@ -11,7 +11,10 @@ from melloa.domain.classification import EpistemicStatus, TrustLabel
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.memory import (
     Assertion,
+    AssertionContentDeletionResult,
+    AssertionContentState,
     AssertionCorrectionResult,
+    AssertionMetadata,
     AssertionStateChange,
     AssertionStateProjection,
     AssertionStateTransitionResult,
@@ -20,13 +23,20 @@ from melloa.domain.memory import (
     ProvenanceEdge,
     ProvenanceRelation,
 )
+from melloa.domain.retention import BackupExpiryDisclosure, BackupExpiryState
 from melloa.ports.auth import RecentAuthenticationRequired
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import (
+    AssertionContentDeletionWrite,
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
     MemoryStore,
+)
+
+_UNKNOWN_BACKUP_EXPIRY = BackupExpiryDisclosure(
+    state=BackupExpiryState.UNKNOWN,
+    status_reason="retention.backup.expiry_unknown",
 )
 
 
@@ -45,12 +55,14 @@ class MemoryService:
         owner_id: RecordId,
         store: MemoryStore,
         guardian_reader: GuardianStatusReader,
+        backup_expiry: BackupExpiryDisclosure = _UNKNOWN_BACKUP_EXPIRY,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
     ) -> None:
         self._owner_id = owner_id
         self._store = store
         self._guardian_reader = guardian_reader
+        self._backup_expiry = backup_expiry
         self._clock = clock
         self._id_factory = id_factory
 
@@ -59,12 +71,55 @@ class MemoryService:
         principal: AuthenticatedOwner,
         assertion_id: RecordId,
     ) -> MemoryInspection:
-        assertion = self._owned_assertion(principal, assertion_id)
+        metadata = self._owned_metadata(principal, assertion_id)
+        deletion = self._store.get_assertion_content_deletion(assertion_id)
+        assertion: Assertion | AssertionMetadata
+        backup_expiry: BackupExpiryDisclosure | None
+        if deletion is None:
+            assertion = self._store.get_assertion(assertion_id)
+            content_state = AssertionContentState.RETAINED
+            backup_expiry = None
+        else:
+            assertion = metadata
+            content_state = AssertionContentState.DELETED
+            backup_expiry = self._backup_expiry
         return MemoryInspection(
+            content_state=content_state,
             assertion=assertion,
+            deletion_tombstone=deletion,
+            backup_expiry=backup_expiry,
             current_state=self._store.get_assertion_state(assertion_id),
             provenance_edges=self._store.list_provenance_edges(frozenset({assertion_id})),
             state_changes=self._store.list_assertion_state_changes(assertion_id),
+        )
+
+    def delete_content(
+        self,
+        principal: AuthenticatedOwner,
+        assertion_id: RecordId,
+    ) -> AssertionContentDeletionResult:
+        now = self._clock()
+        self._require_recent_authentication(principal, now)
+        metadata = self._owned_metadata(principal, assertion_id)
+        self._require_write_mode()
+        persisted = self._store.delete_assertion_content(
+            AssertionContentDeletionWrite(
+                assertion_id=assertion_id,
+                owner_id=principal.owner_id,
+                tombstone_id=self._id_factory("deletion"),
+                rebuild_work_id=self._id_factory("work"),
+                deleted_by_record_id=principal.owner_id,
+                deleted_at=now,
+                reason_code="memory.assertion-content-owner-deleted",
+            )
+        )
+        return AssertionContentDeletionResult(
+            assertion=metadata,
+            current_state=self._store.get_assertion_state(assertion_id),
+            tombstone=persisted.tombstone,
+            rebuild_work=persisted.rebuild_work,
+            backup_expiry=self._backup_expiry,
+            created=persisted.created,
         )
 
     def correct(
@@ -216,11 +271,20 @@ class MemoryService:
         principal: AuthenticatedOwner,
         assertion_id: RecordId,
     ) -> Assertion:
-        self._require_owner(principal)
+        self._owned_metadata(principal, assertion_id)
         assertion = self._store.get_assertion(assertion_id)
-        if assertion.subject_id != principal.owner_id:
-            raise MemoryOwnershipError("authenticated principal does not own this memory")
         return assertion
+
+    def _owned_metadata(
+        self,
+        principal: AuthenticatedOwner,
+        assertion_id: RecordId,
+    ) -> AssertionMetadata:
+        self._require_owner(principal)
+        metadata = self._store.get_assertion_metadata(assertion_id)
+        if metadata.subject_id != principal.owner_id:
+            raise MemoryOwnershipError("authenticated principal does not own this memory")
+        return metadata
 
     def _require_owner(self, principal: AuthenticatedOwner) -> None:
         if principal.owner_id != self._owner_id:

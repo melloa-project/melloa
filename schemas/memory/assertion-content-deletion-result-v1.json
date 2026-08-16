@@ -1,120 +1,5 @@
 {
   "$defs": {
-    "Assertion": {
-      "additionalProperties": false,
-      "properties": {
-        "assertion_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Assertion Id",
-          "type": "string"
-        },
-        "confidence": {
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "title": "Confidence",
-          "type": "number"
-        },
-        "contract_version": {
-          "const": "1.0.0",
-          "default": "1.0.0",
-          "title": "Contract Version",
-          "type": "string"
-        },
-        "correction_target_id": {
-          "anyOf": [
-            {
-              "maxLength": 65,
-              "minLength": 35,
-              "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Correction Target Id"
-        },
-        "epistemic_status": {
-          "$ref": "#/$defs/EpistemicStatus"
-        },
-        "observed_at": {
-          "format": "date-time",
-          "title": "Observed At",
-          "type": "string"
-        },
-        "predicate": {
-          "maxLength": 128,
-          "minLength": 2,
-          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
-          "title": "Predicate",
-          "type": "string"
-        },
-        "sensitivity": {
-          "$ref": "#/$defs/Sensitivity"
-        },
-        "source_authority": {
-          "$ref": "#/$defs/TrustLabel"
-        },
-        "status": {
-          "$ref": "#/$defs/AssertionStatus"
-        },
-        "subject_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Subject Id",
-          "type": "string"
-        },
-        "valid_from": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Valid From"
-        },
-        "valid_to": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Valid To"
-        },
-        "value": {
-          "additionalProperties": true,
-          "title": "Value",
-          "type": "object"
-        }
-      },
-      "required": [
-        "assertion_id",
-        "subject_id",
-        "predicate",
-        "epistemic_status",
-        "status",
-        "confidence",
-        "source_authority",
-        "sensitivity",
-        "observed_at",
-        "value"
-      ],
-      "title": "Assertion",
-      "type": "object"
-    },
     "AssertionContentDeletionTombstone": {
       "additionalProperties": false,
       "description": "Content-free evidence that one assertion value was intentionally removed.",
@@ -224,13 +109,65 @@
       "title": "AssertionContentDeletionTombstone",
       "type": "object"
     },
-    "AssertionContentState": {
-      "enum": [
-        "retained",
-        "deleted"
+    "AssertionDerivedRebuildWork": {
+      "additionalProperties": false,
+      "description": "Content-free work request to purge and rebuild assertion-derived data.",
+      "properties": {
+        "assertion_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Assertion Id",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "requested_at": {
+          "format": "date-time",
+          "title": "Requested At",
+          "type": "string"
+        },
+        "requested_by_record_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Requested By Record Id",
+          "type": "string"
+        },
+        "tombstone_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Tombstone Id",
+          "type": "string"
+        },
+        "work_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Work Id",
+          "type": "string"
+        },
+        "work_type": {
+          "const": "memory.assertion-derived-rebuild",
+          "default": "memory.assertion-derived-rebuild",
+          "title": "Work Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "work_id",
+        "assertion_id",
+        "tombstone_id",
+        "requested_by_record_id",
+        "requested_at"
       ],
-      "title": "AssertionContentState",
-      "type": "string"
+      "title": "AssertionDerivedRebuildWork",
+      "type": "object"
     },
     "AssertionMetadata": {
       "additionalProperties": false,
@@ -339,95 +276,6 @@
         "observed_at"
       ],
       "title": "AssertionMetadata",
-      "type": "object"
-    },
-    "AssertionStateChange": {
-      "additionalProperties": false,
-      "properties": {
-        "assertion_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Assertion Id",
-          "type": "string"
-        },
-        "change_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Change Id",
-          "type": "string"
-        },
-        "changed_at": {
-          "format": "date-time",
-          "title": "Changed At",
-          "type": "string"
-        },
-        "changed_by_record_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Changed By Record Id",
-          "type": "string"
-        },
-        "contract_version": {
-          "const": "1.0.0",
-          "default": "1.0.0",
-          "title": "Contract Version",
-          "type": "string"
-        },
-        "new_status": {
-          "$ref": "#/$defs/AssertionStatus"
-        },
-        "preferred_assertion_id": {
-          "anyOf": [
-            {
-              "maxLength": 65,
-              "minLength": 35,
-              "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Preferred Assertion Id"
-        },
-        "previous_status": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AssertionStatus"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "reason": {
-          "maxLength": 128,
-          "minLength": 2,
-          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
-          "title": "Reason",
-          "type": "string"
-        },
-        "version": {
-          "exclusiveMinimum": 0,
-          "title": "Version",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "change_id",
-        "assertion_id",
-        "previous_status",
-        "new_status",
-        "changed_by_record_id",
-        "reason",
-        "changed_at",
-        "version"
-      ],
-      "title": "AssertionStateChange",
       "type": "object"
     },
     "AssertionStateProjection": {
@@ -572,80 +420,6 @@
       "title": "EpistemicStatus",
       "type": "string"
     },
-    "ProvenanceEdge": {
-      "additionalProperties": false,
-      "properties": {
-        "contract_version": {
-          "const": "1.0.0",
-          "default": "1.0.0",
-          "title": "Contract Version",
-          "type": "string"
-        },
-        "created_at": {
-          "format": "date-time",
-          "title": "Created At",
-          "type": "string"
-        },
-        "edge_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Edge Id",
-          "type": "string"
-        },
-        "from_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "From Id",
-          "type": "string"
-        },
-        "metadata": {
-          "additionalProperties": true,
-          "title": "Metadata",
-          "type": "object"
-        },
-        "producer_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "Producer Id",
-          "type": "string"
-        },
-        "relation": {
-          "$ref": "#/$defs/ProvenanceRelation"
-        },
-        "to_id": {
-          "maxLength": 65,
-          "minLength": 35,
-          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
-          "title": "To Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "edge_id",
-        "from_id",
-        "to_id",
-        "relation",
-        "created_at",
-        "producer_id"
-      ],
-      "title": "ProvenanceEdge",
-      "type": "object"
-    },
-    "ProvenanceRelation": {
-      "enum": [
-        "derived_from",
-        "supports",
-        "contradicts",
-        "supersedes",
-        "corrects",
-        "cites"
-      ],
-      "title": "ProvenanceRelation",
-      "type": "string"
-    },
     "Sensitivity": {
       "enum": [
         "public",
@@ -673,78 +447,44 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.melloa.dev/v1/memory-inspection.json",
+  "$id": "https://schemas.melloa.dev/v1/assertion-content-deletion-result.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "assertion": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Assertion"
-        },
-        {
-          "$ref": "#/$defs/AssertionMetadata"
-        }
-      ],
-      "title": "Assertion"
+      "$ref": "#/$defs/AssertionMetadata"
     },
     "backup_expiry": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/BackupExpiryDisclosure"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
-    },
-    "content_state": {
-      "$ref": "#/$defs/AssertionContentState"
+      "$ref": "#/$defs/BackupExpiryDisclosure"
     },
     "contract_version": {
-      "const": "1.1.0",
-      "default": "1.1.0",
+      "const": "1.0.0",
+      "default": "1.0.0",
       "title": "Contract Version",
       "type": "string"
+    },
+    "created": {
+      "title": "Created",
+      "type": "boolean"
     },
     "current_state": {
       "$ref": "#/$defs/AssertionStateProjection"
     },
-    "deletion_tombstone": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/AssertionContentDeletionTombstone"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
+    "rebuild_work": {
+      "$ref": "#/$defs/AssertionDerivedRebuildWork"
     },
-    "provenance_edges": {
-      "items": {
-        "$ref": "#/$defs/ProvenanceEdge"
-      },
-      "title": "Provenance Edges",
-      "type": "array"
-    },
-    "state_changes": {
-      "items": {
-        "$ref": "#/$defs/AssertionStateChange"
-      },
-      "minItems": 1,
-      "title": "State Changes",
-      "type": "array"
+    "tombstone": {
+      "$ref": "#/$defs/AssertionContentDeletionTombstone"
     }
   },
   "required": [
-    "content_state",
     "assertion",
     "current_state",
-    "provenance_edges",
-    "state_changes"
+    "tombstone",
+    "rebuild_work",
+    "backup_expiry",
+    "created"
   ],
-  "title": "MemoryInspection",
+  "title": "AssertionContentDeletionResult",
   "type": "object"
 }

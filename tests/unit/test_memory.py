@@ -18,12 +18,19 @@ from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabe
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import (
     Assertion,
+    AssertionContentState,
+    AssertionMetadata,
     AssertionStatus,
     ProvenanceEdge,
     ProvenanceRelation,
 )
+from melloa.domain.retention import BackupExpiryDisclosure, BackupExpiryState
 from melloa.ports.auth import RecentAuthenticationRequired
-from melloa.ports.memory import MemoryConflictError, MemoryNotFoundError
+from melloa.ports.memory import (
+    MemoryConflictError,
+    MemoryContentDeletedError,
+    MemoryNotFoundError,
+)
 from tests.conftest import record_id
 
 
@@ -106,6 +113,7 @@ def test_memory_service_appends_correction_without_mutating_original(fixed_time)
     principal = _principal(fixed_time)
 
     initial = service.inspect(principal, original.assertion_id)
+    assert initial.content_state is AssertionContentState.RETAINED
     assert initial.assertion == original
     assert initial.current_state.current_status is AssertionStatus.ACTIVE
     assert initial.current_state.version == 1
@@ -241,6 +249,8 @@ def test_memory_service_enforces_owner_recent_auth_and_guardian(fixed_time) -> N
             value={"activity": "reading"},
             expected_version=1,
         )
+    with pytest.raises(RecentAuthenticationRequired):
+        service.delete_content(_principal(fixed_time), original.assertion_id)
     with pytest.raises(MemoryOwnershipError):
         service.inspect(
             _principal(fixed_time, owner_id=record_id("owner", 2)),
@@ -261,6 +271,8 @@ def test_memory_service_enforces_owner_recent_auth_and_guardian(fixed_time) -> N
     )
     with pytest.raises(MemoryOwnershipError):
         foreign_service.inspect(_principal(fixed_time), foreign.assertion_id)
+    with pytest.raises(MemoryOwnershipError):
+        foreign_service.delete_content(_principal(fixed_time), foreign.assertion_id)
 
     read_only = MemoryService(
         owner_id=original.subject_id,
@@ -276,6 +288,9 @@ def test_memory_service_enforces_owner_recent_auth_and_guardian(fixed_time) -> N
             value={"activity": "reading"},
             expected_version=1,
         )
+    with pytest.raises(MemoryUnavailableError, match="read-only"):
+        read_only.delete_content(_principal(fixed_time), original.assertion_id)
+    assert repository.get_assertion(original.assertion_id) == original
     assert repository.get_assertion_state(original.assertion_id).version == 1
 
 
@@ -370,6 +385,79 @@ def test_memory_service_appends_dispute_and_retraction_history(fixed_time) -> No
         )
 
 
+def test_memory_service_deletes_only_content_and_preserves_inspection(fixed_time) -> None:
+    original = _assertion(fixed_time)
+    evidence = ProvenanceEdge(
+        edge_id=record_id("edge", 1),
+        from_id=original.assertion_id,
+        to_id=record_id("event", 1),
+        relation=ProvenanceRelation.DERIVED_FROM,
+        created_at=fixed_time,
+        producer_id=record_id("intelligence", 1),
+    )
+    repository = InMemoryMemoryRepository((original,), (evidence,))
+    backup_expiry = BackupExpiryDisclosure(
+        state=BackupExpiryState.NOT_CONFIGURED,
+        status_reason="retention.backup.not_configured",
+    )
+    deleted_at = fixed_time + timedelta(minutes=2)
+    service = MemoryService(
+        owner_id=original.subject_id,
+        store=repository,
+        guardian_reader=_guardian(fixed_time),
+        backup_expiry=backup_expiry,
+        clock=lambda: deleted_at,
+        id_factory=_id_factory(
+            deletion=record_id("deletion", 1),
+            work=record_id("work", 1),
+        ),
+    )
+    principal = _principal(fixed_time)
+
+    result = service.delete_content(principal, original.assertion_id)
+
+    assert result.created is True
+    assert type(result.assertion) is AssertionMetadata
+    assert result.assertion.assertion_id == original.assertion_id
+    assert "value" not in result.assertion.model_dump()
+    assert result.current_state.current_status is AssertionStatus.ACTIVE
+    assert result.tombstone.owner_id == principal.owner_id
+    assert result.tombstone.deleted_by_record_id == principal.owner_id
+    assert result.tombstone.deleted_at == deleted_at
+    assert result.tombstone.reason_code == "memory.assertion-content-owner-deleted"
+    assert result.tombstone.size_bytes > 0
+    assert result.tombstone.rebuild_work_id == result.rebuild_work.work_id
+    assert result.rebuild_work.tombstone_id == result.tombstone.tombstone_id
+    assert result.backup_expiry == backup_expiry
+    with pytest.raises(MemoryContentDeletedError):
+        repository.get_assertion(original.assertion_id)
+    assert repository.list_assertions(original.subject_id) == ()
+
+    inspection = service.inspect(principal, original.assertion_id)
+    assert inspection.content_state is AssertionContentState.DELETED
+    assert type(inspection.assertion) is AssertionMetadata
+    assert "value" not in inspection.assertion.model_dump()
+    assert inspection.deletion_tombstone == result.tombstone
+    assert inspection.backup_expiry == backup_expiry
+    assert inspection.current_state == result.current_state
+    assert inspection.provenance_edges == (evidence,)
+    assert inspection.state_changes[0].reason == "assertion.initialized"
+
+    repeated = service.delete_content(principal, original.assertion_id)
+    assert repeated.created is False
+    assert repeated.tombstone == result.tombstone
+    assert repeated.rebuild_work == result.rebuild_work
+    with pytest.raises(MemoryContentDeletedError):
+        service.retract(principal, original.assertion_id, expected_version=1)
+    with pytest.raises(MemoryContentDeletedError):
+        service.correct(
+            principal,
+            original.assertion_id,
+            value={"activity": "reading"},
+            expected_version=1,
+        )
+
+
 def test_memory_repository_missing_records_fail_closed(fixed_time) -> None:
     repository = InMemoryMemoryRepository((_assertion(fixed_time),))
     missing = record_id("assertion", 99)
@@ -377,3 +465,7 @@ def test_memory_repository_missing_records_fail_closed(fixed_time) -> None:
         repository.get_assertion_state(missing)
     with pytest.raises(MemoryNotFoundError):
         repository.list_assertion_state_changes(missing)
+    with pytest.raises(MemoryNotFoundError):
+        repository.get_assertion_metadata(missing)
+    with pytest.raises(MemoryNotFoundError):
+        repository.get_assertion_content_deletion(missing)

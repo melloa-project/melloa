@@ -1,0 +1,62 @@
+{
+  "$id": "https://schemas.melloa.dev/v1/assertion-derived-rebuild-work.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Content-free work request to purge and rebuild assertion-derived data.",
+  "properties": {
+    "assertion_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Assertion Id",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "title": "Requested At",
+      "type": "string"
+    },
+    "requested_by_record_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Requested By Record Id",
+      "type": "string"
+    },
+    "tombstone_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Tombstone Id",
+      "type": "string"
+    },
+    "work_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Work Id",
+      "type": "string"
+    },
+    "work_type": {
+      "const": "memory.assertion-derived-rebuild",
+      "default": "memory.assertion-derived-rebuild",
+      "title": "Work Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "work_id",
+    "assertion_id",
+    "tombstone_id",
+    "requested_by_record_id",
+    "requested_at"
+  ],
+  "title": "AssertionDerivedRebuildWork",
+  "type": "object"
+}

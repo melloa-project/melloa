@@ -104,13 +104,13 @@
         "assertion_id",
         "subject_id",
         "predicate",
-        "value",
         "epistemic_status",
         "status",
         "confidence",
         "source_authority",
         "sensitivity",
-        "observed_at"
+        "observed_at",
+        "value"
       ],
       "title": "Assertion",
       "type": "object"

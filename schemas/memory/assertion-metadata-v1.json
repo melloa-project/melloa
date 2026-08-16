@@ -51,7 +51,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.melloa.dev/v1/assertion.json",
+  "$id": "https://schemas.melloa.dev/v1/assertion-metadata.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -145,11 +145,6 @@
       ],
       "default": null,
       "title": "Valid To"
-    },
-    "value": {
-      "additionalProperties": true,
-      "title": "Value",
-      "type": "object"
     }
   },
   "required": [
@@ -161,9 +156,8 @@
     "confidence",
     "source_authority",
     "sensitivity",
-    "observed_at",
-    "value"
+    "observed_at"
   ],
-  "title": "Assertion",
+  "title": "AssertionMetadata",
   "type": "object"
 }

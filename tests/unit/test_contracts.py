@@ -16,6 +16,7 @@ from melloa.domain.identity import (
 )
 from melloa.domain.memory import (
     Assertion,
+    AssertionContentState,
     AssertionCorrectionResult,
     AssertionStateChange,
     AssertionStateProjection,
@@ -326,6 +327,7 @@ def test_correction_result_and_inspection_require_consistent_links(fixed_time) -
         )
 
     valid_inspection = {
+        "content_state": AssertionContentState.RETAINED,
         "assertion": original,
         "current_state": target_state,
         "provenance_edges": (edge,),

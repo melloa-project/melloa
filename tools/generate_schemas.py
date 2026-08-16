@@ -37,7 +37,11 @@ from melloa.domain.identity import OwnerIdentity, PersistentIntelligenceIdentity
 from melloa.domain.inspection import OwnerModelActivityReport
 from melloa.domain.memory import (
     Assertion,
+    AssertionContentDeletionResult,
+    AssertionContentDeletionTombstone,
     AssertionCorrectionResult,
+    AssertionDerivedRebuildWork,
+    AssertionMetadata,
     AssertionStateChange,
     AssertionStateProjection,
     AssertionStateTransitionResult,
@@ -135,6 +139,19 @@ REGISTRY: dict[str, tuple[str, type[BaseModel]]] = {
         OwnerMediaCatalog,
     ),
     "memory/assertion-v1.json": ("assertion", Assertion),
+    "memory/assertion-metadata-v1.json": ("assertion-metadata", AssertionMetadata),
+    "memory/assertion-content-deletion-tombstone-v1.json": (
+        "assertion-content-deletion-tombstone",
+        AssertionContentDeletionTombstone,
+    ),
+    "memory/assertion-derived-rebuild-work-v1.json": (
+        "assertion-derived-rebuild-work",
+        AssertionDerivedRebuildWork,
+    ),
+    "memory/assertion-content-deletion-result-v1.json": (
+        "assertion-content-deletion-result",
+        AssertionContentDeletionResult,
+    ),
     "memory/assertion-correction-result-v1.json": (
         "assertion-correction-result",
         AssertionCorrectionResult,
