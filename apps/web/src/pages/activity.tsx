@@ -1,0 +1,150 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowUpRight,
+  Bot,
+  Coins,
+  Eye,
+  RefreshCw,
+  ShieldCheck,
+  Timer,
+  Zap,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+import type { ModelActivityReport } from "../api";
+import { errorMessage, useMelloa } from "../app";
+import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Metric, SectionHeader } from "../components/ui";
+import { formatDurationMs, formatGbp, formatInstant, shortId, titleCase } from "../lib/format";
+
+type WindowOption = "24h" | "7d" | "30d";
+
+const windows: ReadonlyArray<{ readonly value: WindowOption; readonly label: string; readonly hours: number }> = [
+  { value: "24h", label: "24 hours", hours: 24 },
+  { value: "7d", label: "7 days", hours: 24 * 7 },
+  { value: "30d", label: "30 days", hours: 24 * 30 },
+];
+
+export function ActivityPage() {
+  const { api } = useMelloa();
+  const navigate = useNavigate();
+  const [windowOption, setWindowOption] = useState<WindowOption>("7d");
+  const [report, setReport] = useState<ModelActivityReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const selectedHours = windowOption === "24h" ? 24 : windowOption === "30d" ? 24 * 30 : 24 * 7;
+    setLoading(true);
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - selectedHours * 60 * 60 * 1_000);
+      setReport(await api.modelActivity(start, end));
+      setError(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setLoading(false);
+    }
+  }, [api, windowOption]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const totalTokens = (report?.total_input_tokens ?? 0) + (report?.total_output_tokens ?? 0);
+
+  return (
+    <div className="standard-page activity-page">
+      <SectionHeader
+        eyebrow="Model ledger"
+        title="Activity"
+        description="Every model run, disclosure, token, and recorded cost in one owner-readable view."
+        action={(
+          <div className="header-actions">
+            <label className="select-field">
+              <span className="sr-only">Activity window</span>
+              <select value={windowOption} onChange={(event) => setWindowOption(event.target.value as WindowOption)}>
+                {windows.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <Button onClick={() => void load()} size="sm"><RefreshCw size={15} /> Refresh</Button>
+          </div>
+        )}
+      />
+
+      {loading && report === null ? <LoadingState label="Reading model activity" /> : null}
+      {error === null ? null : <ErrorState message={error} action={<Button onClick={() => void load()}>Try again</Button>} />}
+
+      {report === null ? null : (
+        <>
+          <section className="metric-grid" aria-label="Model activity summary">
+            <Metric label="Model runs" value={report.total_runs} detail={`${report.external_disclosure_runs} externally disclosed`} />
+            <Metric label="Tokens" value={totalTokens.toLocaleString()} detail={`${report.total_input_tokens.toLocaleString()} in · ${report.total_output_tokens.toLocaleString()} out`} />
+            <Metric label="Recorded cost" value={formatGbp(report.total_cost_gbp)} detail={`${formatGbp(report.external_cost_gbp)} external`} />
+            <Metric label="Window" value={windows.find((item) => item.value === windowOption)?.label ?? "7 days"} detail={`Updated ${formatInstant(report.generated_at)}`} />
+          </section>
+
+          <Card className="data-card">
+            <div className="card-heading-row">
+              <div><h2>Run ledger</h2><p>Provider-neutral execution records tied back to canonical turns.</p></div>
+              <Badge tone={report.external_disclosure_runs > 0 ? "warning" : "positive"}>
+                {report.external_disclosure_runs > 0 ? <Eye size={13} /> : <ShieldCheck size={13} />}
+                {report.external_disclosure_runs > 0 ? `${report.external_disclosure_runs} external` : "No external disclosure"}
+              </Badge>
+            </div>
+
+            {report.entries.length === 0 ? (
+              <EmptyState
+                icon={Zap}
+                title="No model runs in this window"
+                description="Send Melli a message or choose a wider activity window."
+                action={<Button onClick={() => navigate("/conversation")} tone="primary">Open conversation</Button>}
+              />
+            ) : (
+              <div className="activity-list">
+                {report.entries.map((entry) => {
+                  const started = Date.parse(entry.started_at);
+                  const completed = Date.parse(entry.completed_at);
+                  const latency = Number.isFinite(started) && Number.isFinite(completed) ? completed - started : 0;
+                  return (
+                    <article className="activity-row" key={entry.result_id}>
+                      <div className="activity-route-icon"><Bot size={18} /></div>
+                      <div className="activity-identity">
+                        <strong>{entry.model_id}</strong>
+                        <span>{entry.provider_id} · {entry.route_id}</span>
+                      </div>
+                      <div className="activity-facts">
+                        <span><Zap size={14} /> {(entry.input_tokens + entry.output_tokens).toLocaleString()}</span>
+                        <span><Coins size={14} /> {formatGbp(entry.cost_gbp)}</span>
+                        <span><Timer size={14} /> {formatDurationMs(latency)}</span>
+                      </div>
+                      <Badge tone={entry.external_disclosure ? "warning" : "positive"}>
+                        {entry.external_disclosure ? "External" : "Local"}
+                      </Badge>
+                      <div className="activity-time">
+                        <strong>{formatInstant(entry.completed_at)}</strong>
+                        <span>Turn {shortId(entry.turn_id)}</span>
+                      </div>
+                      <Button
+                        aria-label={`Open conversation for ${entry.model_id}`}
+                        onClick={() => navigate(`/conversation/${entry.thread_id}`)}
+                        size="icon"
+                        tone="ghost"
+                      >
+                        <ArrowUpRight size={17} />
+                      </Button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          <p className="page-footnote">
+            <ShieldCheck size={14} /> Activity is an inspection surface; policy and Guardian authority remain outside this view.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}

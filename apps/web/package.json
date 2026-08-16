@@ -1,18 +1,35 @@
 {
   "name": "@melloa/owner-console",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "screenshots:mvp": "node tests/visual/current-mvp.mjs",
     "start": "node server.mjs",
-    "test": "node scripts/test.mjs",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "lucide-react": "0.468.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-router-dom": "7.18.2"
+  },
   "devDependencies": {
-    "typescript": "5.9.2"
+    "@playwright/test": "1.62.1",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
+    "@types/react": "19.0.3",
+    "@types/react-dom": "19.0.2",
+    "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "25.0.1",
+    "typescript": "5.9.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
   }
 }

@@ -186,6 +186,51 @@ export type TelegramOwnerPairing = {
   readonly revoked_at: string | null;
 };
 
+export type TelegramChannelStatus = {
+  readonly configured: boolean;
+  readonly adapter_id: string;
+  readonly state_persistence: "postgresql" | "process-only-preview";
+  readonly polling: {
+    readonly state: string;
+    readonly reason_code: string;
+    readonly next_offset: number;
+    readonly poll_revision: number;
+    readonly updates_handled: number;
+    readonly last_error_code?: string | null;
+    readonly source: {
+      readonly status: string;
+      readonly transport: string;
+      readonly network: boolean;
+      readonly last_success_at?: string | null;
+      readonly last_error_code?: string | null;
+    };
+  } | null;
+  readonly replies: {
+    readonly state: string;
+    readonly reason_code: string;
+    readonly pending_replies: number;
+    readonly deliveries_submitted: number;
+    readonly recovery_after_update_id?: number | null;
+    readonly last_error_code?: string | null;
+  } | null;
+  readonly delivery: {
+    readonly status: string;
+    readonly transport: string;
+    readonly network: boolean;
+    readonly last_success_at?: string | null;
+    readonly last_error_code?: string | null;
+  } | null;
+  readonly capabilities: {
+    readonly transport: string;
+    readonly network: boolean;
+    readonly text: boolean;
+    readonly attachments: boolean;
+    readonly max_text_length: number;
+    readonly ambiguous_send_retries: boolean;
+  } | null;
+  readonly limitations: readonly string[];
+};
+
 export type ConversationTurnInspection = {
   readonly turn: ConversationTurn;
   readonly retrieval_manifest: JsonObject;
@@ -232,6 +277,33 @@ export type ModelActivityEntry = {
   readonly completed_at: string;
   readonly external_disclosure: boolean;
   readonly disclosure?: JsonObject | null;
+};
+
+export type ModelGatewayHealth = {
+  readonly state: "healthy" | "degraded" | "unavailable" | "unknown";
+  readonly checked_at: string;
+  readonly latency_ms?: number | null;
+  readonly reason_code: string;
+};
+
+export type ModelRouteStatus = {
+  readonly route_id: string;
+  readonly display_name: string;
+  readonly route_kind: "synthetic" | "openai_compatible" | "cli_agent" | "acp_agent";
+  readonly provider_id: string;
+  readonly model_id: string;
+  readonly processing_location: "device" | "private_network" | "approved_provider";
+  readonly external_disclosure: boolean;
+  readonly timeout_ms: number;
+  readonly estimated_max_cost_gbp: number;
+  readonly health: ModelGatewayHealth;
+};
+
+export type OwnerModelRouteReport = {
+  readonly contract_version: "1.0.0";
+  readonly owner_id: string;
+  readonly generated_at: string;
+  readonly routes: readonly ModelRouteStatus[];
 };
 
 export type SystemStatus = {
@@ -385,7 +457,7 @@ export class MelloaApi {
   readonly #fetch: FetchLike;
   #csrfToken: string | null = null;
 
-  constructor(fetcher: FetchLike = fetch) {
+  constructor(fetcher: FetchLike = (input, init) => fetch(input, init)) {
     this.#fetch = fetcher;
   }
 
@@ -434,6 +506,10 @@ export class MelloaApi {
 
   async retentionReport(): Promise<OwnerRetentionReport> {
     return this.#request<OwnerRetentionReport>("/api/v1/retention");
+  }
+
+  async modelRoutes(): Promise<OwnerModelRouteReport> {
+    return this.#request<OwnerModelRouteReport>("/api/v1/providers/routes");
   }
 
   async listThreads(): Promise<readonly ConversationThread[]> {
@@ -557,6 +633,12 @@ export class MelloaApi {
     );
   }
 
+  async inspectTelegramStatus(): Promise<TelegramChannelStatus> {
+    return this.#request<TelegramChannelStatus>(
+      "/api/v1/integrations/telegram/status",
+    );
+  }
+
   async inspectTelegramPairing(): Promise<TelegramOwnerPairing | null> {
     return this.#request<TelegramOwnerPairing | null>(
       "/api/v1/integrations/telegram/pairing",
@@ -658,7 +740,8 @@ export class MelloaApi {
       }
       headers.set("X-Melloa-CSRF", this.#csrfToken);
     }
-    const response = await this.#fetch(path, {
+    const fetcher = this.#fetch;
+    const response = await fetcher(path, {
       method: options.method ?? "GET",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),

@@ -1,10 +1,11 @@
 import { createReadStream, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, normalize } from "node:path";
+import { extname, join, normalize, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const host = "127.0.0.1";
 const port = Number.parseInt(process.env.MELLOA_WEB_PORT ?? "8787", 10);
-const root = new URL("./dist/", import.meta.url).pathname;
+const root = resolve(fileURLToPath(new URL("./dist/", import.meta.url)));
 const core = new URL(process.env.MELLOA_CORE_URL ?? "http://127.0.0.1:8000");
 if (core.protocol !== "http:" && core.protocol !== "https:") {
   throw new Error("MELLOA_CORE_URL must use HTTP or HTTPS");
@@ -13,6 +14,12 @@ const types = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
+  [".map", "application/json; charset=utf-8"],
+  [".png", "image/png"],
+  [".svg", "image/svg+xml"],
+  [".webp", "image/webp"],
+  [".woff2", "font/woff2"],
 ]);
 
 const hopByHopHeaders = new Set([
@@ -88,15 +95,32 @@ createServer(async (request, response) => {
     response.writeHead(405, { Allow: "GET, HEAD" }).end();
     return;
   }
-  const requested = url.pathname === "/" ? "index.html" : normalize(url.pathname).replace(/^\/+/, "");
-  const path = join(root, requested);
-  if (!path.startsWith(root) || !statSync(path, { throwIfNoEntry: false })?.isFile()) {
+  let requested;
+  try {
+    requested = url.pathname === "/"
+      ? "index.html"
+      : normalize(decodeURIComponent(url.pathname)).replace(/^[/\\]+/, "");
+  } catch {
+    response.writeHead(400).end();
+    return;
+  }
+  let path = resolve(root, requested);
+  const insideRoot = path === root || path.startsWith(`${root}${sep}`);
+  if (!insideRoot) {
     response.writeHead(404).end();
     return;
   }
+  if (!statSync(path, { throwIfNoEntry: false })?.isFile() && extname(requested) === "") {
+    path = join(root, "index.html");
+  }
+  if (!statSync(path, { throwIfNoEntry: false })?.isFile()) {
+    response.writeHead(404).end();
+    return;
+  }
+  const immutableAsset = requested.startsWith("assets/") && path !== join(root, "index.html");
   response.writeHead(200, {
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "Cache-Control": immutableAsset ? "public, max-age=31536000, immutable" : "no-store",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
     "Content-Type": types.get(extname(path)) ?? "application/octet-stream",
     "Cross-Origin-Resource-Policy": "same-origin",
     "Referrer-Policy": "no-referrer",
