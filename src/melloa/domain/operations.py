@@ -209,6 +209,13 @@ class ExportCoverageItem(ContractModel):
         return self
 
 
+class ExportValidationCheck(ContractModel):
+    check_id: QualifiedName
+    implemented: bool
+    summary: str = Field(min_length=1, max_length=512)
+    status_reason: QualifiedName
+
+
 class OwnerExportReadinessReport(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     owner_id: RecordId
@@ -220,6 +227,7 @@ class OwnerExportReadinessReport(ContractModel):
     includes_sql_snapshot: bool
     includes_blobs: bool
     coverage: tuple[ExportCoverageItem, ...] = Field(min_length=1)
+    validation_checks: tuple[ExportValidationCheck, ...] = Field(min_length=1)
     limitations: tuple[QualifiedName, ...]
 
     @model_validator(mode="after")
@@ -231,6 +239,15 @@ class OwnerExportReadinessReport(ContractModel):
             raise ValueError("export coverage must use deterministic group order")
         if not any(item.included for item in self.coverage):
             raise ValueError("export readiness must include at least one covered group")
+        check_ids = tuple(item.check_id for item in self.validation_checks)
+        if len(set(check_ids)) != len(check_ids):
+            raise ValueError("export validation checks must be unique")
+        if self.validation_checks != tuple(
+            sorted(self.validation_checks, key=lambda item: item.check_id)
+        ):
+            raise ValueError("export validation checks must use deterministic check order")
+        if not any(item.implemented for item in self.validation_checks):
+            raise ValueError("export readiness must include at least one validation check")
         if len(set(self.limitations)) != len(self.limitations):
             raise ValueError("export limitations must be unique")
         if self.limitations != tuple(sorted(self.limitations)):

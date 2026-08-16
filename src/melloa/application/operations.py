@@ -11,6 +11,7 @@ from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, utc_now
 from melloa.domain.operations import (
     ExportCoverageItem,
+    ExportValidationCheck,
     OwnerExportReadinessReport,
     OwnerHealthReport,
     OwnerMediaCatalog,
@@ -160,6 +161,44 @@ class OwnerOperationsService:
                         "exported yet."
                     ),
                     status_reason="export.coverage.telegram-control-state-not-included",
+                ),
+            ),
+            validation_checks=(
+                ExportValidationCheck(
+                    check_id="export.validation.checksums",
+                    implemented=True,
+                    summary=(
+                        "Every bundled file is verified against checksums.sha256 "
+                        "before records are trusted."
+                    ),
+                    status_reason="export.validation.checksum-verification",
+                ),
+                ExportValidationCheck(
+                    check_id="export.validation.references",
+                    implemented=True,
+                    summary=(
+                        "Conversation, turn, and model-activity records receive "
+                        "basic referential-integrity checks inside the bundle."
+                    ),
+                    status_reason="export.validation.basic-references",
+                ),
+                ExportValidationCheck(
+                    check_id="export.validation.restore-execution",
+                    implemented=False,
+                    summary=(
+                        "Validation is a dry run and does not import into a database "
+                        "or execute migrations."
+                    ),
+                    status_reason="export.validation.restore-execution-pending",
+                ),
+                ExportValidationCheck(
+                    check_id="export.validation.schemas",
+                    implemented=True,
+                    summary=(
+                        "JSONL data records are parsed through the bundled versioned "
+                        "contract models."
+                    ),
+                    status_reason="export.validation.schema-models",
                 ),
             ),
             limitations=(

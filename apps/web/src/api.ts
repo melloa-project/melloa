@@ -445,6 +445,13 @@ export type ExportCoverageItem = {
   readonly status_reason: string;
 };
 
+export type ExportValidationCheck = {
+  readonly check_id: string;
+  readonly implemented: boolean;
+  readonly summary: string;
+  readonly status_reason: string;
+};
+
 export type OwnerExportReadinessReport = {
   readonly contract_version: "1.0.0";
   readonly owner_id: string;
@@ -456,6 +463,7 @@ export type OwnerExportReadinessReport = {
   readonly includes_sql_snapshot: boolean;
   readonly includes_blobs: boolean;
   readonly coverage: readonly ExportCoverageItem[];
+  readonly validation_checks: readonly ExportValidationCheck[];
   readonly limitations: readonly string[];
 };
 

@@ -63,6 +63,43 @@
       ],
       "title": "ExportCoverageItem",
       "type": "object"
+    },
+    "ExportValidationCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "check_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Check Id",
+          "type": "string"
+        },
+        "implemented": {
+          "title": "Implemented",
+          "type": "boolean"
+        },
+        "status_reason": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Status Reason",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check_id",
+        "implemented",
+        "summary",
+        "status_reason"
+      ],
+      "title": "ExportValidationCheck",
+      "type": "object"
     }
   },
   "$id": "https://schemas.melloa.dev/v1/owner-export-readiness.json",
@@ -131,6 +168,14 @@
       "title": "Owner Id",
       "type": "string"
     },
+    "validation_checks": {
+      "items": {
+        "$ref": "#/$defs/ExportValidationCheck"
+      },
+      "minItems": 1,
+      "title": "Validation Checks",
+      "type": "array"
+    },
     "validation_command": {
       "maxLength": 256,
       "minLength": 1,
@@ -147,6 +192,7 @@
     "includes_sql_snapshot",
     "includes_blobs",
     "coverage",
+    "validation_checks",
     "limitations"
   ],
   "title": "OwnerExportReadinessReport",

@@ -103,6 +103,20 @@ describe("OperationsPage retention view", () => {
           status_reason: "export.coverage.sql-snapshot-not-included",
         },
       ],
+      validation_checks: [
+        {
+          check_id: "export.validation.checksums",
+          implemented: true,
+          summary: "Every bundled file is verified against checksums.sha256 before records are trusted.",
+          status_reason: "export.validation.checksum-verification",
+        },
+        {
+          check_id: "export.validation.restore-execution",
+          implemented: false,
+          summary: "Validation is a dry run and does not import into a database or execute migrations.",
+          status_reason: "export.validation.restore-execution-pending",
+        },
+      ],
       limitations: [
         "export.blobs-not-included",
         "export.preview-unencrypted",
@@ -139,6 +153,11 @@ describe("OperationsPage retention view", () => {
       .closest(".export-coverage-row");
     expect(conversationCoverage).toBeInstanceOf(HTMLElement);
     expect(within(conversationCoverage as HTMLElement).getByText("7 estimated records")).toBeInTheDocument();
+    expect(screen.getByText("Import validation scope")).toBeInTheDocument();
+    expect(screen.getByText("Every bundled file is verified against checksums.sha256 before records are trusted.")).toBeInTheDocument();
+    expect(screen.getByText("Validation is a dry run and does not import into a database or execute migrations.")).toBeInTheDocument();
+    expect(screen.getByText("Checked")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Logical SQL snapshots remain pending.")).toBeInTheDocument();
     expect(screen.getByText("Excluded")).toBeInTheDocument();
   });

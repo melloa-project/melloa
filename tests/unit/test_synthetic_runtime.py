@@ -205,6 +205,13 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert export_before_coverage["export.conversation-records"]["estimated_records"] == 1
     assert export_before_coverage["export.model-activity"]["estimated_records"] == 0
     assert export_before_coverage["export.blobs"].get("estimated_records") is None
+    export_before_checks = {
+        item["check_id"]: item for item in export_before.json()["validation_checks"]
+    }
+    assert export_before_checks["export.validation.checksums"]["implemented"] is True
+    assert export_before_checks["export.validation.restore-execution"][
+        "implemented"
+    ] is False
 
     memory = client.get(f"/api/v1/memory/{runtime.seed_assertion_id}")
     assert memory.status_code == 200

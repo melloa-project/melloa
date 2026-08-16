@@ -2102,11 +2102,13 @@ pre {
   border-bottom: 0;
 }
 
-.export-coverage-list {
+.export-coverage-list,
+.export-validation-list {
   margin-top: 16px;
 }
 
-.export-coverage-row {
+.export-coverage-row,
+.export-validation-row {
   align-items: center;
   border-bottom: 1px solid #edf0ed;
   display: grid;
@@ -2116,19 +2118,23 @@ pre {
   padding: 11px 1px;
 }
 
-.export-coverage-row:last-child {
+.export-coverage-row:last-child,
+.export-validation-row:last-child {
   border-bottom: 0;
 }
 
-.export-coverage-row > div {
+.export-coverage-row > div,
+.export-validation-row > div {
   min-width: 0;
 }
 
-.export-coverage-row strong {
+.export-coverage-row strong,
+.export-validation-row strong {
   font-size: 0.75rem;
 }
 
-.export-coverage-row p {
+.export-coverage-row p,
+.export-validation-row p {
   color: var(--muted);
   font-size: 0.68rem;
   line-height: 1.45;

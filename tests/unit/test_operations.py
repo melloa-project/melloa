@@ -253,6 +253,20 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
                 "status_reason": "export.coverage.conversation-jsonl",
             },
         ),
+        validation_checks=(
+            {
+                "check_id": "export.validation.checksums",
+                "implemented": True,
+                "summary": "Checksums are verified before records are trusted.",
+                "status_reason": "export.validation.checksum-verification",
+            },
+            {
+                "check_id": "export.validation.restore-execution",
+                "implemented": False,
+                "summary": "Database restore execution remains pending.",
+                "status_reason": "export.validation.restore-execution-pending",
+            },
+        ),
         limitations=(
             "export.blobs-not-included",
             "export.preview-unencrypted",
@@ -285,6 +299,16 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
                         "summary": "Blobs are excluded.",
                         "status_reason": "export.coverage.blobs-not-included",
                     },
+                ),
+            }
+        )
+    with pytest.raises(ValidationError, match="deterministic check order"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "validation_checks": (
+                    report.validation_checks[1].model_dump(),
+                    report.validation_checks[0].model_dump(),
                 ),
             }
         )
@@ -367,6 +391,10 @@ def test_owner_operations_service_sorts_and_scopes_reports(fixed_time) -> None:
     assert export.coverage[0].estimated_records == 0
     assert export.coverage[-2].group_id == "export.schemas-checksums"
     assert export.coverage[-2].estimated_records == 11
+    assert export.validation_checks[0].check_id == "export.validation.checksums"
+    assert export.validation_checks[0].implemented is True
+    assert export.validation_checks[-1].check_id == "export.validation.schemas"
+    assert any(not check.implemented for check in export.validation_checks)
     assert "export.preview-unencrypted" in export.limitations
     assert reader.media_sources(record_id("owner", 2)) == ()
     assert reader.media_items(record_id("owner", 2)) == ()
@@ -421,6 +449,10 @@ def test_operational_inspection_api_is_authenticated_and_fail_closed(fixed_time)
     assert export_payload["encrypted"] is False
     assert export_payload["coverage"][0]["group_id"] == "export.assertion-inspections"
     assert export_payload["coverage"][0]["estimated_records"] == 0
+    assert export_payload["validation_checks"][0]["check_id"] == (
+        "export.validation.checksums"
+    )
+    assert export_payload["validation_checks"][2]["implemented"] is False
 
     absent = TestClient(
         create_app(_guardian(fixed_time), sessions),

@@ -276,6 +276,26 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
           ))}
         </div>
       </Card>
+      <Card className="operations-panel">
+        <div className="card-heading-row">
+          <div><h2>Import validation scope</h2><p>Dry-run checks are separated from restore work that still remains pending.</p></div>
+          <Badge>{report.validation_checks.filter((item) => item.implemented).length} checks</Badge>
+        </div>
+        <div className="export-validation-list">
+          {report.validation_checks.map((item) => (
+            <article className="export-validation-row" key={item.check_id}>
+              <span className={`component-state ${item.implemented ? "healthy" : "disabled"}`}>
+                {item.implemented ? <FileCheck2 size={17} /> : <WifiOff size={17} />}
+              </span>
+              <div>
+                <strong>{titleCase(item.check_id.replace(/^export[.-]validation[.-]/, ""))}</strong>
+                <p>{item.summary}</p>
+              </div>
+              <Badge tone={item.implemented ? "positive" : "warning"}>{item.implemented ? "Checked" : "Pending"}</Badge>
+            </article>
+          ))}
+        </div>
+      </Card>
       <Card className="backup-disclosure">
         <span className="summary-icon"><ShieldCheck size={18} /></span>
         <div><h2>Limitations</h2><p>{report.limitations.map(titleCase).join(" · ")}</p></div>
