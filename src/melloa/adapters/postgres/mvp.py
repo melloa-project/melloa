@@ -24,9 +24,9 @@ from melloa.adapters.postgres.telegram import (
 )
 from melloa.domain.base import (
     ContractModel,
-    JsonObject,
     QualifiedName,
     RecordId,
+    canonical_json_bytes,
     new_record_id,
     utc_now,
 )
@@ -409,4 +409,4 @@ def _ensure_assertion(
 def _parse_document[Model: ContractModel](model: type[Model], document: object) -> Model:
     if not isinstance(document, dict):
         raise PostgresMvpBootstrapError("canonical identity document is not an object")
-    return model.model_validate(cast(JsonObject, document))
+    return model.model_validate_json(canonical_json_bytes(document))

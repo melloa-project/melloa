@@ -186,9 +186,9 @@ c038debfec5f2e7b2bc90eef3e7e0f76997068a503d6342887ebae9ec8311449  ./src/melloa/a
 efbf234016061a11c0883590b1a17de579be996edc31b3b247d620cf05eb220e  ./src/melloa/adapters/postgres/delivery.py
 a543f5e8b65cad81f2b510dac4bd25556c8eddf6e0fe7b0eabd9d5c4c16080fc  ./src/melloa/adapters/postgres/memory.py
 857c2586d5ff4e74700cc45a12e490839f1a2a3ff5ea5d14af12691d06aec0b9  ./src/melloa/adapters/postgres/migrations.py
-21568325732bc2ea273a4e4d887688bdbbc36935fcce987a7e616fbfdf10f513  ./src/melloa/adapters/postgres/mvp.py
+e7b40cb334443702e0a50f23d597c4c3742976c270e5347b1af5446552db4aa8  ./src/melloa/adapters/postgres/mvp.py
 02c8d5c3b28d9b9c455be9124a7cb5c6984708c9b3060cf411e24ebfafd87342  ./src/melloa/adapters/postgres/store.py
-d6a07a027f1bba1eb9ebb5b365acd94f4b028088a6b9588c1f750fec533ecf20  ./src/melloa/adapters/postgres/telegram.py
+72fe4b2695da6c0e966055bc3154e8b8545909c91ef8a7f86c48086722f3946a  ./src/melloa/adapters/postgres/telegram.py
 2601ef6aa7777ca1a658e18ef240f6c9fa3488367482ea963158d7813444b801  ./src/melloa/adapters/telegram/__init__.py
 1ef0f13fd9df5b65956d657eb004e453f67ddef90753eb8ccb84cd20e06ede4e  ./src/melloa/adapters/telegram/bot_api.py
 b67650fefe22965449bb9f702ed2e23a705a32faf203a8fd8f329b552af4bb5f  ./src/melloa/application/__init__.py
@@ -262,7 +262,7 @@ e34cd8a992ce463150e110ff3584356b79e1b424e7e3876a5d3542588c163f10  ./tests/unit/t
 7cae5a16cdf3abcff08062afa1f211282a5008ab2117d14d866e0d2dbde8c8f0  ./tests/unit/test_openai_compatible_model.py
 ef6ddc2575eb345a92f16478d5c16959be0766ac75d6f3fedc2a07e0741e28a6  ./tests/unit/test_operations.py
 e3c6307e8f7187b22cde9116cd723cd439e3e21733d9cc7903c4dda108b92e65  ./tests/unit/test_policy.py
-fc9c1fd3bcd54dca9a799a5ca38e27cb56806a6e5f8cdd29f95bd5001731d543  ./tests/unit/test_postgres_mvp.py
+a6d8411709fb067a9b430201288d1e1393cd2ee62a58782b0e6413436e315595  ./tests/unit/test_postgres_mvp.py
 5b72222adcd219e0ed7d3f03b959c65d95ee398f010556bdcc11c9ba97cc0bc5  ./tests/unit/test_retention.py
 d34a4cc4565b650ef4e148a18d184c3fa06d5817e17d138e6397496ffbdd034d  ./tests/unit/test_retention_inspection.py
 df9f042f5f1ab73857823f5b72b46742b4e649e486625f4982bc0f8bb5f61085  ./tests/unit/test_retrieval.py

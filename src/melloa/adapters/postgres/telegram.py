@@ -9,7 +9,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
-from melloa.domain.base import JsonObject, QualifiedName, RecordId
+from melloa.domain.base import JsonObject, QualifiedName, RecordId, canonical_json_bytes
 from melloa.domain.telegram import (
     TelegramInboundUpdate,
     TelegramIngestionReceipt,
@@ -360,7 +360,9 @@ class PostgresTelegramPairingStateStore:
     @staticmethod
     def _parse_candidate(document: object) -> TelegramPairingCandidate:
         try:
-            return TelegramPairingCandidate.model_validate(cast(JsonObject, document))
+            return TelegramPairingCandidate.model_validate_json(
+                canonical_json_bytes(cast(JsonObject, document))
+            )
         except (ValidationError, TypeError, ValueError) as error:
             raise TelegramPairingConflictError(
                 "durable Telegram candidate document is invalid"
@@ -369,12 +371,16 @@ class PostgresTelegramPairingStateStore:
     @classmethod
     def _parse_pairing_row(cls, row: tuple[object, ...]) -> TelegramOwnerPairing:
         try:
-            confirmed = TelegramOwnerPairing.model_validate(cast(JsonObject, row[0]))
+            confirmed = TelegramOwnerPairing.model_validate_json(
+                canonical_json_bytes(cast(JsonObject, row[0]))
+            )
             if confirmed.revoked_at is not None:
                 raise ValueError("confirmed pairing document contains a revocation")
             if row[1] is None:
                 return confirmed
-            revoked = TelegramOwnerPairing.model_validate(cast(JsonObject, row[1]))
+            revoked = TelegramOwnerPairing.model_validate_json(
+                canonical_json_bytes(cast(JsonObject, row[1]))
+            )
             if revoked.revoked_at is None or confirmed.model_copy(
                 update={"revoked_at": revoked.revoked_at}
             ) != revoked:
@@ -622,7 +628,9 @@ class PostgresTelegramPollStateStore:
     @staticmethod
     def _parse_state(document: object) -> TelegramPollState:
         try:
-            return TelegramPollState.model_validate(cast(JsonObject, document))
+            return TelegramPollState.model_validate_json(
+                canonical_json_bytes(cast(JsonObject, document))
+            )
         except (ValidationError, TypeError, ValueError) as error:
             raise TelegramPollConflictError(
                 "durable Telegram poll state document is invalid"
@@ -631,7 +639,9 @@ class PostgresTelegramPollStateStore:
     @staticmethod
     def _parse_update(document: object) -> TelegramInboundUpdate:
         try:
-            return TelegramInboundUpdate.model_validate(cast(JsonObject, document))
+            return TelegramInboundUpdate.model_validate_json(
+                canonical_json_bytes(cast(JsonObject, document))
+            )
         except (ValidationError, TypeError, ValueError) as error:
             raise TelegramPollConflictError(
                 "durable Telegram update document is invalid"
@@ -640,7 +650,9 @@ class PostgresTelegramPollStateStore:
     @staticmethod
     def _parse_receipt(document: object) -> TelegramIngestionReceipt:
         try:
-            receipt = TelegramIngestionReceipt.model_validate(cast(JsonObject, document))
+            receipt = TelegramIngestionReceipt.model_validate_json(
+                canonical_json_bytes(cast(JsonObject, document))
+            )
         except (ValidationError, TypeError, ValueError) as error:
             raise TelegramPollConflictError(
                 "durable Telegram receipt document is invalid"

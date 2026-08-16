@@ -1,15 +1,32 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from datetime import timedelta
 
 import pytest
 
-from melloa.adapters.postgres.mvp import validate_private_database_dsn
+from melloa.adapters.postgres.mvp import _parse_document, validate_private_database_dsn
+from melloa.adapters.postgres.telegram import (
+    PostgresTelegramPairingStateStore,
+    PostgresTelegramPollStateStore,
+)
 from melloa.apps import postgres_mvp
 from melloa.apps.synthetic import (
     SYNTHETIC_INTELLIGENCE_ID,
     SYNTHETIC_OWNER_ID,
     synthetic_seed_assertion,
+)
+from melloa.domain.identity import OwnerIdentity
+from melloa.domain.telegram import (
+    TelegramChatType,
+    TelegramInboundMessage,
+    TelegramInboundUpdate,
+    TelegramIngestionReceipt,
+    TelegramOwnerPairing,
+    TelegramPairingCandidate,
+    TelegramPollState,
+    TelegramUpdateDisposition,
+    telegram_update_fingerprint,
 )
 
 
@@ -95,3 +112,78 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
     assert any("conversations" in item for item in stores.status.durable_state)
     assert any("Telegram" in item for item in stores.status.durable_state)
     assert "authentication sessions" in stores.status.ephemeral_state
+
+
+def test_postgres_mvp_jsonb_documents_round_trip_through_strict_contracts(
+    fixed_time,
+) -> None:
+    owner = OwnerIdentity(owner_id=SYNTHETIC_OWNER_ID, created_at=fixed_time)
+    assert _parse_document(OwnerIdentity, owner.model_dump(mode="json")) == owner
+
+    candidate = TelegramPairingCandidate(
+        candidate_id="candidate_11111111111111111111111111111111",
+        owner_id=SYNTHETIC_OWNER_ID,
+        update_id=1,
+        telegram_user_id=42,
+        telegram_chat_id=42,
+        confirmation_code_hash="sha256:" + "1" * 64,
+        observed_at=fixed_time,
+        expires_at=fixed_time + timedelta(minutes=5),
+    )
+    pairing = TelegramOwnerPairing(
+        pairing_id="pairing_11111111111111111111111111111111",
+        candidate_id=candidate.candidate_id,
+        owner_id=SYNTHETIC_OWNER_ID,
+        telegram_user_id=42,
+        telegram_chat_id=42,
+        confirmed_by_owner_id=SYNTHETIC_OWNER_ID,
+        confirmed_at=fixed_time + timedelta(seconds=1),
+    )
+    update = TelegramInboundUpdate(
+        update_id=2,
+        message=TelegramInboundMessage(
+            telegram_message_id=2,
+            sender_user_id=42,
+            chat_id=42,
+            chat_type=TelegramChatType.PRIVATE,
+            sent_at=fixed_time + timedelta(seconds=1),
+            text="Persist this update.",
+        ),
+        received_at=fixed_time + timedelta(seconds=2),
+        raw_size_bytes=128,
+        source_payload_hash="sha256:" + "2" * 64,
+    )
+    receipt = TelegramIngestionReceipt(
+        receipt_id="telegramreceipt_11111111111111111111111111111111",
+        adapter_id="client.telegram.synthetic",
+        update_id=update.update_id,
+        update_fingerprint=telegram_update_fingerprint(update),
+        disposition=TelegramUpdateDisposition.INGESTED,
+        recorded_at=fixed_time + timedelta(seconds=2),
+        canonical_message_id="message_11111111111111111111111111111111",
+        pairing_id=pairing.pairing_id,
+    )
+    state = TelegramPollState(
+        adapter_id="client.telegram.synthetic",
+        next_offset=3,
+        revision=1,
+        last_update_id=update.update_id,
+        last_receipt_id=receipt.receipt_id,
+        updated_at=fixed_time + timedelta(seconds=2),
+    )
+
+    assert PostgresTelegramPairingStateStore._parse_candidate(
+        candidate.model_dump(mode="json")
+    ) == candidate
+    assert PostgresTelegramPairingStateStore._parse_pairing_row(
+        (pairing.model_dump(mode="json"), None)
+    ) == pairing
+    assert PostgresTelegramPollStateStore._parse_update(
+        update.model_dump(mode="json")
+    ) == update
+    assert PostgresTelegramPollStateStore._parse_receipt(
+        receipt.model_dump(mode="json")
+    ) == receipt
+    assert PostgresTelegramPollStateStore._parse_state(
+        state.model_dump(mode="json")
+    ) == state
