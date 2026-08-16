@@ -33,6 +33,7 @@
 - Integrated reject-or-quarantine attachment intake after exact Telegram pairing validation, with ordered outcome checks before canonical mutation, Melloa-owned quarantine references, attachment-only reply work, no-refetch crash recovery, and model-input isolation from attachment bytes and metadata.
 - Added owner-bound synthetic quarantine expiry with a one-hour-to-seven-day policy bound, newest-reference extension for deduplicated blobs, deterministic bounded sweeps, quota reclamation, and immutable content-free deletion tombstones.
 - Wired quarantine expiry into a separately bounded no-network lifespan worker that permits local deletion only in Guardian `normal`/`offline`, validates backend receipt bounds and owner scope, and reports redacted optional health.
+- Added an authenticated owner retention report with strict policy bounds, deletion-scope availability, tombstone/rebuild obligations, external-copy status, aggregate inventory coverage, and honest backup-expiry disclosure; unavailable deletion and inventory paths remain explicit.
 
 ## M0 implementation — 16 August 2026
 

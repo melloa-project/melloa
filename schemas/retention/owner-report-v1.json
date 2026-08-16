@@ -1,0 +1,395 @@
+{
+  "$defs": {
+    "BackupExpiryDisclosure": {
+      "additionalProperties": false,
+      "properties": {
+        "latest_snapshot_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latest Snapshot At"
+        },
+        "maximum_retention_seconds": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum Retention Seconds"
+        },
+        "state": {
+          "$ref": "#/$defs/BackupExpiryState"
+        },
+        "status_reason": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Status Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "status_reason"
+      ],
+      "title": "BackupExpiryDisclosure",
+      "type": "object"
+    },
+    "BackupExpiryState": {
+      "enum": [
+        "configured",
+        "not-configured",
+        "unknown"
+      ],
+      "title": "BackupExpiryState",
+      "type": "string"
+    },
+    "RetentionDeletionControl": {
+      "enum": [
+        "owner-request",
+        "automatic-only",
+        "restricted",
+        "not-implemented"
+      ],
+      "title": "RetentionDeletionControl",
+      "type": "string"
+    },
+    "RetentionDeletionScope": {
+      "enum": [
+        "raw-object",
+        "source-integration",
+        "time-range",
+        "memory-claim",
+        "full-export-and-delete"
+      ],
+      "title": "RetentionDeletionScope",
+      "type": "string"
+    },
+    "RetentionDurationBounds": {
+      "additionalProperties": false,
+      "properties": {
+        "default_seconds": {
+          "minimum": 1,
+          "title": "Default Seconds",
+          "type": "integer"
+        },
+        "maximum_seconds": {
+          "minimum": 1,
+          "title": "Maximum Seconds",
+          "type": "integer"
+        },
+        "minimum_seconds": {
+          "minimum": 1,
+          "title": "Minimum Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "minimum_seconds",
+        "default_seconds",
+        "maximum_seconds"
+      ],
+      "title": "RetentionDurationBounds",
+      "type": "object"
+    },
+    "RetentionExternalCopyState": {
+      "enum": [
+        "none",
+        "source-controlled",
+        "provider-controlled",
+        "unknown"
+      ],
+      "title": "RetentionExternalCopyState",
+      "type": "string"
+    },
+    "RetentionInventoryCoverage": {
+      "enum": [
+        "complete",
+        "partial",
+        "unavailable"
+      ],
+      "title": "RetentionInventoryCoverage",
+      "type": "string"
+    },
+    "RetentionInventoryStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "$ref": "#/$defs/RetentionInventoryCoverage"
+        },
+        "deletion_receipts": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deletion Receipts"
+        },
+        "next_expiry_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Expiry At"
+        },
+        "oldest_retained_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oldest Retained At"
+        },
+        "overdue_objects": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overdue Objects"
+        },
+        "pending_deletions": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pending Deletions"
+        },
+        "policy_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "retained_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retained Bytes"
+        },
+        "retained_objects": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retained Objects"
+        },
+        "status_reason": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Status Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy_id",
+        "coverage",
+        "status_reason"
+      ],
+      "title": "RetentionInventoryStatus",
+      "type": "object"
+    },
+    "RetentionMode": {
+      "enum": [
+        "automatic-expiry",
+        "owner-lifecycle",
+        "fixed-window",
+        "append-only",
+        "source-controlled"
+      ],
+      "title": "RetentionMode",
+      "type": "string"
+    },
+    "RetentionPolicyStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "automatic_expiry": {
+          "title": "Automatic Expiry",
+          "type": "boolean"
+        },
+        "data_category": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Data Category",
+          "type": "string"
+        },
+        "deletion_control": {
+          "$ref": "#/$defs/RetentionDeletionControl"
+        },
+        "derived_rebuild_required": {
+          "title": "Derived Rebuild Required",
+          "type": "boolean"
+        },
+        "duration_bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetentionDurationBounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "external_copy_state": {
+          "$ref": "#/$defs/RetentionExternalCopyState"
+        },
+        "mode": {
+          "$ref": "#/$defs/RetentionMode"
+        },
+        "owner_deletion_scopes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RetentionDeletionScope"
+          },
+          "title": "Owner Deletion Scopes",
+          "type": "array"
+        },
+        "policy_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "status_reason": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Status Reason",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "tombstone_retained": {
+          "title": "Tombstone Retained",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "policy_id",
+        "data_category",
+        "summary",
+        "mode",
+        "automatic_expiry",
+        "deletion_control",
+        "tombstone_retained",
+        "derived_rebuild_required",
+        "external_copy_state",
+        "status_reason"
+      ],
+      "title": "RetentionPolicyStatus",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/owner-retention-report.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "backup_expiry": {
+      "$ref": "#/$defs/BackupExpiryDisclosure"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "inventory": {
+      "items": {
+        "$ref": "#/$defs/RetentionInventoryStatus"
+      },
+      "minItems": 1,
+      "title": "Inventory",
+      "type": "array"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "policies": {
+      "items": {
+        "$ref": "#/$defs/RetentionPolicyStatus"
+      },
+      "minItems": 1,
+      "title": "Policies",
+      "type": "array"
+    }
+  },
+  "required": [
+    "owner_id",
+    "generated_at",
+    "policies",
+    "inventory",
+    "backup_expiry"
+  ],
+  "title": "OwnerRetentionReport",
+  "type": "object"
+}

@@ -38,6 +38,11 @@ from melloa.application.memory import (
     MemoryUnavailableError,
 )
 from melloa.application.operations import OwnerOperationsService
+from melloa.application.retention import (
+    OwnerRetentionService,
+    RetentionInspectionUnavailableError,
+    RetentionOwnershipError,
+)
 from melloa.application.status import SystemStatus, read_system_status
 from melloa.application.telegram import (
     TelegramAttachmentRetentionWorker,
@@ -67,6 +72,7 @@ from melloa.domain.memory import (
     MemoryInspection,
 )
 from melloa.domain.operations import OwnerHealthReport, OwnerMediaCatalog
+from melloa.domain.retention import OwnerRetentionReport
 from melloa.domain.telegram import (
     TelegramChatId,
     TelegramOwnerPairing,
@@ -311,6 +317,16 @@ def _configured_operations(request: Request) -> OwnerOperationsService:
     return operations_service
 
 
+def _configured_retention(request: Request) -> OwnerRetentionService:
+    retention_service: OwnerRetentionService | None = request.app.state.retention_service
+    if retention_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Owner retention inspection is not configured.",
+        )
+    return retention_service
+
+
 def _configured_telegram_pairing(request: Request) -> TelegramPairingService:
     pairing_service: TelegramPairingService | None = request.app.state.telegram_pairing_service
     if pairing_service is None:
@@ -362,6 +378,7 @@ def create_app(
     telegram_worker: TelegramPollWorker | None = None,
     telegram_pairing_service: TelegramPairingService | None = None,
     telegram_retention_worker: TelegramAttachmentRetentionWorker | None = None,
+    retention_service: OwnerRetentionService | None = None,
     *,
     secure_session_cookie: bool = True,
     run_conversation_worker: bool = False,
@@ -451,6 +468,7 @@ def create_app(
     app.state.memory_service = memory_service
     app.state.inspection_service = inspection_service
     app.state.operations_service = operations_service
+    app.state.retention_service = retention_service
     app.state.delivery_service = delivery_service
     app.state.telegram_worker = telegram_worker
     app.state.telegram_pairing_service = telegram_pairing_service
@@ -693,6 +711,32 @@ def create_app(
             content={
                 "code": "invalid_inspection_window",
                 "message": "The requested inspection window is invalid.",
+            },
+        )
+
+    @app.exception_handler(RetentionOwnershipError)
+    async def retention_not_found(
+        _request: Request,
+        _error: RetentionOwnershipError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": "retention_report_not_found",
+                "message": "Retention report not found.",
+            },
+        )
+
+    @app.exception_handler(RetentionInspectionUnavailableError)
+    async def retention_unavailable(
+        _request: Request,
+        _error: RetentionInspectionUnavailableError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": "retention_inspection_unavailable",
+                "message": "Owner retention inspection is unavailable.",
             },
         )
 
@@ -1141,5 +1185,15 @@ def create_app(
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
     ) -> OwnerMediaCatalog:
         return _configured_operations(request).media(principal)
+
+    @app.get(
+        "/api/v1/retention",
+        response_model=OwnerRetentionReport,
+    )
+    async def inspect_retention(
+        request: Request,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+    ) -> OwnerRetentionReport:
+        return _configured_retention(request).report(principal)
 
     return app

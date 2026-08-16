@@ -15,6 +15,7 @@ from melloa.adapters.fakes.delivery import InMemoryDeliveryStore
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.fakes.operations import InMemoryOperationsReader
+from melloa.adapters.fakes.retention import InMemoryRetentionReader
 from melloa.adapters.fakes.telegram import (
     DeterministicTelegramPairingCodeIssuer,
     FakeTelegramPairingChallengePublisher,
@@ -28,6 +29,7 @@ from melloa.application.delivery import ClientDeliveryRoute, DeliveryService
 from melloa.application.inspection import OwnerInspectionService
 from melloa.application.memory import MemoryService
 from melloa.application.operations import OwnerOperationsService
+from melloa.application.retention import OwnerRetentionService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.application.routing import DeterministicModelRouter, ModelRouteBinding
 from melloa.application.telegram import (
@@ -47,6 +49,17 @@ from melloa.domain.operations import (
     HealthCategory,
     HealthState,
     MediaSourceStatus,
+)
+from melloa.domain.retention import (
+    BackupExpiryDisclosure,
+    BackupExpiryState,
+    RetentionDeletionControl,
+    RetentionDurationBounds,
+    RetentionExternalCopyState,
+    RetentionInventoryCoverage,
+    RetentionInventoryStatus,
+    RetentionMode,
+    RetentionPolicyStatus,
 )
 from melloa.ports.guardian import GuardianStatusReader
 
@@ -71,6 +84,7 @@ class SyntheticRuntime:
     telegram_attachment_backend: RejectingTelegramAttachmentBackend
     telegram_retention_worker: TelegramAttachmentRetentionWorker
     telegram_worker: TelegramPollWorker
+    retention_service: OwnerRetentionService
 
 
 def build_synthetic_runtime(
@@ -357,6 +371,19 @@ def build_synthetic_runtime(
         ),
         clock=clock,
     )
+    retention = OwnerRetentionService(
+        owner_id=SYNTHETIC_OWNER_ID,
+        reader=InMemoryRetentionReader(
+            SYNTHETIC_OWNER_ID,
+            policies=_synthetic_retention_policies(),
+            inventory=_synthetic_retention_inventory(),
+            backup_expiry=BackupExpiryDisclosure(
+                state=BackupExpiryState.NOT_CONFIGURED,
+                status_reason="retention.backup.not_configured",
+            ),
+        ),
+        clock=clock,
+    )
     return SyntheticRuntime(
         app=create_app(
             guardian_reader,
@@ -369,6 +396,7 @@ def build_synthetic_runtime(
             telegram_worker,
             telegram_pairing_service,
             telegram_retention_worker,
+            retention_service=retention,
             run_conversation_worker=True,
             run_delivery_worker=True,
             run_telegram_worker=True,
@@ -387,6 +415,97 @@ def build_synthetic_runtime(
         telegram_attachment_backend=telegram_attachment_backend,
         telegram_retention_worker=telegram_retention_worker,
         telegram_worker=telegram_worker,
+        retention_service=retention,
+    )
+
+
+def _synthetic_retention_policies() -> tuple[RetentionPolicyStatus, ...]:
+    return (
+        RetentionPolicyStatus(
+            policy_id="retention.audit-ledger",
+            data_category="data.audit-ledger",
+            summary="Security and action evidence is append-oriented and deletion-restricted.",
+            mode=RetentionMode.APPEND_ONLY,
+            automatic_expiry=False,
+            deletion_control=RetentionDeletionControl.RESTRICTED,
+            tombstone_retained=True,
+            derived_rebuild_required=False,
+            external_copy_state=RetentionExternalCopyState.NONE,
+            status_reason="retention.audit.restricted",
+        ),
+        RetentionPolicyStatus(
+            policy_id="retention.owner-conversation",
+            data_category="data.canonical-conversation",
+            summary="Canonical conversation is owner-controlled; deletion is not assembled yet.",
+            mode=RetentionMode.OWNER_LIFECYCLE,
+            automatic_expiry=False,
+            deletion_control=RetentionDeletionControl.NOT_IMPLEMENTED,
+            tombstone_retained=True,
+            derived_rebuild_required=True,
+            external_copy_state=RetentionExternalCopyState.SOURCE_CONTROLLED,
+            status_reason="retention.owner_control.not_implemented",
+        ),
+        RetentionPolicyStatus(
+            policy_id="retention.owner-memory",
+            data_category="data.memory-assertion",
+            summary=(
+                "Memory supports correction and retraction; content deletion is not "
+                "assembled yet."
+            ),
+            mode=RetentionMode.OWNER_LIFECYCLE,
+            automatic_expiry=False,
+            deletion_control=RetentionDeletionControl.NOT_IMPLEMENTED,
+            tombstone_retained=True,
+            derived_rebuild_required=True,
+            external_copy_state=RetentionExternalCopyState.PROVIDER_CONTROLLED,
+            status_reason="retention.owner_control.not_implemented",
+        ),
+        RetentionPolicyStatus(
+            policy_id="retention.telegram-quarantine",
+            data_category="data.telegram-quarantine",
+            summary="Quarantined attachment bytes expire automatically under a hard local bound.",
+            mode=RetentionMode.AUTOMATIC_EXPIRY,
+            duration_bounds=RetentionDurationBounds(
+                minimum_seconds=3_600,
+                default_seconds=86_400,
+                maximum_seconds=604_800,
+            ),
+            automatic_expiry=True,
+            deletion_control=RetentionDeletionControl.AUTOMATIC_ONLY,
+            tombstone_retained=True,
+            derived_rebuild_required=False,
+            external_copy_state=RetentionExternalCopyState.SOURCE_CONTROLLED,
+            status_reason="retention.telegram_quarantine.automatic",
+        ),
+    )
+
+
+def _synthetic_retention_inventory() -> tuple[RetentionInventoryStatus, ...]:
+    unavailable = (
+        "retention.audit-ledger",
+        "retention.owner-conversation",
+        "retention.owner-memory",
+    )
+    unavailable_inventory = tuple(
+        RetentionInventoryStatus(
+            policy_id=policy_id,
+            coverage=RetentionInventoryCoverage.UNAVAILABLE,
+            status_reason="retention.inventory.not_assembled",
+        )
+        for policy_id in unavailable
+    )
+    return (
+        *unavailable_inventory,
+        RetentionInventoryStatus(
+            policy_id="retention.telegram-quarantine",
+            coverage=RetentionInventoryCoverage.COMPLETE,
+            retained_objects=0,
+            retained_bytes=0,
+            overdue_objects=0,
+            pending_deletions=0,
+            deletion_receipts=0,
+            status_reason="retention.inventory.empty",
+        ),
     )
 
 

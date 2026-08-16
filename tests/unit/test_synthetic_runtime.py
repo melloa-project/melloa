@@ -73,6 +73,29 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         component["category"] == "camera" and component["state"] == "disabled"
         for component in health.json()["components"]
     )
+    retention = client.get("/api/v1/retention")
+    assert retention.status_code == 200
+    retention_report = retention.json()
+    assert retention_report["backup_expiry"]["state"] == "not-configured"
+    policies = {
+        item["policy_id"]: item for item in retention_report["policies"]
+    }
+    assert policies["retention.owner-conversation"]["deletion_control"] == (
+        "not-implemented"
+    )
+    quarantine_policy = policies["retention.telegram-quarantine"]
+    assert quarantine_policy["duration_bounds"] == {
+        "minimum_seconds": 3_600,
+        "default_seconds": 86_400,
+        "maximum_seconds": 604_800,
+    }
+    quarantine_inventory = next(
+        item
+        for item in retention_report["inventory"]
+        if item["policy_id"] == "retention.telegram-quarantine"
+    )
+    assert quarantine_inventory["coverage"] == "complete"
+    assert quarantine_inventory["retained_objects"] == 0
     media_catalog = client.get("/api/v1/inspection/media")
     assert media_catalog.status_code == 200
     assert media_catalog.json()["capture_enabled"] is False
