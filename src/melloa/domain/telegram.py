@@ -333,10 +333,12 @@ def validate_telegram_ingestion_receipt(
         for item in receipt.attachment_receipts
     ):
         raise ValueError("Telegram attachment receipt chronology is invalid")
-    referenced = {item.file_unique_id for item in update.message.attachments}
-    recorded = {item.file_unique_id for item in receipt.attachment_receipts}
+    referenced = tuple(item.file_unique_id for item in update.message.attachments)
+    recorded = tuple(item.file_unique_id for item in receipt.attachment_receipts)
     if referenced != recorded:
-        raise ValueError("Telegram ingestion must account for every attachment reference")
+        raise ValueError(
+            "Telegram ingestion must preserve every attachment reference in order"
+        )
     if receipt.disposition is TelegramUpdateDisposition.REJECTED and any(
         item.disposition is TelegramAttachmentDisposition.QUARANTINED
         for item in receipt.attachment_receipts

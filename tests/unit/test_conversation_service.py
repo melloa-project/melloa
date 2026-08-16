@@ -17,6 +17,7 @@ from melloa.application.conversation import (
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.application.routing import DeterministicModelRouter, ModelRouteBinding
 from melloa.domain.auth import AuthenticatedOwner
+from melloa.domain.base import sha256_digest
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import (
     ConversationMessage,
@@ -158,6 +159,68 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert inspection.retrieval_manifest == manifest
     assert inspection.output_message == reply.output_message
     assert inspection.model_result.result_id == reply.turn.model_run_ids[0]
+
+
+def test_attachment_only_reply_uses_safe_summary_without_model_byte_disclosure(
+    fixed_time,
+) -> None:
+    service, store, model = service_fixture(fixed_time)
+    owner = principal(fixed_time)
+    thread = service.create_thread(
+        owner,
+        title="Quarantined attachment",
+        sensitivity=Sensitivity.PERSONAL,
+        retention_policy="retention.owner-conversation",
+    )
+    raw_content = b"private-synthetic-attachment-content-never-disclose"
+    content_hash = sha256_digest(raw_content)
+    blob_id = record_id("quarantine", 41)
+    inbound = ConversationMessage(
+        message_id=record_id("message", 41),
+        thread_id=thread.thread_id,
+        author_principal_id=owner.owner_id,
+        source_client="client.telegram.synthetic",
+        parts=(
+            MessagePart(
+                kind=MessageKind.ATTACHMENT,
+                attachment_id=blob_id,
+                media_type="text/plain",
+                content_hash=content_hash,
+            ),
+        ),
+        delivery_state=DeliveryState.DELIVERED,
+        sensitivity=thread.sensitivity,
+        created_at=fixed_time,
+        observed_at=fixed_time,
+    )
+    store.append_inbound(
+        inbound,
+        "telegram:attachment-only:41",
+        ConversationReplyWork(
+            work_id=record_id("work", 41),
+            thread_id=thread.thread_id,
+            message_id=inbound.message_id,
+            created_at=inbound.created_at,
+        ),
+        max_attempts=3,
+    )
+
+    processed = service.process_ready()
+
+    assert len(processed) == 1
+    assert processed[0].state is ConversationProcessingState.COMPLETED
+    assert len(model.requests) == 1
+    request = model.requests[0]
+    assert request.required_modalities == ("text",)
+    assert request.input["text"] == (
+        "Owner sent 1 quarantined attachment. "
+        "Attachment content remains unavailable to the conversation model."
+    )
+    serialized_request = request.model_dump_json()
+    assert blob_id not in serialized_request
+    assert content_hash not in serialized_request
+    assert raw_content.decode() not in serialized_request
+    assert "text/plain" not in serialized_request
 
 
 def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:

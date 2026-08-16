@@ -375,6 +375,16 @@ def test_ingestion_receipt_matches_update_and_accounts_for_all_attachments(
                 }
             ),
         )
+    with pytest.raises(ValueError, match="in order"):
+        validate_telegram_ingestion_receipt(
+            inbound,
+            TelegramIngestionReceipt(
+                **{
+                    **receipt.model_dump(),
+                    "attachment_receipts": tuple(reversed(receipts)),
+                }
+            ),
+        )
     with pytest.raises(ValueError, match="does not match"):
         validate_telegram_ingestion_receipt(
             inbound,

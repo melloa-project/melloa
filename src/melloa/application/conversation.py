@@ -744,13 +744,26 @@ class ConversationService:
 
     @staticmethod
     def _message_text(message: ConversationMessage) -> str:
-        if (
-            len(message.parts) != 1
-            or message.parts[0].kind is not MessageKind.TEXT
-            or message.parts[0].text is None
-        ):
-            raise ConversationConflictError("owner reply work requires one canonical text part")
-        return message.parts[0].text
+        text_parts = tuple(part for part in message.parts if part.kind is MessageKind.TEXT)
+        attachment_count = sum(
+            part.kind is MessageKind.ATTACHMENT for part in message.parts
+        )
+        if len(text_parts) > 1 or len(text_parts) + attachment_count != len(message.parts):
+            raise ConversationConflictError(
+                "owner reply work requires text and quarantined attachment parts only"
+            )
+        if text_parts:
+            text = text_parts[0].text
+            if text is None:
+                raise ConversationConflictError("canonical text part has no text")
+            return text
+        if attachment_count:
+            noun = "attachment" if attachment_count == 1 else "attachments"
+            return (
+                f"Owner sent {attachment_count} quarantined {noun}. "
+                "Attachment content remains unavailable to the conversation model."
+            )
+        raise ConversationConflictError("owner reply work has no usable canonical content")
 
     def _require_same_submission(self, inbound: ConversationMessage, text: str) -> None:
         if self._message_text(inbound) != text:

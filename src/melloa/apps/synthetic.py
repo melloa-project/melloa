@@ -21,6 +21,7 @@ from melloa.adapters.fakes.telegram import (
     FakeTelegramUpdateSource,
     InMemoryTelegramPairingStateStore,
     InMemoryTelegramPollStateStore,
+    RejectingTelegramAttachmentBackend,
 )
 from melloa.application.conversation import ConversationService
 from melloa.application.delivery import ClientDeliveryRoute, DeliveryService
@@ -66,6 +67,7 @@ class SyntheticRuntime:
     telegram_poll_state_store: InMemoryTelegramPollStateStore
     telegram_pairing_service: TelegramPairingService
     telegram_challenge_publisher: FakeTelegramPairingChallengePublisher
+    telegram_attachment_backend: RejectingTelegramAttachmentBackend
     telegram_worker: TelegramPollWorker
 
 
@@ -165,6 +167,7 @@ def build_synthetic_runtime(
         clock=lambda: seeded_at,
     )
     telegram_challenge_publisher = FakeTelegramPairingChallengePublisher()
+    telegram_attachment_backend = RejectingTelegramAttachmentBackend(clock=clock)
     telegram_pairing_service = TelegramPairingService(
         owner_id=SYNTHETIC_OWNER_ID,
         adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
@@ -180,6 +183,7 @@ def build_synthetic_runtime(
         thread_id=SYNTHETIC_TELEGRAM_THREAD_ID,
         adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
         pairing_service=telegram_pairing_service,
+        attachment_backend=telegram_attachment_backend,
         conversation_store=conversation_store,
         poll_state_store=telegram_poll_state_store,
         guardian_reader=guardian_reader,
@@ -360,6 +364,7 @@ def build_synthetic_runtime(
         telegram_poll_state_store=telegram_poll_state_store,
         telegram_pairing_service=telegram_pairing_service,
         telegram_challenge_publisher=telegram_challenge_publisher,
+        telegram_attachment_backend=telegram_attachment_backend,
         telegram_worker=telegram_worker,
     )
 

@@ -30,6 +30,7 @@
 - Added replay-stable synthetic Telegram pairing challenges, thread-safe candidate/active-pair state, CSRF and recent-auth protected redacted pairing APIs, live ingestion resolution, and authority-reducing revocation without pre-granting channel identity at runtime startup.
 - Added the Owner Console Telegram pairing workflow with typed same-origin reads/mutations, masked provider identifiers, transient cleared challenge entry, recent-authenticated explicit confirm/revoke controls, optional-unconfigured state, and post-mutation projection refresh.
 - Added an immutable Telegram attachment-intake contract plus no-network rejecting and bounded in-memory quarantine backends with pre-fetch metadata policy, hard byte quotas, content-addressed receipts, and exact replay.
+- Integrated reject-or-quarantine attachment intake after exact Telegram pairing validation, with ordered outcome checks before canonical mutation, Melloa-owned quarantine references, attachment-only reply work, no-refetch crash recovery, and model-input isolation from attachment bytes and metadata.
 
 ## M0 implementation — 16 August 2026
 

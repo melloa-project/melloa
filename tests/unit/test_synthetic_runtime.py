@@ -15,6 +15,9 @@ from melloa.apps.synthetic import (
 from melloa.domain.base import sha256_digest
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.telegram import (
+    TelegramAttachmentDisposition,
+    TelegramAttachmentKind,
+    TelegramAttachmentReference,
     TelegramChatType,
     TelegramInboundMessage,
     TelegramInboundUpdate,
@@ -353,6 +356,16 @@ def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
                 chat_type=TelegramChatType.PRIVATE,
                 sent_at=fixed_time,
                 text="Synthetic secondary-channel intake",
+                attachments=(
+                    TelegramAttachmentReference(
+                        kind=TelegramAttachmentKind.DOCUMENT,
+                        file_id="synthetic-runtime-file-51",
+                        file_unique_id="synthetic-runtime-unique-51",
+                        declared_size_bytes=64,
+                        media_type="text/plain",
+                        file_name="runtime-attachment.txt",
+                    ),
+                ),
             ),
             received_at=fixed_time,
             raw_size_bytes=256,
@@ -370,8 +383,30 @@ def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
             if message["source_client"] == SYNTHETIC_TELEGRAM_ADAPTER_ID
         ]
         assert len(telegram_messages) == 1
-        assert telegram_messages[0]["parts"][0]["text"] == inbound.message.text
+        assert telegram_messages[0]["parts"] == [
+            {
+                "kind": "text",
+                "text": inbound.message.text,
+                "attachment_id": None,
+                "media_type": None,
+                "content_hash": None,
+            }
+        ]
         assert telegram_messages[0]["author_principal_id"] == runtime.owner_id
+        attachment_requests = runtime.telegram_attachment_backend.requests
+        assert len(attachment_requests) == 1
+        assert attachment_requests[0].attachments == inbound.message.attachments
+        receipt = runtime.telegram_poll_state_store.get_receipt(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID,
+            inbound.update_id,
+        )
+        assert receipt is not None
+        assert receipt.attachment_receipts[0].disposition is (
+            TelegramAttachmentDisposition.REJECTED
+        )
+        assert receipt.attachment_receipts[0].reason_code == (
+            "telegram.attachment.unsupported"
+        )
         assert runtime.telegram_source.health()["network"] is False
 
         revoked = client.post(

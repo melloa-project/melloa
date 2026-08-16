@@ -29,6 +29,7 @@ from melloa.domain.conversation import (
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.telegram import (
     TelegramAttachmentDisposition,
+    TelegramAttachmentIntakeRequest,
     TelegramAttachmentReceipt,
     TelegramInboundUpdate,
     TelegramIngestionReceipt,
@@ -40,6 +41,7 @@ from melloa.domain.telegram import (
     TelegramUpdateId,
     telegram_update_fingerprint,
     validate_paired_telegram_update,
+    validate_telegram_attachment_receipts,
     validate_telegram_ingestion_receipt,
     validate_telegram_pairing_candidate,
 )
@@ -47,6 +49,8 @@ from melloa.ports.auth import RecentAuthenticationRequired
 from melloa.ports.conversation import ConversationConflictError, ConversationStore
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.telegram import (
+    TelegramAttachmentBackend,
+    TelegramAttachmentConflictError,
     TelegramPairingChallenge,
     TelegramPairingChallengePublisher,
     TelegramPairingCodeIssuer,
@@ -347,6 +351,7 @@ class TelegramIngestionService:
         thread_id: RecordId,
         adapter_id: QualifiedName,
         pairing_service: TelegramPairingService,
+        attachment_backend: TelegramAttachmentBackend,
         conversation_store: ConversationStore,
         poll_state_store: TelegramPollStateStore,
         guardian_reader: GuardianStatusReader,
@@ -366,6 +371,7 @@ class TelegramIngestionService:
         self._thread_id = thread_id
         self._adapter_id = adapter_id
         self._pairing_service = pairing_service
+        self._attachment_backend = attachment_backend
         self._conversation_store = conversation_store
         self._poll_state_store = poll_state_store
         self._guardian_reader = guardian_reader
@@ -392,8 +398,12 @@ class TelegramIngestionService:
         if update.update_id < state.next_offset:
             raise TelegramPollConflictError("Telegram poll offset cannot move backwards")
         thread = self._require_owner_thread()
-        recorded_at = self._clock()
-        attachments = self._rejected_attachments(update, recorded_at)
+        recorded_at = self._receipt_time(update)
+        attachments = self._rejected_attachments(
+            update,
+            recorded_at,
+            reason_code="telegram.attachment.source_not_authorized",
+        )
 
         pairing = self._pairing_service.pairing_for_ingestion()
         if pairing is None:
@@ -433,7 +443,9 @@ class TelegramIngestionService:
                 expected_revision=expected_revision,
             )
 
-        if update.message.text is None:
+        attachments = self._handle_attachments(update)
+        recorded_at = self._receipt_time(update, attachments)
+        if not self._canonical_parts(update, attachments):
             return self._commit_rejection(
                 update,
                 attachments,
@@ -442,7 +454,7 @@ class TelegramIngestionService:
                 expected_revision=expected_revision,
             )
 
-        canonical, created = self._append_text(thread, update)
+        canonical, created = self._append_message(thread, update, attachments)
         receipt = TelegramIngestionReceipt(
             receipt_id=self._id_factory("tgreceipt"),
             adapter_id=self._adapter_id,
@@ -507,22 +519,28 @@ class TelegramIngestionService:
     ) -> ConversationMessage | None:
         if receipt.disposition is not TelegramUpdateDisposition.INGESTED:
             return None
-        if receipt.canonical_message_id is None or update.message.text is None:
+        if receipt.canonical_message_id is None:
             raise TelegramPollConflictError(
                 "ingested Telegram receipt has no usable canonical message"
             )
         canonical = self._conversation_store.get_message(receipt.canonical_message_id)
-        self._require_same_canonical_message(canonical, thread, update)
+        self._require_same_canonical_message(
+            canonical,
+            thread,
+            update,
+            receipt.attachment_receipts,
+        )
         return canonical
 
-    def _append_text(
+    def _append_message(
         self,
         thread: ConversationThread,
         update: TelegramInboundUpdate,
+        attachments: tuple[TelegramAttachmentReceipt, ...],
     ) -> tuple[ConversationMessage, bool]:
-        text = update.message.text
-        if text is None:
-            raise ValueError("Telegram canonical text cannot be absent")
+        parts = self._canonical_parts(update, attachments)
+        if not parts:
+            raise ValueError("Telegram canonical content cannot be absent")
         idempotency_key = telegram_inbound_idempotency_key(
             self._adapter_id,
             update.update_id,
@@ -532,7 +550,7 @@ class TelegramIngestionService:
             idempotency_key,
         )
         if existing is not None:
-            self._require_same_canonical_message(existing, thread, update)
+            self._require_same_canonical_message(existing, thread, update, attachments)
             return existing, False
 
         candidate = ConversationMessage(
@@ -540,7 +558,7 @@ class TelegramIngestionService:
             thread_id=self._thread_id,
             author_principal_id=self._owner_id,
             source_client=self._adapter_id,
-            parts=(MessagePart(kind=MessageKind.TEXT, text=text),),
+            parts=parts,
             delivery_state=DeliveryState.DELIVERED,
             sensitivity=thread.sensitivity,
             created_at=update.received_at,
@@ -558,7 +576,12 @@ class TelegramIngestionService:
             work,
             max_attempts=self._max_processing_attempts,
         )
-        self._require_same_canonical_message(accepted.message, thread, update)
+        self._require_same_canonical_message(
+            accepted.message,
+            thread,
+            update,
+            attachments,
+        )
         return accepted.message, accepted.created
 
     def _require_same_canonical_message(
@@ -566,18 +589,14 @@ class TelegramIngestionService:
         message: ConversationMessage,
         thread: ConversationThread,
         update: TelegramInboundUpdate,
+        attachments: tuple[TelegramAttachmentReceipt, ...],
     ) -> None:
-        text = update.message.text
-        if text is None:
-            raise ConversationConflictError(
-                "Telegram attachment-only update cannot resolve a canonical text message"
-            )
         expected = ConversationMessage(
             message_id=message.message_id,
             thread_id=self._thread_id,
             author_principal_id=self._owner_id,
             source_client=self._adapter_id,
-            parts=(MessagePart(kind=MessageKind.TEXT, text=text),),
+            parts=self._canonical_parts(update, attachments),
             delivery_state=DeliveryState.DELIVERED,
             sensitivity=thread.sensitivity,
             created_at=update.received_at,
@@ -587,6 +606,67 @@ class TelegramIngestionService:
             raise ConversationConflictError(
                 "Telegram idempotency key was reused with different canonical content"
             )
+
+    def _handle_attachments(
+        self,
+        update: TelegramInboundUpdate,
+    ) -> tuple[TelegramAttachmentReceipt, ...]:
+        if not update.message.attachments:
+            return ()
+        request = TelegramAttachmentIntakeRequest(
+            adapter_id=self._adapter_id,
+            update_id=update.update_id,
+            update_fingerprint=telegram_update_fingerprint(update),
+            received_at=update.received_at,
+            attachments=update.message.attachments,
+        )
+        receipts = self._attachment_backend.handle(request)
+        try:
+            validate_telegram_attachment_receipts(request, receipts)
+        except ValueError as error:
+            raise TelegramAttachmentConflictError(
+                "Telegram attachment backend returned an invalid outcome"
+            ) from error
+        return receipts
+
+    @staticmethod
+    def _canonical_parts(
+        update: TelegramInboundUpdate,
+        attachments: tuple[TelegramAttachmentReceipt, ...],
+    ) -> tuple[MessagePart, ...]:
+        parts: list[MessagePart] = []
+        if update.message.text is not None:
+            parts.append(MessagePart(kind=MessageKind.TEXT, text=update.message.text))
+        for receipt in attachments:
+            if receipt.disposition is TelegramAttachmentDisposition.REJECTED:
+                continue
+            if (
+                receipt.quarantine_blob_id is None
+                or receipt.media_type is None
+                or receipt.content_hash is None
+            ):
+                raise TelegramAttachmentConflictError(
+                    "Telegram quarantine receipt lacks canonical attachment metadata"
+                )
+            parts.append(
+                MessagePart(
+                    kind=MessageKind.ATTACHMENT,
+                    attachment_id=receipt.quarantine_blob_id,
+                    media_type=receipt.media_type,
+                    content_hash=receipt.content_hash,
+                )
+            )
+        return tuple(parts)
+
+    def _receipt_time(
+        self,
+        update: TelegramInboundUpdate,
+        attachments: tuple[TelegramAttachmentReceipt, ...] = (),
+    ) -> datetime:
+        recorded_at = max(self._clock(), update.received_at)
+        for attachment in attachments:
+            recorded_at = max(recorded_at, attachment.recorded_at)
+        return recorded_at
 
     def _commit_pairing_candidate(
         self,
@@ -650,17 +730,19 @@ class TelegramIngestionService:
             receipt_replayed=False,
         )
 
-    @staticmethod
     def _rejected_attachments(
+        self,
         update: TelegramInboundUpdate,
         recorded_at: datetime,
+        *,
+        reason_code: QualifiedName,
     ) -> tuple[TelegramAttachmentReceipt, ...]:
         return tuple(
             TelegramAttachmentReceipt(
                 file_unique_id=attachment.file_unique_id,
                 disposition=TelegramAttachmentDisposition.REJECTED,
                 recorded_at=recorded_at,
-                reason_code="telegram.attachment.unsupported",
+                reason_code=reason_code,
             )
             for attachment in update.message.attachments
         )

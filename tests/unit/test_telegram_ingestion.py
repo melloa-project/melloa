@@ -11,8 +11,11 @@ from melloa.adapters.fakes.telegram import (
     DeterministicTelegramPairingCodeIssuer,
     FakeTelegramPairingChallengePublisher,
     FakeTelegramUpdateSource,
+    InMemoryTelegramAttachmentQuarantine,
     InMemoryTelegramPairingStateStore,
     InMemoryTelegramPollStateStore,
+    RejectingTelegramAttachmentBackend,
+    SyntheticTelegramAttachmentPayload,
 )
 from melloa.application.telegram import (
     TelegramIngestionOwnershipError,
@@ -40,7 +43,9 @@ from melloa.domain.conversation import (
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.telegram import (
     TelegramAttachmentDisposition,
+    TelegramAttachmentIntakeRequest,
     TelegramAttachmentKind,
+    TelegramAttachmentReceipt,
     TelegramAttachmentReference,
     TelegramChatType,
     TelegramInboundMessage,
@@ -52,8 +57,10 @@ from melloa.domain.telegram import (
 from melloa.ports.auth import RecentAuthenticationRequired
 from melloa.ports.conversation import ConversationConflictError
 from melloa.ports.telegram import (
+    TelegramAttachmentConflictError,
     TelegramPairingConflictError,
     TelegramPollConflictError,
+    TransientTelegramAttachmentError,
     TransientTelegramPollingError,
 )
 from tests.conftest import record_id
@@ -94,6 +101,33 @@ class MutableClock:
 
     def __call__(self) -> datetime:
         return self.now
+
+
+class RecordingAttachmentBackend:
+    def __init__(self, delegate: InMemoryTelegramAttachmentQuarantine) -> None:
+        self.delegate = delegate
+        self.results: list[tuple[TelegramAttachmentReceipt, ...]] = []
+
+    def handle(
+        self,
+        request: TelegramAttachmentIntakeRequest,
+    ) -> tuple[TelegramAttachmentReceipt, ...]:
+        result = self.delegate.handle(request)
+        self.results.append(result)
+        return result
+
+
+class ReorderingAttachmentBackend:
+    def __init__(self, fixed_time: datetime) -> None:
+        self.delegate = RejectingTelegramAttachmentBackend(
+            clock=lambda: fixed_time + timedelta(minutes=4)
+        )
+
+    def handle(
+        self,
+        request: TelegramAttachmentIntakeRequest,
+    ) -> tuple[TelegramAttachmentReceipt, ...]:
+        return tuple(reversed(self.delegate.handle(request)))
 
 
 def sequential_id_factory():
@@ -203,6 +237,28 @@ def attachment(number: int = 1) -> TelegramAttachmentReference:
     )
 
 
+def attachment_payload(number: int) -> SyntheticTelegramAttachmentPayload:
+    content = f"synthetic-safe-attachment-{number}".encode().ljust(128, b".")
+    return SyntheticTelegramAttachmentPayload(content=content, media_type="text/plain")
+
+
+def quarantine_backend(
+    fixed_time: datetime,
+    *numbers: int,
+) -> InMemoryTelegramAttachmentQuarantine:
+    return InMemoryTelegramAttachmentQuarantine(
+        {
+            f"synthetic-unique-{number}": attachment_payload(number)
+            for number in numbers
+        },
+        allowed_kinds=frozenset({TelegramAttachmentKind.DOCUMENT}),
+        allowed_media_types=frozenset({"text/plain"}),
+        max_attachment_bytes=1_024,
+        max_quarantine_bytes=4_096,
+        clock=lambda: fixed_time + timedelta(minutes=4),
+    )
+
+
 def inbound_update(
     fixed_time: datetime,
     *,
@@ -244,6 +300,7 @@ def ingestion_fixture(
     poll_store: InMemoryTelegramPollStateStore | None = None,
     guardian_reader: FakeGuardianStatusReader | None = None,
     pairing_service_override: TelegramPairingService | None = None,
+    attachment_backend=None,
     clock=None,
 ) -> tuple[
     TelegramIngestionService,
@@ -281,11 +338,15 @@ def ingestion_fixture(
         )
     else:
         pairing_service = pairing_service_override
+    effective_attachment_backend = attachment_backend or RejectingTelegramAttachmentBackend(
+        clock=effective_clock
+    )
     service = TelegramIngestionService(
         owner_id=OWNER_ID,
         thread_id=THREAD_ID,
         adapter_id=ADAPTER_ID,
         pairing_service=pairing_service,
+        attachment_backend=effective_attachment_backend,
         conversation_store=conversation_store,
         poll_state_store=effective_poll_store,
         guardian_reader=effective_guardian,
@@ -379,6 +440,90 @@ def test_text_survives_only_after_every_attachment_is_rejected_before_fetch(
     assert len(store.list_messages(THREAD_ID)) == 1
 
 
+def test_text_and_quarantined_attachments_become_ordered_canonical_parts(
+    fixed_time: datetime,
+) -> None:
+    backend = quarantine_backend(fixed_time, 1, 2)
+    service, store, _poll_store, _thread = ingestion_fixture(
+        fixed_time,
+        attachment_backend=backend,
+    )
+    update = inbound_update(
+        fixed_time,
+        text="Keep these quarantined",
+        attachments=(attachment(1), attachment(2)),
+    )
+
+    result = service.ingest(update, expected_revision=0)
+
+    receipts = result.receipt.attachment_receipts
+    assert tuple(item.file_unique_id for item in receipts) == (
+        "synthetic-unique-1",
+        "synthetic-unique-2",
+    )
+    assert all(
+        item.disposition is TelegramAttachmentDisposition.QUARANTINED
+        for item in receipts
+    )
+    assert result.canonical_message is not None
+    assert result.canonical_message.parts == (
+        MessagePart(kind=MessageKind.TEXT, text="Keep these quarantined"),
+        *(
+            MessagePart(
+                kind=MessageKind.ATTACHMENT,
+                attachment_id=item.quarantine_blob_id,
+                media_type=item.media_type,
+                content_hash=item.content_hash,
+            )
+            for item in receipts
+        ),
+    )
+    assert backend.fetched_file_unique_ids == [
+        "synthetic-unique-1",
+        "synthetic-unique-2",
+    ]
+    assert len(store.list_messages(THREAD_ID)) == 1
+
+    replay = service.ingest(update, expected_revision=0)
+
+    assert replay.receipt == result.receipt
+    assert replay.canonical_message == result.canonical_message
+    assert replay.receipt_replayed is True
+    assert len(backend.requests) == 1
+    assert backend.fetched_file_unique_ids == [
+        "synthetic-unique-1",
+        "synthetic-unique-2",
+    ]
+
+
+def test_attachment_only_quarantine_becomes_canonical_reply_work(
+    fixed_time: datetime,
+) -> None:
+    backend = quarantine_backend(fixed_time, 1)
+    service, store, _poll_store, _thread = ingestion_fixture(
+        fixed_time,
+        attachment_backend=backend,
+    )
+    update = inbound_update(fixed_time, text=None, attachments=(attachment(1),))
+
+    result = service.ingest(update, expected_revision=0)
+
+    assert result.receipt.disposition is TelegramUpdateDisposition.INGESTED
+    assert result.canonical_message is not None
+    receipt = result.receipt.attachment_receipts[0]
+    assert result.canonical_message.parts == (
+        MessagePart(
+            kind=MessageKind.ATTACHMENT,
+            attachment_id=receipt.quarantine_blob_id,
+            media_type=receipt.media_type,
+            content_hash=receipt.content_hash,
+        ),
+    )
+    processing = store.reply_processing(result.canonical_message.message_id)
+    assert processing.state is ConversationProcessingState.READY
+    assert processing.attempt_count == 0
+
+
 def test_attachment_only_update_is_rejected_and_advances_after_durable_receipt(
     fixed_time: datetime,
 ) -> None:
@@ -399,6 +544,88 @@ def test_attachment_only_update_is_rejected_and_advances_after_durable_receipt(
     replay = service.ingest(update, expected_revision=0)
     assert replay.receipt == result.receipt
     assert replay.receipt_replayed is True
+
+
+@pytest.mark.parametrize(
+    ("paired", "update_kwargs"),
+    [
+        (False, {}),
+        (True, {"sender_user_id": 2002}),
+        (True, {"chat_id": 2002}),
+    ],
+)
+def test_unauthorized_attachment_sources_never_reach_quarantine_backend(
+    fixed_time: datetime,
+    paired: bool,
+    update_kwargs: dict[str, object],
+) -> None:
+    backend = quarantine_backend(fixed_time, 1)
+    service, store, _poll_store, _thread = ingestion_fixture(
+        fixed_time,
+        paired=paired,
+        attachment_backend=backend,
+    )
+    update = inbound_update(
+        fixed_time,
+        attachments=(attachment(1),),
+        **update_kwargs,
+    )
+
+    result = service.ingest(update, expected_revision=0)
+
+    assert result.receipt.disposition is TelegramUpdateDisposition.REJECTED
+    assert result.receipt.attachment_receipts[0].reason_code == (
+        "telegram.attachment.source_not_authorized"
+    )
+    assert backend.requests == []
+    assert backend.fetched_file_unique_ids == []
+    assert backend.stored_blob_ids == ()
+    assert store.list_messages(THREAD_ID) == ()
+
+
+def test_transient_attachment_failure_leaves_canonical_and_cursor_state_unchanged(
+    fixed_time: datetime,
+) -> None:
+    backend = quarantine_backend(fixed_time)
+    service, store, poll_store, _thread = ingestion_fixture(
+        fixed_time,
+        attachment_backend=backend,
+    )
+    update = inbound_update(fixed_time, attachments=(attachment(1),))
+    state_before = poll_store.read_state(ADAPTER_ID)
+
+    with pytest.raises(TransientTelegramAttachmentError) as failure:
+        service.ingest(update, expected_revision=0)
+
+    assert failure.value.reason_code == "telegram.attachment.fetch_unavailable"
+    assert store.list_messages(THREAD_ID) == ()
+    assert poll_store.read_state(ADAPTER_ID) == state_before
+    assert poll_store.get_update(ADAPTER_ID, update.update_id) is None
+    assert poll_store.get_receipt(ADAPTER_ID, update.update_id) is None
+    assert backend.fetched_file_unique_ids == ["synthetic-unique-1"]
+    assert backend.stored_blob_ids == ()
+
+
+def test_invalid_attachment_backend_order_fails_before_any_durable_mutation(
+    fixed_time: datetime,
+) -> None:
+    backend = ReorderingAttachmentBackend(fixed_time)
+    service, store, poll_store, _thread = ingestion_fixture(
+        fixed_time,
+        attachment_backend=backend,
+    )
+    update = inbound_update(
+        fixed_time,
+        attachments=(attachment(1), attachment(2)),
+    )
+
+    with pytest.raises(TelegramAttachmentConflictError, match="invalid outcome"):
+        service.ingest(update, expected_revision=0)
+
+    assert len(backend.delegate.requests) == 1
+    assert store.list_messages(THREAD_ID) == ()
+    assert poll_store.read_state(ADAPTER_ID).revision == 0
+    assert poll_store.get_receipt(ADAPTER_ID, update.update_id) is None
 
 
 @pytest.mark.parametrize(
@@ -502,6 +729,47 @@ def test_crash_after_canonical_append_replays_without_duplicate_message_or_work(
     assert recovered.canonical_created is False
     assert recovered.receipt_replayed is False
     assert poll_store.read_state(ADAPTER_ID).next_offset == update.update_id + 1
+    assert len(store.list_messages(THREAD_ID)) == 1
+    assert len(store.list_reply_processing(THREAD_ID)) == 1
+
+
+def test_crash_reuses_exact_quarantine_receipt_without_refetching(
+    fixed_time: datetime,
+) -> None:
+    poll_store = CrashOncePollStateStore(
+        adapter_id=ADAPTER_ID,
+        clock=lambda: fixed_time,
+    )
+    delegate = quarantine_backend(fixed_time, 1)
+    backend = RecordingAttachmentBackend(delegate)
+    service, store, _poll_store, _thread = ingestion_fixture(
+        fixed_time,
+        poll_store=poll_store,
+        attachment_backend=backend,
+    )
+    update = inbound_update(fixed_time, text=None, attachments=(attachment(1),))
+
+    with pytest.raises(RuntimeError, match="after canonical acceptance"):
+        service.ingest(update, expected_revision=0)
+
+    assert len(backend.results) == 1
+    assert delegate.fetched_file_unique_ids == ["synthetic-unique-1"]
+    assert len(delegate.stored_blob_ids) == 1
+    accepted = store.list_messages(THREAD_ID)
+    assert len(accepted) == 1
+    assert poll_store.read_state(ADAPTER_ID).revision == 0
+
+    recovered = service.ingest(update, expected_revision=0)
+
+    assert backend.results == [backend.results[0], backend.results[0]]
+    assert recovered.receipt.attachment_receipts == backend.results[0]
+    assert recovered.canonical_message == accepted[0]
+    assert recovered.canonical_created is False
+    assert recovered.receipt_replayed is False
+    assert delegate.requests == [delegate.requests[0], delegate.requests[0]]
+    assert delegate.fetched_file_unique_ids == ["synthetic-unique-1"]
+    assert poll_store.read_state(ADAPTER_ID).next_offset == update.update_id + 1
+    assert poll_store.get_receipt(ADAPTER_ID, update.update_id) == recovered.receipt
     assert len(store.list_messages(THREAD_ID)) == 1
     assert len(store.list_reply_processing(THREAD_ID)) == 1
 
