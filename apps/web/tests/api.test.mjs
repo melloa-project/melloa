@@ -97,7 +97,7 @@ test("model activity uses encoded half-open window parameters", async () => {
   assert.match(requested, /to=2026-08-17T00%3A00%3A00.000Z/);
 });
 
-test("health and media inspection use authenticated same-origin routes", async () => {
+test("health, media, and retention inspection use authenticated same-origin routes", async () => {
   const requested = [];
   const api = new MelloaApi(async (input) => {
     requested.push(String(input));
@@ -105,9 +105,11 @@ test("health and media inspection use authenticated same-origin routes", async (
   });
   await api.healthDetail();
   await api.mediaCatalog();
+  await api.retentionReport();
   assert.deepEqual(requested, [
     "/api/v1/inspection/health",
     "/api/v1/inspection/media",
+    "/api/v1/retention",
   ]);
 });
 

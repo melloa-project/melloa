@@ -1043,9 +1043,20 @@ pre {
   background: #091914;
 }
 
+.retention-panel,
 .telegram-pairing-panel {
   margin-top: 0.85rem;
   padding: 1rem;
+}
+
+.retention-panel > .muted {
+  max-width: 76rem;
+  margin-bottom: 0;
+  font-size: 0.75rem;
+}
+
+.retention-panel .health-list {
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
 }
 
 .telegram-pairing-heading > div:first-child h3,

@@ -16,6 +16,9 @@ import {
   type ModelActivityReport,
   type OwnerHealthReport,
   type OwnerMediaCatalog,
+  type OwnerRetentionReport,
+  type RetentionInventoryStatus,
+  type RetentionPolicyStatus,
   type SystemStatus,
   type TelegramOwnerPairing,
   type TelegramPairingCandidate,
@@ -53,6 +56,7 @@ type ConsoleState = {
   modelActivity: ModelActivityReport | null;
   healthDetail: OwnerHealthReport | null;
   mediaCatalog: OwnerMediaCatalog | null;
+  retentionReport: OwnerRetentionReport | null;
   telegramPairingConfigured: boolean | null;
   telegramPairingCandidates: readonly TelegramPairingCandidate[];
   telegramPairing: TelegramOwnerPairing | null;
@@ -303,6 +307,14 @@ const shell = `
         </section>
         <section class="panel-card boundary-copy"><h3>Enforced boundaries</h3><ul><li>Private ingress only</li><li>Authenticated owner records</li><li>Guardian independence</li><li>Deterministic policy decisions</li><li>Synthetic adapters until explicitly configured</li></ul></section>
       </div>
+      <section class="panel-card retention-panel" aria-labelledby="retention-title">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Owner-visible lifecycle policy</p><h3 id="retention-title">Retention and deletion</h3></div>
+          <span class="state-chip" id="retention-backup-state">Sign in</span>
+        </div>
+        <p class="muted">This report shows configured policy, aggregate measurement coverage, external-copy limits, and the backup expiry horizon. It exposes no object content or identifiers and never treats correction, retraction, backup expiry, or restart as erasure. Deletion controls appear only after an exact recent-authenticated backend scope exists.</p>
+        <div class="health-list" id="retention-policy-list"></div>
+      </section>
       <section class="panel-card telegram-pairing-panel" aria-labelledby="telegram-pairing-title">
         <div class="panel-heading telegram-pairing-heading">
           <div>
@@ -440,6 +452,8 @@ const refs = {
   operationsStatus: required<HTMLElement>("#operations-status"),
   operationsHealthState: required<HTMLElement>("#operations-health-state"),
   operationsHealth: required<HTMLDivElement>("#operations-health"),
+  retentionBackupState: required<HTMLElement>("#retention-backup-state"),
+  retentionPolicyList: required<HTMLDivElement>("#retention-policy-list"),
   telegramPairingState: required<HTMLElement>("#telegram-pairing-state"),
   telegramPairingRefresh: required<HTMLButtonElement>("#telegram-pairing-refresh"),
   telegramPairingActive: required<HTMLDivElement>("#telegram-pairing-active"),
@@ -463,6 +477,7 @@ const state: ConsoleState = {
   modelActivity: null,
   healthDetail: null,
   mediaCatalog: null,
+  retentionReport: null,
   telegramPairingConfigured: null,
   telegramPairingCandidates: [],
   telegramPairing: null,
@@ -1062,6 +1077,104 @@ function renderHealthComponent(component: ComponentHealth): HTMLElement {
   return article;
 }
 
+function renderRetention(): void {
+  const report = state.retentionReport;
+  writeText(refs.retentionBackupState, report?.backup_expiry.state ?? "—");
+  refs.retentionPolicyList.replaceChildren();
+  if (report === null) {
+    refs.retentionPolicyList.append(
+      emptyState(
+        "No retention report loaded",
+        "Authenticate to inspect policy, inventory coverage, and backup expiry.",
+      ),
+    );
+    return;
+  }
+
+  const backup = report.backup_expiry;
+  const backupCard = makeElement("article", "health-card");
+  const backupHeading = makeElement("div", "panel-heading");
+  const backupTitle = makeElement("div");
+  backupTitle.append(
+    makeElement("p", "eyebrow", "Backup expiry"),
+    makeElement("h4", undefined, "Deletion propagation horizon"),
+  );
+  backupHeading.append(backupTitle, makeElement("span", "state-chip", backup.state));
+  backupCard.append(
+    backupHeading,
+    definitionGrid([
+      [
+        "Maximum retention",
+        backup.maximum_retention_seconds === null ||
+        backup.maximum_retention_seconds === undefined
+          ? "Not configured or unknown"
+          : `${formatCount(backup.maximum_retention_seconds)} seconds`,
+      ],
+      ["Latest snapshot", formatInstant(backup.latest_snapshot_at)],
+      ["Status reason", backup.status_reason],
+      ["Report generated", formatInstant(report.generated_at)],
+    ]),
+  );
+  refs.retentionPolicyList.append(backupCard);
+
+  for (const policy of report.policies) {
+    const inventory = report.inventory.find((item) => item.policy_id === policy.policy_id);
+    refs.retentionPolicyList.append(renderRetentionPolicy(policy, inventory));
+  }
+}
+
+function retentionMetric(value: number | null | undefined): string {
+  return value === null || value === undefined ? "Not measured" : formatCount(value);
+}
+
+function renderRetentionPolicy(
+  policy: RetentionPolicyStatus,
+  inventory: RetentionInventoryStatus | undefined,
+): HTMLElement {
+  const article = makeElement("article", "health-card");
+  const heading = makeElement("div", "panel-heading");
+  const title = makeElement("div");
+  title.append(
+    makeElement("p", "eyebrow", policy.data_category),
+    makeElement("h4", undefined, policy.policy_id),
+  );
+  heading.append(title, makeElement("span", "state-chip", policy.deletion_control));
+  const duration = policy.duration_bounds;
+  const durationSummary =
+    duration === null || duration === undefined
+      ? "Lifecycle-defined; no numeric bound reported"
+      : `${formatCount(duration.default_seconds)} seconds default (${formatCount(duration.minimum_seconds)}–${formatCount(duration.maximum_seconds)})`;
+  article.append(
+    heading,
+    makeElement("p", "muted", policy.summary),
+    definitionGrid([
+      ["Mode", policy.mode],
+      ["Duration", durationSummary],
+      ["Automatic expiry", policy.automatic_expiry ? "Yes" : "No"],
+      [
+        "Owner deletion scopes",
+        policy.owner_deletion_scopes.length === 0
+          ? "None exposed"
+          : policy.owner_deletion_scopes.join(", "),
+      ],
+      ["Tombstone retained", policy.tombstone_retained ? "Yes" : "No"],
+      ["Derived rebuild", policy.derived_rebuild_required ? "Required" : "Not required"],
+      ["External copies", policy.external_copy_state],
+      ["Inventory coverage", inventory?.coverage ?? "missing"],
+      ["Retained objects", retentionMetric(inventory?.retained_objects)],
+      ["Retained bytes", retentionMetric(inventory?.retained_bytes)],
+      ["Overdue objects", retentionMetric(inventory?.overdue_objects)],
+      ["Pending deletions", retentionMetric(inventory?.pending_deletions)],
+      ["Deletion receipts", retentionMetric(inventory?.deletion_receipts)],
+      ["Oldest retained", formatInstant(inventory?.oldest_retained_at)],
+      ["Next expiry", formatInstant(inventory?.next_expiry_at)],
+      ["Policy status", policy.status_reason],
+      ["Inventory status", inventory?.status_reason ?? "retention.inventory.missing"],
+    ]),
+  );
+  return article;
+}
+
 function renderTelegramPairingControls(): void {
   const authenticated = state.principal !== null;
   const canChangePairing =
@@ -1381,6 +1494,7 @@ function clearPrivateState(): void {
   state.modelActivity = null;
   state.healthDetail = null;
   state.mediaCatalog = null;
+  state.retentionReport = null;
   state.telegramPairingConfigured = null;
   state.telegramPairingCandidates = [];
   state.telegramPairing = null;
@@ -1398,6 +1512,7 @@ function clearPrivateState(): void {
   renderActivity();
   renderHealth();
   renderMedia();
+  renderRetention();
   renderTelegramPairing();
 }
 
@@ -1457,6 +1572,7 @@ async function loadPrivateOverview(): Promise<void> {
     loadActivity().catch((error: unknown) => handleError(error, "Load model activity")),
     loadHealth().catch((error: unknown) => handleError(error, "Load component health")),
     loadMedia().catch((error: unknown) => handleError(error, "Load media metadata")),
+    loadRetention().catch((error: unknown) => handleError(error, "Load retention policy")),
     loadTelegramPairing().catch((error: unknown) => handleError(error, "Load Telegram pairing")),
   ]);
 }
@@ -1576,6 +1692,12 @@ async function loadMedia(): Promise<void> {
   requireAuthenticated();
   state.mediaCatalog = await api.mediaCatalog();
   renderMedia();
+}
+
+async function loadRetention(): Promise<void> {
+  requireAuthenticated();
+  state.retentionReport = await api.retentionReport();
+  renderRetention();
 }
 
 async function loadTelegramPairing(): Promise<void> {
@@ -1846,6 +1968,7 @@ renderMemory();
 renderActivity();
 renderHealth();
 renderMedia();
+renderRetention();
 renderTelegramPairing();
 window.setInterval(renderAuth, 15_000);
 void Promise.all([loadStatus(), restoreSession()]);

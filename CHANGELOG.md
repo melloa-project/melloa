@@ -34,6 +34,7 @@
 - Added owner-bound synthetic quarantine expiry with a one-hour-to-seven-day policy bound, newest-reference extension for deduplicated blobs, deterministic bounded sweeps, quota reclamation, and immutable content-free deletion tombstones.
 - Wired quarantine expiry into a separately bounded no-network lifespan worker that permits local deletion only in Guardian `normal`/`offline`, validates backend receipt bounds and owner scope, and reports redacted optional health.
 - Added an authenticated owner retention report with strict policy bounds, deletion-scope availability, tombstone/rebuild obligations, external-copy status, aggregate inventory coverage, and honest backup-expiry disclosure; unavailable deletion and inventory paths remain explicit.
+- Added a typed same-origin Owner Console retention view that renders policy, aggregate coverage, external-copy limits, and backup expiry through safe text nodes while withholding deletion controls until a real recent-authenticated mutation boundary exists.
 
 ## M0 implementation — 16 August 2026
 

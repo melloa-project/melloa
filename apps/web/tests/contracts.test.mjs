@@ -41,9 +41,18 @@ test("shell wires every currently implemented owner workflow", async () => {
     "api.modelActivity",
     "api.healthDetail",
     "api.mediaCatalog",
+    "api.retentionReport",
   ]) {
     assert.match(source, new RegExp(operation.replace(".", "\\.")));
   }
+});
+
+test("retention inspection stays honest and does not invent deletion controls", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  assert.match(source, /Retention and deletion/);
+  assert.match(source, /never treats correction, retraction, backup expiry, or restart as erasure/);
+  assert.match(source, /id="retention-policy-list"/);
+  assert.doesNotMatch(source, /id="retention-delete/);
 });
 
 test("API and owner values are written as text rather than interpreted markup", async () => {

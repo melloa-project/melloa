@@ -5,7 +5,7 @@ a2e88b55fef4ff9a86bc4671425dadcdbbb0d50f0f2e3212d05936c7c4232038  ./.env.example
 f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56  ./.nvmrc
 02e735b3dfe1c32833eb550b7ff8ffa17f5f2bc3fa1e7bae61a8f5a3883ce398  ./.python-version
 a7fffe0e798c17e5c1ff001a25846892cea1341145111e535b03637c97dd2579  ./AGENTS.md
-1aad1e2a96079a53cd5f732982e034210f7a95018dd83d3ce73b95691e741c95  ./CHANGELOG.md
+65e30e5079bbe2bfed200a907c1c81650ad7338cd2a5e504e13e265fbdac3f26  ./CHANGELOG.md
 f6ca82c9e9da9f103fc80a96f41ea2e01119d702af0282bfb8d6a9f6a611cd27  ./CONSOLIDATED.md
 18b83e73c92039fd05cf3d7f8a158cf9e5e6a4d45675529749ff8b9301ddd55b  ./CONTRIBUTING.md
 dad31822f08fa134f602faea18c1cfff01254768770c0bdc04df67759094d11c  ./IMPLEMENTATION_AGENT_PROMPT.md
@@ -20,12 +20,12 @@ c634a504269cb17d1d7ccda8a6fd5f5fd793299ee59921434299896905180d47  ./apps/web/ind
 9c501eb3cc4bdf0071b6be7164fa663bcb5dbc8ab9f6ffed1cafe790afd7e567  ./apps/web/scripts/build.mjs
 a2746eeeb7f1f194521d6c075f755eeffcaa8cc5ada079728c663a6c43d8d8a1  ./apps/web/scripts/test.mjs
 2b83598efeafead4355888c8301a95b744dc3b703830375aec029e70e1ad577d  ./apps/web/server.mjs
-49ed23d5cc77e1dae2fb81cfbf46822e11f2f688fcb3860cb96e4e1c37a74bfc  ./apps/web/src/api.ts
-a946bf5e27ae29370805697620ff48d90c829702a013cd7f9af889f8ce4c1cd2  ./apps/web/src/main.ts
+74f7ca1aabf6dc1aa0709c45ebc309b50c2a440524ca385dc1ea44be8cd17e34  ./apps/web/src/api.ts
+9038d4932c7d23b17854c57a05dc0357f48e8be4e417cef35f2ddf2d5871fc76  ./apps/web/src/main.ts
 8fa1359651a781b8934a0f23cb9a8bbecd6dc5ad1b63313dab62cc5f72a22f67  ./apps/web/src/view.ts
-a9f822490125b5d414c0c37c0138763e6df567e92b56b491d8a3b7cb59dc21e0  ./apps/web/styles.css
-91300bbf3b33dcdb9591970773a3cc02b045d8c8db051940984f768af8b317bc  ./apps/web/tests/api.test.mjs
-01773b1784db44b422ac46f6f152fa31d9fa3e9fa5e0aa4f5befec8268894d0c  ./apps/web/tests/contracts.test.mjs
+3bfdb74cec780ce5c1398bec5b5f34980becacec62b52d395d08c8ef95597815  ./apps/web/styles.css
+873426912b149b26625be7e394e331603b5a143eb04bef535d5344f08d50312a  ./apps/web/tests/api.test.mjs
+2fbd452779c18a1bf4893fe841619fe6730711a97a2dddcb7f4ac5f85f630977  ./apps/web/tests/contracts.test.mjs
 10ab65b90057494260442bdfa4f4c28181853226762d9e6cb57fa17c33e2a2e7  ./apps/web/tests/view.test.mjs
 7903902e126a010a53b9ba9334b05266ab911c0bf68bbdea925d1c14f9ef8497  ./apps/web/tsconfig.json
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml
@@ -54,7 +54,7 @@ afde7c16ec2b3582a3497aef8b95a34fcd1192eb739a41a4d6b1b21b199ed165  ./docs/21-revi
 5852f70ce8cf8e58ed5034cbdc1062aa50c73a66029470eb90c2c84d8c853c95  ./docs/22-final-synthesis.md
 44a3db513e0454571ab58ba1cd330327664e02dc30e572ebaf4f6a18210031f7  ./docs/23-v0.2-decisions.md
 a98b2657cf236c2c0b16d0a85611fd2566cff6448d68d74932fd0c275f133758  ./docs/24-m0-implementation.md
-8eb114671930b4a089b6f25343c2ef6c06d25f8780ab2e4ba55f97704046280e  ./docs/25-m1-implementation.md
+2965218d2f5e0433975cedbcfa9d8bd3bbf1ca8b1c32510adc55df6cbb5aedb9  ./docs/25-m1-implementation.md
 926510904a18d0f582bc498e6d7a780e1aa9c61d2e67e94d380622b751e68260  ./docs/adr/ADR-001-event-oriented-provenance-ledger.md
 725fd9f2048fa570db36387aeae26d5821a549cd2a56af09659037ff018562aa  ./docs/adr/ADR-002-postgresql-primary-store-and-jobs.md
 31517d8fc1cb8bb74ae96a6222e839322b398da126d1aa89d9df63089eb6ca78  ./docs/adr/ADR-003-policy-aware-model-routing.md

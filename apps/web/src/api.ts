@@ -311,6 +311,56 @@ export type OwnerMediaCatalog = {
   readonly items: readonly MediaItemMetadata[];
 };
 
+export type RetentionDurationBounds = {
+  readonly minimum_seconds: number;
+  readonly default_seconds: number;
+  readonly maximum_seconds: number;
+};
+
+export type RetentionPolicyStatus = {
+  readonly policy_id: string;
+  readonly data_category: string;
+  readonly summary: string;
+  readonly mode: string;
+  readonly duration_bounds?: RetentionDurationBounds | null;
+  readonly automatic_expiry: boolean;
+  readonly deletion_control: string;
+  readonly owner_deletion_scopes: readonly string[];
+  readonly tombstone_retained: boolean;
+  readonly derived_rebuild_required: boolean;
+  readonly external_copy_state: string;
+  readonly status_reason: string;
+};
+
+export type RetentionInventoryStatus = {
+  readonly policy_id: string;
+  readonly coverage: string;
+  readonly retained_objects?: number | null;
+  readonly retained_bytes?: number | null;
+  readonly overdue_objects?: number | null;
+  readonly pending_deletions?: number | null;
+  readonly deletion_receipts?: number | null;
+  readonly oldest_retained_at?: string | null;
+  readonly next_expiry_at?: string | null;
+  readonly status_reason: string;
+};
+
+export type BackupExpiryDisclosure = {
+  readonly state: string;
+  readonly status_reason: string;
+  readonly maximum_retention_seconds?: number | null;
+  readonly latest_snapshot_at?: string | null;
+};
+
+export type OwnerRetentionReport = {
+  readonly contract_version: "1.0.0";
+  readonly owner_id: string;
+  readonly generated_at: string;
+  readonly policies: readonly RetentionPolicyStatus[];
+  readonly inventory: readonly RetentionInventoryStatus[];
+  readonly backup_expiry: BackupExpiryDisclosure;
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -380,6 +430,10 @@ export class MelloaApi {
 
   async mediaCatalog(): Promise<OwnerMediaCatalog> {
     return this.#request<OwnerMediaCatalog>("/api/v1/inspection/media");
+  }
+
+  async retentionReport(): Promise<OwnerRetentionReport> {
+    return this.#request<OwnerRetentionReport>("/api/v1/retention");
   }
 
   async listThreads(): Promise<readonly ConversationThread[]> {
