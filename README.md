@@ -13,7 +13,7 @@ The decisive recommendation remains a **local-first modular monolith with a dura
 
 ## Implementation status
 
-M0 provides strict versioned contracts, a deny-first policy evaluator, PostgreSQL 18 migrations and append-only audit controls, signed read-only Guardian status consumption, deterministic fake adapters, pinned CI, and an encrypted clean-restore drill. M1 now adds authenticated canonical conversation, deterministic routed/retrieval-backed replies, durable leased retry/resume state for accepted inbound messages and exact-authority outbound delivery, durable turn and disclosure records, immutable memory correction/contestation, owner activity plus health/media inspection, and the corresponding private Owner Console workflows.
+M0 provides strict versioned contracts, a deny-first policy evaluator, PostgreSQL 18 migrations and append-only audit controls, signed read-only Guardian status consumption, deterministic fake adapters, pinned CI, and an encrypted clean-restore drill. M1 now adds authenticated canonical conversation, durable leased retry/resume state for accepted inbound messages and exact-authority outbound delivery, durable turn and disclosure records, immutable memory correction/contestation, owner activity plus health/media inspection, provider-neutral routes for local OpenAI-compatible runtimes and an explicitly bounded experimental subscription-backed Codex CLI, an optional real Telegram Bot API channel, and a modern conversation-first Owner Console.
 
 ```bash
 make bootstrap
@@ -22,7 +22,7 @@ make integration
 make recovery
 ```
 
-All fixtures and adapters remain synthetic. The web server binds loopback only and keeps browser/API traffic same-origin. The ordinary CLI remains a status-only surface; the separate `serve-synthetic` command explicitly wires process-local M1 acceptance services, bounded reply/delivery workers, a deterministic device route, and an in-memory fake client route with no provider/channel network calls. The main runtime has no Guardian transition or signing API. See [M0 implementation evidence](docs/24-m0-implementation.md), [M1 implementation evidence](docs/25-m1-implementation.md), [development](docs/development.md), and [the recovery runbook](docs/operations/m0-recovery.md).
+The explicit `serve-mvp` command can route conversation through a configured local OpenAI-compatible endpoint or an optional experimental Codex CLI subscription route, and can enable Telegram Bot API long polling, private owner pairing, canonical text ingestion, and policy-authorized replies. Codex runs only from an exact configured executable with a private working directory and `CODEX_HOME`, fixed read-only/no-approval/ephemeral flags, visible external disclosure, and no Guardian, deterministic-policy, or capability authority. The deterministic model and Telegram fixtures remain visibly labelled no-network defaults. Application stores remain process-local by default; an explicit private core-role DSN enables partial PostgreSQL restart durability for canonical conversations/model provenance, memory correction history, reply/delivery work, Telegram pairing authority, normalized intake receipts, poll offsets, and pre-submission reply recovery. Sessions, provider observations, Telegram challenge-send observation, attachment bytes, retention inventory, and backup remain visibly ephemeral or unavailable. The web server binds loopback only and keeps browser/API traffic same-origin. The main runtime has no Guardian transition or signing API. Start with the canonical [run the current MVP](docs/run-current-mvp.md) guide; see also [M0 implementation evidence](docs/24-m0-implementation.md), [M1 implementation evidence](docs/25-m1-implementation.md), [development](docs/development.md), and [the recovery runbook](docs/operations/m0-recovery.md).
 
 ## v0.2 decisions
 
@@ -51,7 +51,8 @@ The authoritative update and precedence rule are recorded in [v0.2 decisions](do
 13. [Validation report](VALIDATION.md)
 14. [M0 implementation evidence](docs/24-m0-implementation.md)
 15. [M1 implementation evidence](docs/25-m1-implementation.md)
-16. [Development and verification](docs/development.md)
+16. [Run the current MVP](docs/run-current-mvp.md)
+17. [Development and verification](docs/development.md)
 
 ## Decision in one page
 

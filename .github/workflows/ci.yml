@@ -40,3 +40,123 @@ jobs:
         run: make integration
       - name: Prove encrypted clean restore
         run: make recovery
+
+  visual-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      UV_CACHE_DIR: .cache/uv
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out independent Guardian source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: melloa-project/melloa-guardian
+          path: .ci/melloa-guardian
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - name: Install pinned Node.js line
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install Go for independent Guardian fixture
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: "1.24.x"
+      - name: Install locked application dependencies
+        run: make bootstrap
+      - name: Build and verify independent Guardian
+        run: make -C .ci/melloa-guardian check build
+      - name: Start signed offline MVP fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/melloa-mvp"
+          install -d -m 0700 "$state"
+          umask 077
+          python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$state/owner-credential"
+          chmod 0600 "$state/owner-credential"
+          guardian=".ci/melloa-guardian/bin/guardianctl"
+          guardian_flags=(
+            --status-file "$state/guardian-status.json"
+            --audit-file "$state/guardian-audit.jsonl"
+            --private-key-file "$state/guardian-private.pem"
+            --public-key-file "$state/guardian-public.pem"
+            --lock-file "$state/guardian.lock"
+          )
+          "$guardian" init --instance-id ci-mvp-guardian --key-id guardian.status-v1 "${guardian_flags[@]}"
+          "$guardian" transition --mode offline --reason ci.visual_smoke "${guardian_flags[@]}"
+          uv run melloa serve-mvp \
+            --status "$state/guardian-status.json" \
+            --public-key "$state/guardian-public.pem" \
+            --owner-credential-file "$state/owner-credential" \
+            --model-route-config config/routes/ollama-qwen.example.json \
+            --host 127.0.0.1 \
+            --port 8000 \
+            > "$RUNNER_TEMP/melloa-core.log" 2>&1 &
+          echo "MELLOA_OWNER_CREDENTIAL_FILE=$state/owner-credential" >> "$GITHUB_ENV"
+          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:8000/health/ready >/dev/null
+      - name: Build and start production Owner Console
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix apps/web run build
+          MELLOA_CORE_URL=http://127.0.0.1:8000 \
+          MELLOA_WEB_PORT=8787 \
+            npm --prefix apps/web start > "$RUNNER_TEMP/melloa-web.log" 2>&1 &
+          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:8787/ >/dev/null
+      - name: Install headless Chromium
+        run: npm --prefix apps/web exec -- playwright install --with-deps chromium
+      - name: Capture authenticated desktop and mobile states
+        env:
+          MELLOA_SCREENSHOT_DIR: ${{ runner.temp }}/melloa-screenshots
+        run: npm --prefix apps/web run screenshots:mvp
+      - name: Upload visual inspection artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: current-mvp-screenshots
+          path: ${{ runner.temp }}/melloa-screenshots
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-docs:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verify, visual-smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out validated source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          version: "0.12.0"
+          enable-cache: true
+      - name: Install locked documentation dependencies
+        run: UV_CACHE_DIR=.cache/uv uv sync --frozen --no-dev --group docs
+      - name: Build strict documentation site
+        run: UV_CACHE_DIR=.cache/uv uv run mkdocs build --strict
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

@@ -1,6 +1,6 @@
 site_name: Melloa Architecture Specification
 site_description: Research-backed architecture for a long-lived personal AI operating system
-site_url: ""
+site_url: "https://melloa-project.github.io/melloa/"
 repo_url: "https://github.com/melloa-project/melloa"
 theme:
   name: material
@@ -23,6 +23,7 @@ nav:
   - v0.2 adopted decisions: 23-v0.2-decisions.md
   - M0 implementation: 24-m0-implementation.md
   - M1 implementation (in progress): 25-m1-implementation.md
+  - Run the current MVP: run-current-mvp.md
   - Development: development.md
   - Contracts:
       - Guardian protocol: contracts/guardian-protocol.md
