@@ -165,6 +165,27 @@ export type DeliverySubmission = {
   readonly created: boolean;
 };
 
+export type TelegramPairingCandidate = {
+  readonly candidate_id: string;
+  readonly update_id: number;
+  readonly telegram_user_id: number;
+  readonly telegram_chat_id: number;
+  readonly observed_at: string;
+  readonly expires_at: string;
+};
+
+export type TelegramOwnerPairing = {
+  readonly contract_version: "1.0.0";
+  readonly pairing_id: string;
+  readonly candidate_id: string;
+  readonly owner_id: string;
+  readonly telegram_user_id: number;
+  readonly telegram_chat_id: number;
+  readonly confirmed_by_owner_id: string;
+  readonly confirmed_at: string;
+  readonly revoked_at: string | null;
+};
+
 export type ConversationTurnInspection = {
   readonly turn: ConversationTurn;
   readonly retrieval_manifest: JsonObject;
@@ -469,6 +490,42 @@ export class MelloaApi {
   async resumeDelivery(threadId: string, workId: string): Promise<DeliveryWorkStatus> {
     return this.#request<DeliveryWorkStatus>(
       `/api/v1/conversations/${encodeURIComponent(threadId)}/deliveries/${encodeURIComponent(workId)}/resume`,
+      {
+        method: "POST",
+        csrf: true,
+      },
+    );
+  }
+
+  async listTelegramPairingCandidates(): Promise<readonly TelegramPairingCandidate[]> {
+    return this.#request<readonly TelegramPairingCandidate[]>(
+      "/api/v1/integrations/telegram/pairing/candidates",
+    );
+  }
+
+  async inspectTelegramPairing(): Promise<TelegramOwnerPairing | null> {
+    return this.#request<TelegramOwnerPairing | null>(
+      "/api/v1/integrations/telegram/pairing",
+    );
+  }
+
+  async confirmTelegramPairing(
+    candidateId: string,
+    confirmationCode: string,
+  ): Promise<TelegramOwnerPairing> {
+    return this.#request<TelegramOwnerPairing>(
+      `/api/v1/integrations/telegram/pairing/candidates/${encodeURIComponent(candidateId)}/confirm`,
+      {
+        method: "POST",
+        body: { confirmation_code: confirmationCode },
+        csrf: true,
+      },
+    );
+  }
+
+  async revokeTelegramPairing(pairingId: string): Promise<TelegramOwnerPairing> {
+    return this.#request<TelegramOwnerPairing>(
+      `/api/v1/integrations/telegram/pairing/${encodeURIComponent(pairingId)}/revoke`,
       {
         method: "POST",
         csrf: true,

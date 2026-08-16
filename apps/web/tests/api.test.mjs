@@ -176,3 +176,34 @@ test("delivery inspection, enqueue, and resume stay thread-scoped and CSRF-bound
   assert.equal(calls[4].init.method, "POST");
   assert.equal(calls[4].init.headers.get("X-Melloa-CSRF"), "csrf-proof");
 });
+
+test("Telegram pairing reads stay private and mutations are encoded and CSRF-bound", async () => {
+  const calls = [];
+  const api = new MelloaApi(async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (String(input) === "/api/v1/auth/session") {
+      return jsonResponse({ principal, csrf_token: "csrf-proof" });
+    }
+    return jsonResponse([]);
+  });
+  const candidateId = "tgcandidate_00000000000000000000000000000001";
+  const pairingId = "tgpairing_00000000000000000000000000000001";
+  await api.login("synthetic-owner-credential");
+  await api.listTelegramPairingCandidates();
+  await api.inspectTelegramPairing();
+  await api.confirmTelegramPairing(candidateId, "synthetic-confirmation-code");
+  await api.revokeTelegramPairing(pairingId);
+
+  const base = "/api/v1/integrations/telegram/pairing";
+  assert.equal(calls[1].input, `${base}/candidates`);
+  assert.equal(calls[2].input, base);
+  assert.equal(calls[3].input, `${base}/candidates/${candidateId}/confirm`);
+  assert.equal(calls[3].init.method, "POST");
+  assert.equal(calls[3].init.headers.get("X-Melloa-CSRF"), "csrf-proof");
+  assert.deepEqual(JSON.parse(calls[3].init.body), {
+    confirmation_code: "synthetic-confirmation-code",
+  });
+  assert.equal(calls[4].input, `${base}/${pairingId}/revoke`);
+  assert.equal(calls[4].init.method, "POST");
+  assert.equal(calls[4].init.headers.get("X-Melloa-CSRF"), "csrf-proof");
+});
