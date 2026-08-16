@@ -167,7 +167,10 @@ def build_synthetic_runtime(
         clock=lambda: seeded_at,
     )
     telegram_challenge_publisher = FakeTelegramPairingChallengePublisher()
-    telegram_attachment_backend = RejectingTelegramAttachmentBackend(clock=clock)
+    telegram_attachment_backend = RejectingTelegramAttachmentBackend(
+        owner_id=SYNTHETIC_OWNER_ID,
+        clock=clock,
+    )
     telegram_pairing_service = TelegramPairingService(
         owner_id=SYNTHETIC_OWNER_ID,
         adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,

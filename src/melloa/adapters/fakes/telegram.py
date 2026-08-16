@@ -6,10 +6,18 @@ import base64
 import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import RLock
 
-from melloa.domain.base import JsonObject, QualifiedName, sha256_digest, utc_now
+from melloa.domain.base import (
+    JsonObject,
+    QualifiedName,
+    RecordId,
+    new_record_id,
+    sha256_digest,
+    utc_now,
+)
+from melloa.domain.retention import RetentionDeletionReceipt
 from melloa.domain.telegram import (
     TelegramAttachmentDisposition,
     TelegramAttachmentIntakeRequest,
@@ -86,9 +94,11 @@ class RejectingTelegramAttachmentBackend:
     def __init__(
         self,
         *,
+        owner_id: RecordId,
         reason_code: QualifiedName = "telegram.attachment.unsupported",
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
+        self._owner_id = owner_id
         self._reason_code = reason_code
         self._clock = clock
         self._lock = RLock()
@@ -99,6 +109,10 @@ class RejectingTelegramAttachmentBackend:
             tuple[QualifiedName, int], tuple[TelegramAttachmentReceipt, ...]
         ] = {}
         self.requests: list[TelegramAttachmentIntakeRequest] = []
+
+    @property
+    def owner_id(self) -> RecordId:
+        return self._owner_id
 
     def handle(
         self,
@@ -141,6 +155,16 @@ class SyntheticTelegramAttachmentPayload:
             raise ValueError("synthetic Telegram attachment media type cannot be empty")
 
 
+@dataclass(frozen=True)
+class _QuarantinedTelegramBlob:
+    owner_id: RecordId
+    content: bytes = field(repr=False)
+    content_hash: str
+    retained_at: datetime
+    expires_at: datetime
+    retention_policy: QualifiedName
+
+
 class InMemoryTelegramAttachmentQuarantine:
     """Apply fail-closed metadata policy and content-address synthetic bytes."""
 
@@ -148,16 +172,25 @@ class InMemoryTelegramAttachmentQuarantine:
         self,
         payloads: Mapping[str, SyntheticTelegramAttachmentPayload],
         *,
+        owner_id: RecordId,
         allowed_kinds: frozenset[TelegramAttachmentKind],
         allowed_media_types: frozenset[str],
         max_attachment_bytes: int,
         max_quarantine_bytes: int,
+        retention_ttl: timedelta = timedelta(days=1),
+        retention_policy: QualifiedName = "retention.telegram-quarantine",
         clock: Callable[[], datetime] = utc_now,
+        id_factory: Callable[[str], str] = new_record_id,
     ) -> None:
         if max_attachment_bytes < 1:
             raise ValueError("Telegram attachment size limit must be positive")
         if max_quarantine_bytes < max_attachment_bytes:
             raise ValueError("Telegram quarantine quota must cover one attachment")
+        if not timedelta(hours=1) <= retention_ttl <= timedelta(days=7):
+            raise ValueError(
+                "Telegram quarantine retention must be between one hour and seven days"
+            )
+        self._owner_id = owner_id
         self._payloads = dict(payloads)
         self._allowed_kinds = allowed_kinds
         self._allowed_media_types = frozenset(
@@ -165,7 +198,10 @@ class InMemoryTelegramAttachmentQuarantine:
         )
         self._max_attachment_bytes = max_attachment_bytes
         self._max_quarantine_bytes = max_quarantine_bytes
+        self._retention_ttl = retention_ttl
+        self._retention_policy = retention_policy
         self._clock = clock
+        self._id_factory = id_factory
         self._lock = RLock()
         self._requests_by_update: dict[
             tuple[QualifiedName, int], TelegramAttachmentIntakeRequest
@@ -173,18 +209,88 @@ class InMemoryTelegramAttachmentQuarantine:
         self._receipts_by_update: dict[
             tuple[QualifiedName, int], tuple[TelegramAttachmentReceipt, ...]
         ] = {}
-        self._blobs: dict[str, bytes] = {}
+        self._blobs: dict[str, _QuarantinedTelegramBlob] = {}
+        self._deletion_receipts: list[RetentionDeletionReceipt] = []
+        self._deletion_receipts_by_id: dict[str, RetentionDeletionReceipt] = {}
         self.requests: list[TelegramAttachmentIntakeRequest] = []
         self.fetched_file_unique_ids: list[str] = []
+
+    @property
+    def owner_id(self) -> RecordId:
+        return self._owner_id
 
     @property
     def stored_blob_ids(self) -> tuple[str, ...]:
         with self._lock:
             return tuple(sorted(self._blobs))
 
+    @property
+    def deletion_receipts(self) -> tuple[RetentionDeletionReceipt, ...]:
+        with self._lock:
+            return tuple(self._deletion_receipts)
+
     def has_blob(self, blob_id: str) -> bool:
         with self._lock:
             return blob_id in self._blobs
+
+    def retention_deadline(self, blob_id: str) -> datetime:
+        with self._lock:
+            try:
+                return self._blobs[blob_id].expires_at
+            except KeyError as error:
+                raise LookupError("Telegram quarantine blob not found") from error
+
+    def sweep_expired(
+        self,
+        *,
+        as_of: datetime,
+        limit: int = 100,
+    ) -> tuple[RetentionDeletionReceipt, ...]:
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("Telegram quarantine sweep time must be timezone-aware")
+        if not 1 <= limit <= 1_000:
+            raise ValueError("Telegram quarantine sweep limit must be between 1 and 1000")
+        with self._lock:
+            due = tuple(
+                sorted(
+                    (
+                        (blob_id, blob)
+                        for blob_id, blob in self._blobs.items()
+                        if blob.expires_at <= as_of
+                    ),
+                    key=lambda item: (item[1].expires_at, item[0]),
+                )
+            )[:limit]
+            planned: list[tuple[str, RetentionDeletionReceipt]] = []
+            planned_ids: set[str] = set()
+            for blob_id, blob in due:
+                receipt = RetentionDeletionReceipt(
+                    receipt_id=self._id_factory("deletion"),
+                    owner_id=blob.owner_id,
+                    object_id=blob_id,
+                    object_type="object.telegram-quarantine-blob",
+                    content_hash=blob.content_hash,
+                    size_bytes=len(blob.content),
+                    retention_policy=blob.retention_policy,
+                    retained_at=blob.retained_at,
+                    expires_at=blob.expires_at,
+                    deleted_at=as_of,
+                    reason_code="retention.expired",
+                )
+                if (
+                    receipt.receipt_id in self._deletion_receipts_by_id
+                    or receipt.receipt_id in planned_ids
+                ):
+                    raise TelegramAttachmentConflictError(
+                        "Telegram quarantine deletion receipt identity conflicts"
+                    )
+                planned_ids.add(receipt.receipt_id)
+                planned.append((blob_id, receipt))
+            for blob_id, receipt in planned:
+                self._deletion_receipts_by_id[receipt.receipt_id] = receipt
+                self._deletion_receipts.append(receipt)
+                del self._blobs[blob_id]
+            return tuple(receipt for _blob_id, receipt in planned)
 
     def handle(
         self,
@@ -277,19 +383,31 @@ class InMemoryTelegramAttachmentQuarantine:
         content_hash = sha256_digest(payload.content)
         blob_id = f"quarantine_{content_hash.removeprefix('sha256:')[:32]}"
         existing = self._blobs.get(blob_id)
-        if existing is not None and existing != payload.content:
+        if existing is not None and (
+            existing.owner_id != self._owner_id or existing.content != payload.content
+        ):
             raise TelegramAttachmentConflictError(
                 "Telegram quarantine content-address collision"
             )
-        if existing is None and sum(map(len, self._blobs.values())) + size_bytes > (
-            self._max_quarantine_bytes
-        ):
+        if existing is None and sum(len(blob.content) for blob in self._blobs.values()) + (
+            size_bytes
+        ) > self._max_quarantine_bytes:
             return self._rejected(
                 attachment,
                 recorded_at,
                 "telegram.attachment.quarantine_quota_exceeded",
             )
-        self._blobs[blob_id] = payload.content
+        expires_at = recorded_at + self._retention_ttl
+        self._blobs[blob_id] = _QuarantinedTelegramBlob(
+            owner_id=self._owner_id,
+            content=payload.content,
+            content_hash=content_hash,
+            retained_at=recorded_at if existing is None else existing.retained_at,
+            expires_at=(
+                expires_at if existing is None else max(expires_at, existing.expires_at)
+            ),
+            retention_policy=self._retention_policy,
+        )
         return TelegramAttachmentReceipt(
             file_unique_id=attachment.file_unique_id,
             disposition=TelegramAttachmentDisposition.QUARANTINED,

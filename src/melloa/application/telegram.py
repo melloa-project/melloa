@@ -365,6 +365,10 @@ class TelegramIngestionService:
             )
         if pairing_service.adapter_id != adapter_id:
             raise ValueError("Telegram pairing service adapter identity mismatch")
+        if attachment_backend.owner_id != owner_id:
+            raise TelegramIngestionOwnershipError(
+                "Telegram attachment backend does not belong to the configured owner"
+            )
         if max_processing_attempts < 1:
             raise ValueError("max processing attempts must be positive")
         self._owner_id = owner_id

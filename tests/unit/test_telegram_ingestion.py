@@ -108,6 +108,10 @@ class RecordingAttachmentBackend:
         self.delegate = delegate
         self.results: list[tuple[TelegramAttachmentReceipt, ...]] = []
 
+    @property
+    def owner_id(self) -> str:
+        return self.delegate.owner_id
+
     def handle(
         self,
         request: TelegramAttachmentIntakeRequest,
@@ -120,8 +124,13 @@ class RecordingAttachmentBackend:
 class ReorderingAttachmentBackend:
     def __init__(self, fixed_time: datetime) -> None:
         self.delegate = RejectingTelegramAttachmentBackend(
+            owner_id=OWNER_ID,
             clock=lambda: fixed_time + timedelta(minutes=4)
         )
+
+    @property
+    def owner_id(self) -> str:
+        return self.delegate.owner_id
 
     def handle(
         self,
@@ -251,6 +260,7 @@ def quarantine_backend(
             f"synthetic-unique-{number}": attachment_payload(number)
             for number in numbers
         },
+        owner_id=OWNER_ID,
         allowed_kinds=frozenset({TelegramAttachmentKind.DOCUMENT}),
         allowed_media_types=frozenset({"text/plain"}),
         max_attachment_bytes=1_024,
@@ -339,6 +349,7 @@ def ingestion_fixture(
     else:
         pairing_service = pairing_service_override
     effective_attachment_backend = attachment_backend or RejectingTelegramAttachmentBackend(
+        owner_id=OWNER_ID,
         clock=effective_clock
     )
     service = TelegramIngestionService(
@@ -793,6 +804,18 @@ def test_stale_writer_and_foreign_thread_fail_before_canonical_acceptance(
         foreign_service.ingest(update, expected_revision=0)
     assert foreign_store.list_messages(THREAD_ID) == ()
     assert foreign_poll_store.read_state(ADAPTER_ID).revision == 0
+
+
+def test_ingestion_rejects_attachment_backend_from_another_owner(
+    fixed_time: datetime,
+) -> None:
+    backend = RejectingTelegramAttachmentBackend(
+        owner_id=record_id("owner", 2),
+        clock=lambda: fixed_time,
+    )
+
+    with pytest.raises(TelegramIngestionOwnershipError, match="attachment backend"):
+        ingestion_fixture(fixed_time, attachment_backend=backend)
 
 
 def test_invalid_revision_offset_and_incomplete_replay_state_fail_closed(

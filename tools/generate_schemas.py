@@ -52,6 +52,7 @@ from melloa.domain.models import (
 )
 from melloa.domain.operations import OwnerHealthReport, OwnerMediaCatalog
 from melloa.domain.policy import AuthorizationRequest, PolicyDecision
+from melloa.domain.retention import RetentionDeletionReceipt
 from melloa.domain.retrieval import MemoryCitation, RetrievalManifest
 from melloa.domain.telegram import (
     TelegramAttachmentIntakeRequest,
@@ -153,6 +154,10 @@ REGISTRY: dict[str, tuple[str, type[BaseModel]]] = {
     "models/registered-route-v1.json": ("registered-model-route", RegisteredModelRoute),
     "retrieval/citation-v1.json": ("memory-citation", MemoryCitation),
     "retrieval/manifest-v1.json": ("retrieval-manifest", RetrievalManifest),
+    "retention/deletion-receipt-v1.json": (
+        "retention-deletion-receipt",
+        RetentionDeletionReceipt,
+    ),
     "telegram/attachment-intake-request-v1.json": (
         "telegram-attachment-intake-request",
         TelegramAttachmentIntakeRequest,

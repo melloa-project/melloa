@@ -1,9 +1,11 @@
 """Ports for credential-free Telegram pairing, polling, and durable state."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 from melloa.domain.base import JsonObject, QualifiedName, RecordId
+from melloa.domain.retention import RetentionDeletionReceipt
 from melloa.domain.telegram import (
     TelegramAttachmentIntakeRequest,
     TelegramAttachmentReceipt,
@@ -149,11 +151,25 @@ class TelegramPairingStateStore(Protocol):
 
 
 class TelegramAttachmentBackend(Protocol):
+    @property
+    def owner_id(self) -> RecordId:
+        """Return the local owner whose quarantine namespace this backend serves."""
+
     def handle(
         self,
         request: TelegramAttachmentIntakeRequest,
     ) -> tuple[TelegramAttachmentReceipt, ...]:
         """Reject before fetch or idempotently quarantine every exact reference."""
+
+
+class TelegramAttachmentRetentionBackend(TelegramAttachmentBackend, Protocol):
+    def sweep_expired(
+        self,
+        *,
+        as_of: datetime,
+        limit: int = 100,
+    ) -> tuple[RetentionDeletionReceipt, ...]:
+        """Delete a bounded deterministic batch of due quarantine blobs."""
 
 
 class TelegramUpdateSource(Protocol):
