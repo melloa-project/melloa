@@ -64,7 +64,7 @@ The ordinary `melloa serve` command remains the fail-closed M0 status surface, w
 
 ## Validate an owner export
 
-`melloa export-mvp` writes the current MVP's canonical conversation and memory-inspection records to a JSONL bundle with copied JSON Schemas, `manifest.json`, and `checksums.sha256`. It requires the same signed Guardian status paths and mode-`0600` owner credential file as the MVP runtime, and accepts the optional core-role PostgreSQL DSN file when exporting durable preview stores.
+`melloa export-mvp` writes the current MVP's canonical conversation and memory-inspection records to a JSONL bundle with copied JSON Schemas, `manifest.json`, and `checksums.sha256`. Deleted assertion values are not restored into the export, but their memory-inspection rows preserve content-free tombstone and rebuild-work evidence. It requires the same signed Guardian status paths and mode-`0600` owner credential file as the MVP runtime, and accepts the optional core-role PostgreSQL DSN file when exporting durable preview stores.
 
 ```bash
 uv run melloa export-mvp \

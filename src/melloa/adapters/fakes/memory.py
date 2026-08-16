@@ -110,6 +110,20 @@ class InMemoryMemoryRepository:
                 )
             )
 
+    def list_assertion_metadata(self, subject_id: RecordId) -> tuple[AssertionMetadata, ...]:
+        with self._lock:
+            metadata = (
+                assertion
+                for assertion in self._metadata.values()
+                if assertion.subject_id == subject_id
+            )
+            return tuple(
+                sorted(
+                    metadata,
+                    key=lambda assertion: (assertion.observed_at, assertion.assertion_id),
+                )
+            )
+
     def list_provenance_edges(
         self,
         record_ids: frozenset[RecordId],

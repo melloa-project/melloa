@@ -90,6 +90,9 @@ class MemoryRepository(Protocol):
     def list_assertions(self, subject_id: RecordId) -> tuple[Assertion, ...]:
         """Return assertions for deterministic policy filtering and candidate generation."""
 
+    def list_assertion_metadata(self, subject_id: RecordId) -> tuple[AssertionMetadata, ...]:
+        """Return content-free assertion metadata for owner inspection and export."""
+
     def list_provenance_edges(
         self,
         record_ids: frozenset[RecordId],

@@ -111,6 +111,18 @@ class PostgresMemoryRepository:
             )
         return tuple(assertions)
 
+    def list_assertion_metadata(self, subject_id: RecordId) -> tuple[AssertionMetadata, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT document
+              FROM melloa.assertions
+             WHERE subject_id = %s
+             ORDER BY observed_at, assertion_id
+            """,
+            (subject_id,),
+        ).fetchall()
+        return tuple(self._parse_metadata(row[0]) for row in rows)
+
     def list_provenance_edges(
         self,
         record_ids: frozenset[RecordId],

@@ -1156,6 +1156,7 @@ def test_postgres_memory_content_deletion_is_durable_and_role_bounded(
         with pytest.raises(MemoryContentDeletedError):
             durable.get_assertion(original.assertion_id)
         assert durable.list_assertions(owner_id) == ()
+        assert durable.list_assertion_metadata(owner_id) == (result.assertion,)
         after_inventory = durable.assertion_content_retention_inventory(owner_id)
         assert after_inventory.retained_objects == 0
         assert after_inventory.retained_bytes == 0

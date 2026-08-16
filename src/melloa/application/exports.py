@@ -181,7 +181,7 @@ class OwnerExportService:
                     )
                 )
 
-        assertions = self._memory_repository.list_assertions(self._owner_id)
+        assertions = self._memory_repository.list_assertion_metadata(self._owner_id)
         inspections = tuple(
             self._memory.inspect(principal, assertion.assertion_id)
             for assertion in sorted(

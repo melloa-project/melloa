@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from itertools import count
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.application.exports import ExportBundleError, OwnerExportService, validate_bundle
 from melloa.apps.synthetic import build_synthetic_runtime
+from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import ConversationMessage, DeliveryState, MessageKind, MessagePart
 from melloa.domain.exports import (
@@ -46,6 +48,52 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     assert manifest.encrypted is False
     assert manifest.includes_sql_snapshot is False
     assert manifest.includes_blobs is False
+
+
+def test_owner_export_includes_deleted_memory_tombstone_evidence(
+    tmp_path,
+    fixed_time,
+) -> None:
+    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
+    runtime.memory_service.delete_content(
+        AuthenticatedOwner(
+            owner_id=runtime.owner_id,
+            session_id="session_00000000000000000000000000000001",
+            authentication_method="auth.owner-export-test",
+            authenticated_at=fixed_time,
+            reauthenticated_until=fixed_time + timedelta(minutes=5),
+            expires_at=fixed_time + timedelta(minutes=30),
+        ),
+        runtime.seed_assertion_id,
+    )
+    bundle_dir = tmp_path / "export"
+
+    OwnerExportService(
+        owner_id=runtime.owner_id,
+        intelligence_id=runtime.intelligence_id,
+        conversation=runtime.conversation_service,
+        memory=runtime.memory_service,
+        memory_repository=runtime.memory_store,
+        clock=lambda: fixed_time,
+        id_factory=_fixed_ids(),
+    ).write_bundle(bundle_dir, schema_root=_schema_root())
+
+    report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
+    records = [
+        json.loads(line)
+        for line in (bundle_dir / "assertions/inspections.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line
+    ]
+
+    assert report.valid is True
+    assert report.record_counts["assertions/inspections.jsonl"] == 1
+    assert records[0]["content_state"] == "deleted"
+    assert "value" not in records[0]["assertion"]
+    assert records[0]["deletion_tombstone"]["assertion_id"] == runtime.seed_assertion_id
+    assert records[0]["deletion_tombstone"]["content_hash"].startswith("sha256:")
+    assert records[0]["backup_expiry"]["state"] == "not-configured"
 
 
 def test_import_validation_rejects_tampered_jsonl_record(tmp_path, fixed_time) -> None:
@@ -282,11 +330,11 @@ def test_export_contracts_reject_misleading_or_unsafe_metadata(fixed_time) -> No
         )
 
 
-def _runtime(fixed_time):
+def _runtime(fixed_time, *, mode: GuardianMode = GuardianMode.READ_ONLY):
     guardian = FakeGuardianStatusReader.from_payload(
         GuardianStatusPayload(
             instance_id="home-guardian",
-            mode=GuardianMode.READ_ONLY,
+            mode=mode,
             sequence=1,
             changed_at=fixed_time,
             reason_code="guardian.export-test",
