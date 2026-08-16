@@ -5,9 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from melloa.domain.audit import AuditContent
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import JsonObject, RecordId, new_record_id, utc_now
+from melloa.domain.base import (
+    JsonObject,
+    RecordId,
+    canonical_json_bytes,
+    new_record_id,
+    sha256_digest,
+    utc_now,
+)
 from melloa.domain.classification import EpistemicStatus, TrustLabel
+from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.memory import (
     Assertion,
@@ -27,12 +36,14 @@ from melloa.domain.retention import BackupExpiryDisclosure, BackupExpiryState
 from melloa.ports.auth import RecentAuthenticationRequired
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import (
+    AssertionContentDeletionStoreResult,
     AssertionContentDeletionWrite,
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
     MemoryStore,
 )
+from melloa.ports.store import EventAuditStore
 
 _UNKNOWN_BACKUP_EXPIRY = BackupExpiryDisclosure(
     state=BackupExpiryState.UNKNOWN,
@@ -56,6 +67,7 @@ class MemoryService:
         store: MemoryStore,
         guardian_reader: GuardianStatusReader,
         backup_expiry: BackupExpiryDisclosure = _UNKNOWN_BACKUP_EXPIRY,
+        event_audit_store: EventAuditStore | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
     ) -> None:
@@ -63,6 +75,7 @@ class MemoryService:
         self._store = store
         self._guardian_reader = guardian_reader
         self._backup_expiry = backup_expiry
+        self._event_audit_store = event_audit_store
         self._clock = clock
         self._id_factory = id_factory
 
@@ -113,6 +126,15 @@ class MemoryService:
                 reason_code="memory.assertion-content-owner-deleted",
             )
         )
+        event_audit_store = self._event_audit_store
+        if persisted.created and event_audit_store is not None:
+            self._append_content_deletion_audit(
+                event_audit_store=event_audit_store,
+                principal=principal,
+                metadata=metadata,
+                result=persisted,
+                occurred_at=now,
+            )
         return AssertionContentDeletionResult(
             assertion=metadata,
             current_state=self._store.get_assertion_state(assertion_id),
@@ -305,3 +327,68 @@ class MemoryService:
                 f"Guardian mode does not permit memory writes: {mode.value}"
             )
         return mode
+
+    def _append_content_deletion_audit(
+        self,
+        *,
+        event_audit_store: EventAuditStore,
+        principal: AuthenticatedOwner,
+        metadata: AssertionMetadata,
+        result: AssertionContentDeletionStoreResult,
+        occurred_at: datetime,
+    ) -> None:
+        tombstone = result.tombstone
+        rebuild_work = result.rebuild_work
+        payload: JsonObject = {
+            "assertion_id": metadata.assertion_id,
+            "backup_expiry_state": self._backup_expiry.state.value,
+            "content_state": "deleted",
+            "reason_code": tombstone.reason_code,
+            "rebuild_work_id": rebuild_work.work_id,
+            "retained_size_bytes": tombstone.size_bytes,
+            "sensitivity": metadata.sensitivity.value,
+            "tombstone_id": tombstone.tombstone_id,
+        }
+        event = EventEnvelope(
+            event_id=self._id_factory("event"),
+            event_type="memory.assertion-content-deleted.v1",
+            schema_version="1.0.0",
+            occurred_at=occurred_at,
+            recorded_at=occurred_at,
+            subject_ids=(metadata.subject_id,),
+            source=EventSource(
+                capability_id="memory.owner-console",
+                execution_id=tombstone.tombstone_id,
+            ),
+            producer=EventProducer(
+                component="memory.service",
+                version="0.1.0",
+            ),
+            epistemic_status=EpistemicStatus.OBSERVATION,
+            sensitivity=metadata.sensitivity,
+            trust=TrustLabel.TRUSTED_SYSTEM,
+            retention_policy="retention.audit-ledger",
+            correlation_id=tombstone.tombstone_id,
+            payload=payload,
+            integrity=EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(payload))
+            ),
+        )
+        audit = AuditContent(
+            audit_id=self._id_factory("audit"),
+            event_type="audit.event-appended.v1",
+            occurred_at=occurred_at,
+            actor_id=principal.owner_id,
+            action="memory.assertion-content.delete",
+            object_ids=(
+                metadata.assertion_id,
+                tombstone.tombstone_id,
+                rebuild_work.work_id,
+            ),
+            metadata={
+                "backup_expiry_state": self._backup_expiry.state.value,
+                "event_id": event.event_id,
+                "result": "content_deleted",
+            },
+        )
+        event_audit_store.append_event(event, audit)

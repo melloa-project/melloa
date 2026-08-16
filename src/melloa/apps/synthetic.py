@@ -357,6 +357,7 @@ def build_synthetic_runtime(
         store=memory_store,
         guardian_reader=guardian_reader,
         backup_expiry=backup_expiry,
+        event_audit_store=event_audit_store,
         clock=clock,
         id_factory=id_factory,
     )

@@ -297,6 +297,25 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert updated["current_state"]["current_status"] == "superseded"
     assert updated["current_state"]["version"] == 2
 
+    deletion = client.delete(
+        f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/content",
+        headers=headers,
+    )
+    assert deletion.status_code == 200
+    assert deletion.json()["created"] is True
+    retention_after_deletion = client.get("/api/v1/retention").json()
+    inventory_after_deletion = {
+        item["policy_id"]: item for item in retention_after_deletion["inventory"]
+    }
+    audit_after_deletion = inventory_after_deletion["retention.audit-ledger"]
+    assert audit_after_deletion["coverage"] == "complete"
+    assert audit_after_deletion["retained_objects"] == 1
+    assert audit_after_deletion["retained_bytes"] > 0
+    assert audit_after_deletion["oldest_retained_at"] is not None
+    memory_after_deletion = inventory_after_deletion["retention.owner-memory"]
+    assert memory_after_deletion["retained_objects"] == 1
+    assert memory_after_deletion["deletion_receipts"] == 1
+
 
 def test_synthetic_runtime_preserves_guardian_write_denial(fixed_time) -> None:
     guardian = FakeGuardianStatusReader.from_payload(

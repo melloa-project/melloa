@@ -7,6 +7,7 @@ import pytest
 
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.application.memory import (
     MemoryOwnershipError,
     MemoryService,
@@ -456,6 +457,64 @@ def test_memory_service_deletes_only_content_and_preserves_inspection(fixed_time
             value={"activity": "reading"},
             expected_version=1,
         )
+
+
+def test_memory_service_audits_owner_content_deletion_without_content(
+    fixed_time,
+) -> None:
+    original = _assertion(fixed_time)
+    repository = InMemoryMemoryRepository((original,))
+    audit_store = InMemoryEventAuditStore()
+    deleted_at = fixed_time + timedelta(minutes=2)
+    service = MemoryService(
+        owner_id=original.subject_id,
+        store=repository,
+        guardian_reader=_guardian(fixed_time),
+        event_audit_store=audit_store,
+        clock=lambda: deleted_at,
+        id_factory=_id_factory(
+            deletion=record_id("deletion", 1),
+            work=record_id("work", 1),
+            event=record_id("event", 1),
+            audit=record_id("audit", 1),
+        ),
+    )
+    principal = _principal(fixed_time)
+
+    result = service.delete_content(principal, original.assertion_id)
+
+    assert result.created is True
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
+    event = audit_store.events[0]
+    assert event.event_type == "memory.assertion-content-deleted.v1"
+    assert event.subject_ids == (original.subject_id,)
+    assert event.payload == {
+        "assertion_id": original.assertion_id,
+        "backup_expiry_state": "unknown",
+        "content_state": "deleted",
+        "reason_code": "memory.assertion-content-owner-deleted",
+        "rebuild_work_id": result.rebuild_work.work_id,
+        "retained_size_bytes": result.tombstone.size_bytes,
+        "sensitivity": original.sensitivity.value,
+        "tombstone_id": result.tombstone.tombstone_id,
+    }
+    assert "value" not in event.model_dump(mode="json")
+    assert "content_hash" not in event.model_dump_json()
+    audit = audit_store.audit_records[0].content
+    assert audit.actor_id == principal.owner_id
+    assert audit.action == "memory.assertion-content.delete"
+    assert audit.object_ids == (
+        original.assertion_id,
+        result.tombstone.tombstone_id,
+        result.rebuild_work.work_id,
+    )
+
+    repeated = service.delete_content(principal, original.assertion_id)
+
+    assert repeated.created is False
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
 
 
 def test_memory_repository_missing_records_fail_closed(fixed_time) -> None:
