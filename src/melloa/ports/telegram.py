@@ -198,6 +198,15 @@ class TelegramPollStateStore(Protocol):
     ) -> TelegramInboundUpdate | None:
         """Resolve the immutable normalized inbound observation by update ID."""
 
+    def list_ingested_receipts(
+        self,
+        adapter_id: QualifiedName,
+        *,
+        after_update_id: TelegramUpdateId | None = None,
+        limit: int = 100,
+    ) -> tuple[TelegramIngestionReceipt, ...]:
+        """Scan a bounded ordered batch for restart-safe reply dispatch."""
+
     def commit_ingestion(
         self,
         update: TelegramInboundUpdate,

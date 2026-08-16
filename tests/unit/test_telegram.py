@@ -361,6 +361,7 @@ def test_ingestion_receipt_matches_update_and_accounts_for_all_attachments(
         disposition=TelegramUpdateDisposition.INGESTED,
         recorded_at=inbound.received_at,
         canonical_message_id=record_id("message", 1),
+        pairing_id=record_id("tgpairing", 1),
         attachment_receipts=receipts,
     )
     validate_telegram_ingestion_receipt(inbound, receipt)
@@ -494,6 +495,7 @@ def test_pairing_and_attachment_only_outcomes_fail_closed(fixed_time) -> None:
         disposition=TelegramUpdateDisposition.INGESTED,
         recorded_at=attachment_only.received_at,
         canonical_message_id=record_id("message", 1),
+        pairing_id=record_id("tgpairing", 1),
         attachment_receipts=(rejected_attachment,),
     )
     with pytest.raises(ValueError, match="usable quarantined"):

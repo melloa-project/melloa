@@ -6,7 +6,13 @@ from collections.abc import Callable
 from datetime import datetime
 
 from melloa.domain.base import JsonObject, new_record_id, utc_now
-from melloa.domain.models import ModelResult, ModelRouteRequest, ProcessingLocation
+from melloa.domain.models import (
+    ModelGatewayHealth,
+    ModelResult,
+    ModelRouteHealthState,
+    ModelRouteRequest,
+    ProcessingLocation,
+)
 
 
 class FakeModelGateway:
@@ -49,4 +55,12 @@ class FakeModelGateway:
             started_at=started_at,
             completed_at=self._clock(),
             external_disclosure=self._external_disclosure,
+        )
+
+    def health(self) -> ModelGatewayHealth:
+        return ModelGatewayHealth(
+            state=ModelRouteHealthState.HEALTHY,
+            checked_at=self._clock(),
+            latency_ms=0,
+            reason_code="model.synthetic_ready",
         )

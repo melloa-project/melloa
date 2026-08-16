@@ -17,6 +17,20 @@ class ProcessingLocation(StrEnum):
     APPROVED_PROVIDER = "approved_provider"
 
 
+class ModelRouteKind(StrEnum):
+    SYNTHETIC = "synthetic"
+    OPENAI_COMPATIBLE = "openai_compatible"
+    CLI_AGENT = "cli_agent"
+    ACP_AGENT = "acp_agent"
+
+
+class ModelRouteHealthState(StrEnum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNAVAILABLE = "unavailable"
+    UNKNOWN = "unknown"
+
+
 class ModelAttemptOutcome(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -59,6 +73,42 @@ class RegisteredModelRoute(ContractModel):
             and not self.external_disclosure
         ):
             raise ValueError("approved-provider routes must record external disclosure")
+        return self
+
+
+class ModelGatewayHealth(ContractModel):
+    state: ModelRouteHealthState
+    checked_at: AwareDatetime
+    latency_ms: Annotated[int | None, Field(default=None, ge=0)]
+    reason_code: QualifiedName
+
+
+class ModelRouteStatus(ContractModel):
+    route_id: QualifiedName
+    display_name: str = Field(min_length=1, max_length=128)
+    route_kind: ModelRouteKind
+    provider_id: QualifiedName
+    model_id: str = Field(min_length=1, max_length=256)
+    processing_location: ProcessingLocation
+    external_disclosure: bool
+    timeout_ms: Annotated[int, Field(gt=0, le=3_600_000)]
+    estimated_max_cost_gbp: Annotated[float, Field(ge=0.0)]
+    health: ModelGatewayHealth
+
+
+class OwnerModelRouteReport(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    owner_id: RecordId
+    generated_at: AwareDatetime
+    routes: tuple[ModelRouteStatus, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_routes(self) -> OwnerModelRouteReport:
+        route_ids = tuple(route.route_id for route in self.routes)
+        if len(set(route_ids)) != len(route_ids):
+            raise ValueError("owner model route IDs must be unique")
+        if self.routes != tuple(sorted(self.routes, key=lambda route: route.route_id)):
+            raise ValueError("owner model routes must use deterministic route order")
         return self
 
 

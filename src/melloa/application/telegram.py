@@ -7,8 +7,14 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from threading import RLock
 
+from melloa.application.delivery import (
+    ClientDeliveryRoute,
+    DeliveryService,
+    DeliveryUnavailableError,
+)
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import (
     JsonObject,
@@ -18,14 +24,17 @@ from melloa.domain.base import (
     sha256_digest,
     utc_now,
 )
+from melloa.domain.classification import Sensitivity, sensitivity_scope
 from melloa.domain.conversation import (
     ConversationMessage,
+    ConversationProcessingState,
     ConversationReplyWork,
     ConversationThread,
     DeliveryState,
     MessageKind,
     MessagePart,
 )
+from melloa.domain.delivery import DeliveryWorkStatus
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.retention import RetentionDeletionReceipt
 from melloa.domain.telegram import (
@@ -40,6 +49,8 @@ from melloa.domain.telegram import (
     TelegramPollState,
     TelegramUpdateDisposition,
     TelegramUpdateId,
+    telegram_pairing_destination,
+    telegram_pairing_id_from_destination,
     telegram_update_fingerprint,
     validate_paired_telegram_update,
     validate_telegram_attachment_receipts,
@@ -47,7 +58,9 @@ from melloa.domain.telegram import (
     validate_telegram_pairing_candidate,
 )
 from melloa.ports.auth import RecentAuthenticationRequired
+from melloa.ports.client import ClientAdapter
 from melloa.ports.conversation import ConversationConflictError, ConversationStore
+from melloa.ports.delivery import DeliveryStore
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.telegram import (
     TelegramAttachmentBackend,
@@ -157,6 +170,7 @@ class TelegramPairingService:
         return self._adapter_id
 
     def begin_candidate(self, update: TelegramInboundUpdate) -> TelegramPairingCandidate:
+        self._require_activation_mode()
         existing = self._store.get_candidate_for_update(self._adapter_id, update.update_id)
         if existing is not None:
             try:
@@ -233,6 +247,17 @@ class TelegramPairingService:
             raise TelegramPairingConflictError(
                 "Telegram active pairing belongs to another owner"
             )
+        return pairing
+
+    def pairing_for_delivery(self, pairing_id: RecordId) -> TelegramOwnerPairing:
+        pairing = self._store.get_pairing(self._adapter_id, pairing_id)
+        active = self.pairing_for_ingestion()
+        if (
+            pairing.owner_id != self._owner_id
+            or pairing.revoked_at is not None
+            or active != pairing
+        ):
+            raise TelegramPairingNotFoundError("active Telegram owner pairing not found")
         return pairing
 
     def confirm(
@@ -336,6 +361,7 @@ class TelegramPairingService:
     def _require_activation_mode(self) -> GuardianMode:
         mode = self._guardian_reader.read_status().payload.mode
         if mode in {
+            GuardianMode.NO_ACTIONS,
             GuardianMode.OFFLINE,
             GuardianMode.READ_ONLY,
             GuardianMode.STOPPED,
@@ -473,6 +499,7 @@ class TelegramIngestionService:
             disposition=TelegramUpdateDisposition.INGESTED,
             recorded_at=recorded_at,
             canonical_message_id=canonical.message_id,
+            pairing_id=pairing.pairing_id,
             attachment_receipts=attachments,
         )
         poll_state = self._poll_state_store.commit_ingestion(
@@ -1061,3 +1088,193 @@ class TelegramPollWorker:
                 f"Guardian mode does not permit Telegram polling: {mode.value}"
             )
         return mode
+
+
+class TelegramDeliveryRouteResolver:
+    """Resolve only the exact immutable active pairing named by a delivery action."""
+
+    def __init__(
+        self,
+        *,
+        adapter_id: QualifiedName,
+        pairing_service: TelegramPairingService,
+        adapter: ClientAdapter,
+        external_destination: str,
+        maximum_sensitivity: Sensitivity = Sensitivity.PERSONAL,
+        estimated_cost_gbp: Decimal = Decimal("0"),
+    ) -> None:
+        self._adapter_id = adapter_id
+        self._pairing_service = pairing_service
+        self._adapter = adapter
+        self._external_destination = external_destination
+        self._allowed_sensitivities = sensitivity_scope(maximum_sensitivity)
+        self._estimated_cost_gbp = estimated_cost_gbp
+
+    def resolve(
+        self,
+        client_adapter: QualifiedName,
+        destination_ref: str,
+    ) -> ClientDeliveryRoute | None:
+        if client_adapter != self._adapter_id:
+            return None
+        try:
+            pairing_id = telegram_pairing_id_from_destination(destination_ref)
+            self._pairing_service.pairing_for_delivery(pairing_id)
+        except (TelegramPairingNotFoundError, ValueError):
+            return None
+        return ClientDeliveryRoute(
+            adapter_id=self._adapter_id,
+            destination_ref=destination_ref,
+            external_destination=self._external_destination,
+            purpose="conversation.owner_initiated_reply",
+            adapter=self._adapter,
+            allowed_sensitivities=self._allowed_sensitivities,
+            estimated_cost_gbp=self._estimated_cost_gbp,
+        )
+
+
+class TelegramReplyDispatcher:
+    """Route completed Telegram-triggered turns back to their exact source pairing."""
+
+    def __init__(
+        self,
+        *,
+        owner_id: RecordId,
+        thread_id: RecordId,
+        adapter_id: QualifiedName,
+        conversation_store: ConversationStore,
+        delivery_service: DeliveryService,
+        delivery_store: DeliveryStore,
+        receipt_store: TelegramPollStateStore,
+    ) -> None:
+        self._owner_id = owner_id
+        self._thread_id = thread_id
+        self._adapter_id = adapter_id
+        self._conversation_store = conversation_store
+        self._delivery_service = delivery_service
+        self._delivery_store = delivery_store
+        self._receipt_store = receipt_store
+        self._lock = RLock()
+        self._pending: dict[RecordId, RecordId] = {}
+        self._recovery_after_update_id: TelegramUpdateId | None = None
+        self._deliveries_submitted = 0
+        self._last_error_code: QualifiedName | None = None
+
+    def observe_poll_cycle(self, cycle: TelegramPollCycle) -> None:
+        for outcome in cycle.outcomes:
+            if outcome.receipt.disposition is not TelegramUpdateDisposition.INGESTED:
+                continue
+            canonical = outcome.canonical_message
+            pairing_id = outcome.receipt.pairing_id
+            if canonical is None or pairing_id is None:
+                raise TelegramPollConflictError(
+                    "ingested Telegram outcome lacks canonical pairing provenance"
+                )
+            self._remember_pending(canonical, pairing_id)
+
+    def dispatch_ready(self, *, limit: int = 25) -> tuple[DeliveryWorkStatus, ...]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Telegram reply dispatch limit must be between 1 and 100")
+        self._recover_ingested_receipts(limit=limit)
+        with self._lock:
+            pending = tuple(self._pending.items())[:limit]
+        submitted: list[DeliveryWorkStatus] = []
+        for triggering_message_id, pairing_id in pending:
+            completed = self._conversation_store.completed_turn_for_trigger(
+                triggering_message_id
+            )
+            if completed is None:
+                processing = self._conversation_store.reply_processing(triggering_message_id)
+                if processing.state is ConversationProcessingState.DEAD:
+                    self._record_error("telegram.reply.processing_dead")
+                continue
+            output = completed.output_message
+            destination_ref = telegram_pairing_destination(pairing_id)
+            existing = tuple(
+                status
+                for status in self._delivery_store.find_by_message(output.message_id)
+                if status.client_adapter == self._adapter_id
+                and status.destination_ref == destination_ref
+            )
+            if existing:
+                self._remove_pending(triggering_message_id, pairing_id)
+                continue
+            try:
+                submission = self._delivery_service.enqueue_owner_initiated_reply(
+                    triggering_message_id=triggering_message_id,
+                    reply_message_id=output.message_id,
+                    client_adapter=self._adapter_id,
+                    destination_ref=destination_ref,
+                    idempotency_key=f"telegram:reply:{output.message_id}",
+                )
+            except DeliveryUnavailableError as error:
+                self._record_error(error.reason_code)
+                continue
+            submitted.append(submission.status)
+            self._remove_pending(triggering_message_id, pairing_id)
+            with self._lock:
+                self._deliveries_submitted += 1
+                self._last_error_code = None
+        return tuple(submitted)
+
+    def health(self) -> JsonObject:
+        with self._lock:
+            pending = len(self._pending)
+            submitted = self._deliveries_submitted
+            error_code = self._last_error_code
+            recovery_after_update_id = self._recovery_after_update_id
+        return {
+            "state": "healthy" if error_code is None else "degraded",
+            "reason_code": error_code or "telegram.reply.ready",
+            "pending_replies": pending,
+            "deliveries_submitted": submitted,
+            "recovery_after_update_id": recovery_after_update_id,
+            "last_error_code": error_code,
+        }
+
+    def _recover_ingested_receipts(self, *, limit: int) -> None:
+        with self._lock:
+            after_update_id = self._recovery_after_update_id
+        receipts = self._receipt_store.list_ingested_receipts(
+            self._adapter_id,
+            after_update_id=after_update_id,
+            limit=limit,
+        )
+        for receipt in receipts:
+            if receipt.canonical_message_id is None or receipt.pairing_id is None:
+                raise TelegramPollConflictError(
+                    "ingested Telegram receipt lacks canonical pairing provenance"
+                )
+            canonical = self._conversation_store.get_message(receipt.canonical_message_id)
+            self._remember_pending(canonical, receipt.pairing_id)
+            with self._lock:
+                self._recovery_after_update_id = receipt.update_id
+
+    def _remember_pending(
+        self,
+        canonical: ConversationMessage,
+        pairing_id: RecordId,
+    ) -> None:
+        if (
+            canonical.thread_id != self._thread_id
+            or canonical.author_principal_id != self._owner_id
+            or canonical.source_client != self._adapter_id
+        ):
+            raise TelegramPollConflictError(
+                "Telegram reply work escaped its configured owner channel"
+            )
+        with self._lock:
+            existing = self._pending.setdefault(canonical.message_id, pairing_id)
+            if existing != pairing_id:
+                raise TelegramPollConflictError(
+                    "Telegram canonical message changed pairing identity"
+                )
+
+    def _remove_pending(self, message_id: RecordId, pairing_id: RecordId) -> None:
+        with self._lock:
+            if self._pending.get(message_id) == pairing_id:
+                del self._pending[message_id]
+
+    def _record_error(self, reason_code: QualifiedName) -> None:
+        with self._lock:
+            self._last_error_code = reason_code

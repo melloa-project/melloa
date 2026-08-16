@@ -1,0 +1,180 @@
+{
+  "$defs": {
+    "ModelGatewayHealth": {
+      "additionalProperties": false,
+      "properties": {
+        "checked_at": {
+          "format": "date-time",
+          "title": "Checked At",
+          "type": "string"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "reason_code": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/ModelRouteHealthState"
+        }
+      },
+      "required": [
+        "state",
+        "checked_at",
+        "reason_code"
+      ],
+      "title": "ModelGatewayHealth",
+      "type": "object"
+    },
+    "ModelRouteHealthState": {
+      "enum": [
+        "healthy",
+        "degraded",
+        "unavailable",
+        "unknown"
+      ],
+      "title": "ModelRouteHealthState",
+      "type": "string"
+    },
+    "ModelRouteKind": {
+      "enum": [
+        "synthetic",
+        "openai_compatible",
+        "cli_agent",
+        "acp_agent"
+      ],
+      "title": "ModelRouteKind",
+      "type": "string"
+    },
+    "ModelRouteStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "estimated_max_cost_gbp": {
+          "minimum": 0.0,
+          "title": "Estimated Max Cost Gbp",
+          "type": "number"
+        },
+        "external_disclosure": {
+          "title": "External Disclosure",
+          "type": "boolean"
+        },
+        "health": {
+          "$ref": "#/$defs/ModelGatewayHealth"
+        },
+        "model_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "processing_location": {
+          "$ref": "#/$defs/ProcessingLocation"
+        },
+        "provider_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "route_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Route Id",
+          "type": "string"
+        },
+        "route_kind": {
+          "$ref": "#/$defs/ModelRouteKind"
+        },
+        "timeout_ms": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600000,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "route_id",
+        "display_name",
+        "route_kind",
+        "provider_id",
+        "model_id",
+        "processing_location",
+        "external_disclosure",
+        "timeout_ms",
+        "estimated_max_cost_gbp",
+        "health"
+      ],
+      "title": "ModelRouteStatus",
+      "type": "object"
+    },
+    "ProcessingLocation": {
+      "enum": [
+        "device",
+        "private_network",
+        "approved_provider"
+      ],
+      "title": "ProcessingLocation",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/owner-model-route-report.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "routes": {
+      "items": {
+        "$ref": "#/$defs/ModelRouteStatus"
+      },
+      "minItems": 1,
+      "title": "Routes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "owner_id",
+    "generated_at",
+    "routes"
+  ],
+  "title": "OwnerModelRouteReport",
+  "type": "object"
+}

@@ -6,6 +6,7 @@
     "0003_m1_projection_trigger_privilege.sql": "sha256:c2f4ce8d46fcec197833c9d9829911839a06db93836798b34facadc5cd5956d6",
     "0004_m1_assertion_state_history.sql": "sha256:ec9da887cc725ca68550ee2152e663b6daaa8cdfad81798e1f8b0d06a0f1d84e",
     "0005_m1_outbound_delivery.sql": "sha256:3b92486d589677c3b46ea2cb5b5fb51b9084f95bc2430b1fc030501b1054dc38",
-    "0006_m1_assertion_content_boundary.sql": "sha256:f9891c35a5c51728853522b39ab2aaa140eb9208cb11bb11f469304578f20afb"
+    "0006_m1_assertion_content_boundary.sql": "sha256:f9891c35a5c51728853522b39ab2aaa140eb9208cb11bb11f469304578f20afb",
+    "0007_m1_telegram_durable_state.sql": "sha256:1d43f671b0ab1e061366c583215ff6392e0b04d857efcc7cf68ae0e959718adf"
   }
 }

@@ -9,13 +9,18 @@ from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.application.routing import (
     DeterministicModelRouter,
     ModelRouteBinding,
+    ModelRouteOwnershipError,
     ModelRoutingError,
+    OwnerModelRouteService,
 )
+from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.classification import Sensitivity
 from melloa.domain.models import (
     ModelAttemptOutcome,
     ModelResult,
     ModelRouteAttempt,
+    ModelRouteHealthState,
+    ModelRouteKind,
     ModelRouteRequest,
     ProcessingLocation,
     RegisteredModelRoute,
@@ -410,3 +415,85 @@ def test_router_rejects_backend_latency_violation(fixed_time) -> None:
 
     with pytest.raises(ModelRoutingError):
         router.invoke(route_request)
+
+
+def test_route_statuses_expose_kind_location_disclosure_and_redacted_health(fixed_time) -> None:
+    local = route(
+        route_id="model.local",
+        location=ProcessingLocation.DEVICE,
+        priority=0,
+        external_disclosure=False,
+    )
+    backend = FakeModelGateway(
+        {"text": "synthetic"},
+        clock=lambda: fixed_time,
+        route_id=local.route_id,
+        provider_id=local.provider_id,
+        model_id=local.model_id,
+    )
+    router = DeterministicModelRouter(
+        (
+            ModelRouteBinding(
+                local,
+                backend,
+                display_name="Local fixture",
+                route_kind=ModelRouteKind.OPENAI_COMPATIBLE,
+                timeout_ms=12_000,
+            ),
+        ),
+        clock=lambda: fixed_time,
+    )
+
+    status = router.route_statuses()[0]
+    assert status.display_name == "Local fixture"
+    assert status.route_kind is ModelRouteKind.OPENAI_COMPATIBLE
+    assert status.processing_location is ProcessingLocation.DEVICE
+    assert status.external_disclosure is False
+    assert status.timeout_ms == 12_000
+    assert status.health.state is ModelRouteHealthState.HEALTHY
+    assert status.health.reason_code == "model.synthetic_ready"
+
+
+def test_owner_route_report_is_scoped_to_authenticated_owner(fixed_time) -> None:
+    local = route(
+        route_id="model.local",
+        location=ProcessingLocation.DEVICE,
+        priority=0,
+        external_disclosure=False,
+    )
+    router = DeterministicModelRouter(
+        (
+            ModelRouteBinding(
+                local,
+                FakeModelGateway(
+                    {"text": "synthetic"},
+                    clock=lambda: fixed_time,
+                    route_id=local.route_id,
+                    provider_id=local.provider_id,
+                    model_id=local.model_id,
+                ),
+            ),
+        ),
+        clock=lambda: fixed_time,
+    )
+    owner_id = record_id("owner", 1)
+    service = OwnerModelRouteService(
+        owner_id=owner_id,
+        router=router,
+        clock=lambda: fixed_time,
+    )
+    principal = AuthenticatedOwner(
+        owner_id=owner_id,
+        session_id=record_id("session", 1),
+        authentication_method="auth.synthetic",
+        authenticated_at=fixed_time,
+        reauthenticated_until=fixed_time + timedelta(minutes=5),
+        expires_at=fixed_time + timedelta(minutes=30),
+    )
+
+    report = service.report(principal)
+    assert report.owner_id == owner_id
+    assert report.routes[0].route_id == "model.local"
+
+    with pytest.raises(ModelRouteOwnershipError):
+        service.report(principal.model_copy(update={"owner_id": record_id("owner", 2)}))

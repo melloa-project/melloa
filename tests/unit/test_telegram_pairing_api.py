@@ -80,7 +80,7 @@ def pairing_fixture(
     fixed_time: datetime,
     clock: MutableClock,
     *,
-    mode: GuardianMode = GuardianMode.NO_ACTIONS,
+    mode: GuardianMode = GuardianMode.NORMAL,
 ):
     guardian_reader = guardian(fixed_time, mode)
     publisher = FakeTelegramPairingChallengePublisher()

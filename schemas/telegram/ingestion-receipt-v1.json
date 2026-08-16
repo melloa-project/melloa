@@ -178,6 +178,21 @@
       "default": null,
       "title": "Pairing Candidate Id"
     },
+    "pairing_id": {
+      "anyOf": [
+        {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pairing Id"
+    },
     "reason_code": {
       "anyOf": [
         {

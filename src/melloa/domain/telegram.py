@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, TypeAdapter, model_validator
 
 from melloa.domain.base import (
     AwareDatetime,
@@ -49,6 +49,7 @@ class TelegramAttachmentKind(StrEnum):
     VIDEO = "video"
     ANIMATION = "animation"
     STICKER = "sticker"
+    UNSUPPORTED = "unsupported"
 
 
 class TelegramAttachmentDisposition(StrEnum):
@@ -283,6 +284,7 @@ class TelegramIngestionReceipt(ContractModel):
     disposition: TelegramUpdateDisposition
     recorded_at: AwareDatetime
     canonical_message_id: RecordId | None = None
+    pairing_id: RecordId | None = None
     pairing_candidate_id: RecordId | None = None
     reason_code: QualifiedName | None = None
     attachment_receipts: tuple[TelegramAttachmentReceipt, ...] = ()
@@ -292,20 +294,25 @@ class TelegramIngestionReceipt(ContractModel):
         if self.disposition is TelegramUpdateDisposition.INGESTED:
             if (
                 self.canonical_message_id is None
+                or self.pairing_id is None
                 or self.pairing_candidate_id is not None
                 or self.reason_code is not None
             ):
-                raise ValueError("ingested Telegram updates require only a canonical message")
+                raise ValueError(
+                    "ingested Telegram updates require a canonical message and pairing"
+                )
         elif self.disposition is TelegramUpdateDisposition.PAIRING_CANDIDATE:
             if (
                 self.pairing_candidate_id is None
                 or self.canonical_message_id is not None
+                or self.pairing_id is not None
                 or self.reason_code is not None
             ):
                 raise ValueError("pairing updates require only a pairing candidate")
         elif (
             self.reason_code is None
             or self.canonical_message_id is not None
+            or self.pairing_id is not None
             or self.pairing_candidate_id is not None
         ):
             raise ValueError("rejected Telegram updates require only a reason code")
@@ -398,3 +405,23 @@ class TelegramPollState(ContractModel):
         elif self.next_offset != self.last_update_id + 1:
             raise ValueError("Telegram offset must follow the last durably handled update")
         return self
+
+
+_PAIRING_ID_ADAPTER = TypeAdapter(RecordId)
+_TELEGRAM_PAIRING_DESTINATION_PREFIX = "telegram:pairing:"
+
+
+def telegram_pairing_destination(pairing_id: RecordId) -> str:
+    """Name one immutable paired-owner binding without exposing Telegram IDs."""
+
+    validated = _PAIRING_ID_ADAPTER.validate_python(pairing_id, strict=True)
+    return f"{_TELEGRAM_PAIRING_DESTINATION_PREFIX}{validated}"
+
+
+def telegram_pairing_id_from_destination(destination_ref: str) -> RecordId:
+    """Resolve the immutable pairing ID carried by a canonical delivery resource."""
+
+    if not destination_ref.startswith(_TELEGRAM_PAIRING_DESTINATION_PREFIX):
+        raise ValueError("Telegram delivery destination is not pairing-bound")
+    pairing_id = destination_ref.removeprefix(_TELEGRAM_PAIRING_DESTINATION_PREFIX)
+    return _PAIRING_ID_ADAPTER.validate_python(pairing_id, strict=True)

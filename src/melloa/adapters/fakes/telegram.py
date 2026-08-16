@@ -30,6 +30,7 @@ from melloa.domain.telegram import (
     TelegramPairingCandidate,
     TelegramPollRequest,
     TelegramPollState,
+    TelegramUpdateDisposition,
     TelegramUpdateId,
     validate_telegram_attachment_receipts,
     validate_telegram_ingestion_receipt,
@@ -693,6 +694,23 @@ class InMemoryTelegramPollStateStore:
     ) -> TelegramInboundUpdate | None:
         self._require_adapter(adapter_id)
         return self._updates.get(update_id)
+
+    def list_ingested_receipts(
+        self,
+        adapter_id: QualifiedName,
+        *,
+        after_update_id: TelegramUpdateId | None = None,
+        limit: int = 100,
+    ) -> tuple[TelegramIngestionReceipt, ...]:
+        self._require_adapter(adapter_id)
+        if not 1 <= limit <= 1_000:
+            raise ValueError("Telegram receipt scan limit must be between 1 and 1000")
+        return tuple(
+            receipt
+            for update_id, receipt in sorted(self._receipts.items())
+            if receipt.disposition is TelegramUpdateDisposition.INGESTED
+            and (after_update_id is None or update_id > after_update_id)
+        )[:limit]
 
     def commit_ingestion(
         self,

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+from contextlib import ExitStack
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import psycopg
 import pytest
+from fastapi.testclient import TestClient
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
@@ -22,6 +24,13 @@ from melloa.application.conversation import ConversationService
 from melloa.application.inspection import OwnerInspectionService
 from melloa.application.memory import MemoryService
 from melloa.application.retrieval import PolicyConstrainedRetriever
+from melloa.apps.mvp import build_mvp_runtime
+from melloa.apps.postgres_mvp import build_postgres_mvp_stores
+from melloa.apps.synthetic import (
+    SYNTHETIC_ASSERTION_ID,
+    SYNTHETIC_OWNER_ID,
+    SYNTHETIC_TELEGRAM_ADAPTER_ID,
+)
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import canonical_json_bytes, sha256_digest
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
@@ -60,6 +69,11 @@ from melloa.domain.policy import (
     PolicyDecision,
     action_hash,
 )
+from melloa.domain.telegram import (
+    TelegramChatType,
+    TelegramInboundMessage,
+    TelegramInboundUpdate,
+)
 from melloa.ports.delivery import DeliveryConflictError
 from melloa.ports.memory import (
     AssertionCorrectionWrite,
@@ -70,11 +84,16 @@ from tests.conftest import record_id
 
 
 @pytest.fixture
-def connection():
+def database_dsn():
     dsn = os.environ.get("MELLOA_TEST_DATABASE_DSN")
     if dsn is None:
         pytest.skip("MELLOA_TEST_DATABASE_DSN is required for PostgreSQL integration tests")
-    with psycopg.connect(dsn, autocommit=True) as database:
+    return dsn
+
+
+@pytest.fixture
+def connection(database_dsn):
+    with psycopg.connect(database_dsn, autocommit=True) as database:
         yield database
 
 
@@ -83,6 +102,13 @@ def reset_append_tables(connection) -> None:
     connection.execute(
         """
         TRUNCATE
+            melloa.telegram_poll_states,
+            melloa.telegram_ingestion_receipts,
+            melloa.telegram_inbound_updates,
+            melloa.telegram_active_pairings,
+            melloa.telegram_pairing_revocations,
+            melloa.telegram_owner_pairings,
+            melloa.telegram_pairing_candidates,
             melloa.audit_events,
             melloa.canonical_events,
             melloa.provenance_edges,
@@ -1518,3 +1544,314 @@ def test_postgres_outbound_lease_expiry_requires_core_reauthorization(
         (work.work_id, work.work_id),
     ).fetchone()
     assert counts == (2, 1, 2)
+
+
+def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> None:
+    bootstrap_token = "durable-owner-bootstrap-token-value-0001"
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.postgres-mvp-restart",
+        ),
+        receipt_hash="sha256:" + "9" * 64,
+    )
+
+    with ExitStack() as first_run:
+        first_connections = tuple(
+            first_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
+            for _ in range(4)
+        )
+        for database in first_connections:
+            database.execute("SET ROLE melloa_core")
+        first_stores = build_postgres_mvp_stores(
+            *first_connections,
+            clock=lambda: fixed_time,
+        )
+        first_runtime = build_mvp_runtime(
+            guardian,
+            bootstrap_token,
+            durable_stores=first_stores,
+            clock=lambda: fixed_time,
+        )
+        first_client = first_run.enter_context(
+            TestClient(first_runtime.app, base_url="https://testserver")
+        )
+        login = first_client.post(
+            "/api/v1/auth/session",
+            json={"credential": bootstrap_token},
+        )
+        assert login.status_code == 200
+        headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+        thread = first_client.post(
+            "/api/v1/conversations",
+            headers=headers,
+            json={
+                "title": "Restart durability",
+                "sensitivity": "personal",
+                "retention_policy": "retention.owner-conversation",
+            },
+        )
+        assert thread.status_code == 201
+        thread_id = thread.json()["thread_id"]
+        reply = first_client.post(
+            f"/api/v1/conversations/{thread_id}/messages",
+            headers=headers,
+            json={
+                "text": "Preserve this canonical turn across restart.",
+                "idempotency_key": "postgres-mvp:restart-message:1",
+            },
+        )
+        assert reply.status_code == 200
+        assert reply.json()["processing"]["state"] == "completed"
+        inbound_message_id = reply.json()["inbound_message"]["message_id"]
+        output_message_id = reply.json()["output_message"]["message_id"]
+        turn_id = reply.json()["turn"]["turn_id"]
+        delivery = first_client.post(
+            f"/api/v1/conversations/{thread_id}/deliveries",
+            headers=headers,
+            json={
+                "message_id": output_message_id,
+                "client_adapter": "client.fake",
+                "destination_ref": "synthetic:owner",
+                "idempotency_key": "postgres-mvp:restart-delivery:1",
+            },
+        )
+        assert delivery.status_code == 200
+        assert delivery.json()["delivery"]["state"] == "completed"
+        work_id = delivery.json()["delivery"]["work_id"]
+        correction = first_client.post(
+            f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",
+            headers=headers,
+            json={
+                "value": {"activity": "walking", "fixture": True},
+                "expected_version": 1,
+            },
+        )
+        assert correction.status_code == 201
+
+    with ExitStack() as second_run:
+        second_connections = tuple(
+            second_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
+            for _ in range(4)
+        )
+        for database in second_connections:
+            database.execute("SET ROLE melloa_core")
+        second_stores = build_postgres_mvp_stores(
+            *second_connections,
+            clock=lambda: fixed_time + timedelta(seconds=1),
+        )
+        second_runtime = build_mvp_runtime(
+            guardian,
+            bootstrap_token,
+            durable_stores=second_stores,
+            clock=lambda: fixed_time + timedelta(seconds=1),
+        )
+        second_client = second_run.enter_context(
+            TestClient(second_runtime.app, base_url="https://testserver")
+        )
+        assert second_client.get("/api/v1/conversations").status_code == 401
+        login = second_client.post(
+            "/api/v1/auth/session",
+            json={"credential": bootstrap_token},
+        )
+        assert login.status_code == 200
+        headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+
+        threads = second_client.get("/api/v1/conversations")
+        assert threads.status_code == 200
+        assert any(candidate["thread_id"] == thread_id for candidate in threads.json())
+        messages = second_client.get(f"/api/v1/conversations/{thread_id}/messages")
+        assert [message["message_id"] for message in messages.json()] == [
+            inbound_message_id,
+            output_message_id,
+        ]
+        turns = second_client.get(f"/api/v1/conversations/{thread_id}/turns")
+        assert [turn["turn_id"] for turn in turns.json()] == [turn_id]
+        activity = second_client.get("/api/v1/inspection/model-activity")
+        assert activity.status_code == 200
+        assert activity.json()["total_runs"] == 1
+        assert activity.json()["entries"][0]["turn_id"] == turn_id
+        duplicate = second_client.post(
+            f"/api/v1/conversations/{thread_id}/messages",
+            headers=headers,
+            json={
+                "text": "Preserve this canonical turn across restart.",
+                "idempotency_key": "postgres-mvp:restart-message:1",
+            },
+        )
+        assert duplicate.status_code == 200
+        assert duplicate.json()["duplicate"] is True
+        assert duplicate.json()["turn"]["turn_id"] == turn_id
+        deliveries = second_client.get(
+            f"/api/v1/conversations/{thread_id}/deliveries"
+        )
+        assert deliveries.status_code == 200
+        assert [item["work_id"] for item in deliveries.json()] == [work_id]
+        memory = second_client.get(f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}")
+        assert memory.status_code == 200
+        assert memory.json()["current_state"]["version"] == 2
+        assert memory.json()["current_state"]["current_status"] == "superseded"
+        health = second_client.get("/api/v1/inspection/health")
+        assert health.status_code == 200
+        components = {
+            component["component_id"]: component for component in health.json()["components"]
+        }
+        assert components["database.postgresql-mvp"]["state"] == "healthy"
+        assert components["storage.process-local-control-state"]["state"] == "degraded"
+
+
+def _telegram_update(
+    observed_at: datetime,
+    update_id: int,
+    text: str,
+) -> TelegramInboundUpdate:
+    return TelegramInboundUpdate(
+        update_id=update_id,
+        message=TelegramInboundMessage(
+            telegram_message_id=update_id,
+            sender_user_id=1001,
+            chat_id=1001,
+            chat_type=TelegramChatType.PRIVATE,
+            sent_at=observed_at,
+            text=text,
+        ),
+        received_at=observed_at,
+        raw_size_bytes=128,
+        source_payload_hash=sha256_digest(
+            f"postgres-telegram:{update_id}:{text}".encode()
+        ),
+    )
+
+
+def _telegram_principal(observed_at: datetime, number: int) -> AuthenticatedOwner:
+    return AuthenticatedOwner(
+        owner_id=SYNTHETIC_OWNER_ID,
+        session_id=record_id("session", number),
+        authentication_method="auth.owner-bootstrap",
+        authenticated_at=observed_at,
+        reauthenticated_until=observed_at + timedelta(minutes=5),
+        expires_at=observed_at + timedelta(hours=1),
+    )
+
+
+def test_postgres_telegram_state_survives_core_restarts(database_dsn, fixed_time) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.postgres-telegram-restart",
+        ),
+        receipt_hash="sha256:" + "8" * 64,
+    )
+
+    with ExitStack() as first_run:
+        connections = tuple(
+            first_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
+            for _ in range(4)
+        )
+        for database in connections:
+            database.execute("SET ROLE melloa_core")
+        stores = build_postgres_mvp_stores(*connections, clock=lambda: fixed_time)
+        runtime = build_mvp_runtime(
+            guardian,
+            "durable-owner-bootstrap-token-value-0001",
+            durable_stores=stores,
+            clock=lambda: fixed_time,
+        )
+        runtime.telegram_source.add_update(_telegram_update(fixed_time, 1, "/start"))
+        start_cycle = runtime.telegram_worker.poll_once()
+        candidate_id = start_cycle.outcomes[0].receipt.pairing_candidate_id
+        assert candidate_id is not None
+        challenge = runtime.telegram_challenge_publisher.challenge_for(candidate_id)
+        pairing = runtime.telegram_pairing_service.confirm(
+            _telegram_principal(fixed_time, 1),
+            candidate_id,
+            challenge.confirmation_code,
+        )
+
+        runtime.telegram_source.add_update(
+            _telegram_update(fixed_time, 2, "Preserve this Telegram turn.")
+        )
+        text_cycle = runtime.telegram_worker.poll_once()
+        canonical = text_cycle.outcomes[0].canonical_message
+        assert canonical is not None
+        processed = runtime.app.state.conversation_service.process_ready()
+        assert len(processed) == 1
+        completed = stores.conversation_store.completed_turn_for_trigger(canonical.message_id)
+        assert completed is not None
+        output_message_id = completed.output_message.message_id
+        assert stores.telegram_poll_state_store.read_state(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID
+        ).next_offset == 3
+
+    second_time = fixed_time + timedelta(seconds=1)
+    with ExitStack() as second_run:
+        connections = tuple(
+            second_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
+            for _ in range(4)
+        )
+        for database in connections:
+            database.execute("SET ROLE melloa_core")
+        stores = build_postgres_mvp_stores(*connections, clock=lambda: second_time)
+        runtime = build_mvp_runtime(
+            guardian,
+            "durable-owner-bootstrap-token-value-0001",
+            durable_stores=stores,
+            clock=lambda: second_time,
+        )
+
+        assert runtime.telegram_pairing_service.pairing_for_ingestion() == pairing
+        state = stores.telegram_poll_state_store.read_state(SYNTHETIC_TELEGRAM_ADAPTER_ID)
+        assert state.next_offset == 3
+        assert state.revision == 2
+        assert stores.telegram_poll_state_store.get_update(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID,
+            2,
+        ) == _telegram_update(fixed_time, 2, "Preserve this Telegram turn.")
+        receipt = stores.telegram_poll_state_store.get_receipt(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID,
+            2,
+        )
+        assert receipt is not None
+        assert stores.telegram_poll_state_store.list_ingested_receipts(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID
+        ) == (receipt,)
+        completed = stores.conversation_store.completed_turn_for_trigger(canonical.message_id)
+        assert completed is not None
+        assert completed.output_message.message_id == output_message_id
+        revoked = runtime.telegram_pairing_service.revoke(
+            _telegram_principal(second_time, 2),
+            pairing.pairing_id,
+        )
+        assert revoked.revoked_at == second_time
+
+    third_time = fixed_time + timedelta(seconds=2)
+    with ExitStack() as third_run:
+        connections = tuple(
+            third_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
+            for _ in range(4)
+        )
+        for database in connections:
+            database.execute("SET ROLE melloa_core")
+        stores = build_postgres_mvp_stores(*connections, clock=lambda: third_time)
+        runtime = build_mvp_runtime(
+            guardian,
+            "durable-owner-bootstrap-token-value-0001",
+            durable_stores=stores,
+            clock=lambda: third_time,
+        )
+
+        assert runtime.telegram_pairing_service.pairing_for_ingestion() is None
+        persisted = stores.telegram_pairing_store.get_pairing(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID,
+            pairing.pairing_id,
+        )
+        assert persisted.revoked_at == second_time
+        assert stores.telegram_poll_state_store.read_state(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID
+        ).next_offset == 3

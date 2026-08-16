@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Protocol
 
 from pydantic import ValidationError
 
@@ -65,6 +66,15 @@ class ClientDeliveryRoute:
     estimated_cost_gbp: Decimal = Decimal("0")
 
 
+class ClientDeliveryRouteResolver(Protocol):
+    def resolve(
+        self,
+        client_adapter: QualifiedName,
+        destination_ref: str,
+    ) -> ClientDeliveryRoute | None:
+        """Resolve one exact dynamic destination without broadening adapter authority."""
+
+
 @dataclass(frozen=True)
 class DeliverySubmission:
     status: DeliveryWorkStatus
@@ -81,6 +91,7 @@ class DeliveryService:
         delivery_store: DeliveryStore,
         routes: tuple[ClientDeliveryRoute, ...],
         guardian_reader: GuardianStatusReader,
+        route_resolvers: tuple[ClientDeliveryRouteResolver, ...] = (),
         policy_evaluator: DeterministicPolicyEvaluator | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
@@ -104,6 +115,7 @@ class DeliveryService:
         self._conversation_store = conversation_store
         self._delivery_store = delivery_store
         self._routes = {(route.adapter_id, route.destination_ref): route for route in routes}
+        self._route_resolvers = route_resolvers
         self._guardian_reader = guardian_reader
         self._policy_evaluator = policy_evaluator or DeterministicPolicyEvaluator(
             policy_version="m1-owner-delivery-v1"
@@ -127,6 +139,55 @@ class DeliveryService:
         idempotency_key: str,
     ) -> DeliverySubmission:
         self._require_thread_owner(principal, thread_id)
+        return self._enqueue_delivery(
+            thread_id=thread_id,
+            message_id=message_id,
+            client_adapter=client_adapter,
+            destination_ref=destination_ref,
+            idempotency_key=idempotency_key,
+            requested_by=principal.owner_id,
+        )
+
+    def enqueue_owner_initiated_reply(
+        self,
+        *,
+        triggering_message_id: RecordId,
+        reply_message_id: RecordId,
+        client_adapter: QualifiedName,
+        destination_ref: str,
+        idempotency_key: str,
+    ) -> DeliverySubmission:
+        """Deliver only Melli's direct reply to an owner message from the same adapter."""
+
+        triggering = self._conversation_store.get_message(triggering_message_id)
+        reply = self._conversation_store.get_message(reply_message_id)
+        if (
+            triggering.author_principal_id != self._owner_id
+            or triggering.source_client != client_adapter
+            or reply.author_principal_id != self._intelligence_id
+            or reply.reply_to_message_id != triggering.message_id
+            or reply.thread_id != triggering.thread_id
+        ):
+            raise DeliveryUnavailableError("delivery.owner_initiated_reply_invalid")
+        return self._enqueue_delivery(
+            thread_id=reply.thread_id,
+            message_id=reply.message_id,
+            client_adapter=client_adapter,
+            destination_ref=destination_ref,
+            idempotency_key=idempotency_key,
+            requested_by=self._owner_id,
+        )
+
+    def _enqueue_delivery(
+        self,
+        *,
+        thread_id: RecordId,
+        message_id: RecordId,
+        client_adapter: QualifiedName,
+        destination_ref: str,
+        idempotency_key: str,
+        requested_by: RecordId,
+    ) -> DeliverySubmission:
         if not 1 <= len(idempotency_key) <= 256:
             raise ValueError("idempotency key must contain between 1 and 256 characters")
         message = self._conversation_store.get_message(message_id)
@@ -150,7 +211,7 @@ class DeliveryService:
             thread_id=thread_id,
             message_id=message.message_id,
             message_hash=conversation_message_hash(message),
-            requested_by=principal.owner_id,
+            requested_by=requested_by,
             client_adapter=route.adapter_id,
             destination_ref=route.destination_ref,
             idempotency_key=idempotency_key,
@@ -288,12 +349,13 @@ class DeliveryService:
                 started_at=started_at,
                 error_code=guardian_error,
             )
-        route = self._routes.get((work.client_adapter, work.destination_ref))
-        if route is None:
+        try:
+            route = self._route(work.client_adapter, work.destination_ref)
+        except DeliveryUnavailableError as error:
             return self._record_failure(
                 claim,
                 started_at=started_at,
-                error_code="delivery.adapter_unconfigured",
+                error_code=error.reason_code,
                 force_terminal=True,
             )
         try:
@@ -458,10 +520,20 @@ class DeliveryService:
         client_adapter: QualifiedName,
         destination_ref: str,
     ) -> ClientDeliveryRoute:
-        try:
-            return self._routes[(client_adapter, destination_ref)]
-        except KeyError as error:
-            raise DeliveryUnavailableError("delivery.route_not_configured") from error
+        configured = self._routes.get((client_adapter, destination_ref))
+        if configured is not None:
+            return configured
+        resolved = tuple(
+            route
+            for resolver in self._route_resolvers
+            if (route := resolver.resolve(client_adapter, destination_ref)) is not None
+        )
+        if len(resolved) != 1:
+            raise DeliveryUnavailableError("delivery.route_not_configured")
+        route = resolved[0]
+        if route.adapter_id != client_adapter or route.destination_ref != destination_ref:
+            raise DeliveryUnavailableError("delivery.route_invalid")
+        return route
 
     def _require_thread_owner(
         self,

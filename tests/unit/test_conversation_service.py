@@ -136,6 +136,9 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert reply.turn.decision_record["external_disclosure"] is False
     assert len(model.requests) == 1
     assert model.requests[0].input["text"] == "What should I review?"
+    assert model.requests[0].allowed_processing_locations == frozenset(
+        {ProcessingLocation.DEVICE}
+    )
     assert model.requests[0].input["retrieval_manifest_id"] == manifest.manifest_id
     assert model.requests[0].input["memory_citations"] == []
     assert store.list_messages(thread.thread_id) == (
@@ -515,6 +518,7 @@ def test_cited_retrieval_flows_through_model_message_and_turn(fixed_time) -> Non
 
     service, store, model = service_fixture(
         fixed_time,
+        mode=GuardianMode.NORMAL,
         response=cited_response,
         assertions=(memory,),
         external_disclosure=True,
@@ -652,6 +656,7 @@ def test_failed_external_provider_route_records_disclosed_memory(fixed_time) -> 
     )
     service, store, _model = service_fixture(
         fixed_time,
+        mode=GuardianMode.NORMAL,
         assertions=(memory,),
         model_gateway=router,
     )

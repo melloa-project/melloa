@@ -6,14 +6,22 @@ from itertools import count
 
 from fastapi.testclient import TestClient
 
+from melloa.adapters.fakes.conversation import InMemoryConversationStore
+from melloa.adapters.fakes.delivery import InMemoryDeliveryStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
+from melloa.adapters.fakes.memory import InMemoryMemoryRepository
+from melloa.apps.mvp import build_mvp_runtime
 from melloa.apps.synthetic import (
     SYNTHETIC_ASSERTION_ID,
     SYNTHETIC_TELEGRAM_ADAPTER_ID,
+    DurableRuntimeStores,
+    RuntimePersistenceStatus,
     build_synthetic_runtime,
+    synthetic_seed_assertion,
 )
 from melloa.domain.base import sha256_digest
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
+from melloa.domain.operations import ComponentHealth, HealthCategory, HealthState
 from melloa.domain.telegram import (
     TelegramAttachmentDisposition,
     TelegramAttachmentKind,
@@ -24,6 +32,64 @@ from melloa.domain.telegram import (
 )
 
 _BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
+
+
+def test_mvp_runtime_exposes_partial_durable_store_boundaries(fixed_time) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.durable-preview",
+        ),
+        receipt_hash="sha256:" + "0" * 64,
+    )
+    assertion = synthetic_seed_assertion(fixed_time)
+    database_health = ComponentHealth(
+        component_id="database.postgresql-mvp",
+        category=HealthCategory.DATABASE,
+        state=HealthState.HEALTHY,
+        required=True,
+        observed_at=fixed_time,
+        summary="Private PostgreSQL is healthy.",
+        version="18.0",
+    )
+    stores = DurableRuntimeStores(
+        seeded_at=fixed_time,
+        conversation_store=InMemoryConversationStore(),
+        memory_store=InMemoryMemoryRepository((assertion,)),
+        delivery_store=InMemoryDeliveryStore(),
+        database_health_reader=lambda: database_health,
+        status=RuntimePersistenceStatus(
+            mode="postgresql-partial-preview",
+            durable_state=("canonical conversations",),
+            ephemeral_state=("authentication sessions",),
+        ),
+    )
+
+    runtime = build_mvp_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        durable_stores=stores,
+        clock=lambda: fixed_time,
+    )
+
+    assert runtime.persistence == stores.status
+    with TestClient(runtime.app, base_url="https://testserver") as client:
+        login = client.post(
+            "/api/v1/auth/session",
+            json={"credential": _BOOTSTRAP_TOKEN},
+        )
+        assert login.status_code == 200
+        health = client.get("/api/v1/inspection/health").json()
+
+    components = {component["component_id"]: component for component in health["components"]}
+    assert components["database.postgresql-mvp"]["state"] == "healthy"
+    assert components["queue.postgresql-durable"]["state"] == "healthy"
+    assert components["storage.postgresql-canonical"]["state"] == "healthy"
+    assert components["storage.process-local-control-state"]["state"] == "degraded"
+    assert components["backup.not-configured"]["state"] == "disabled"
 
 
 def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
@@ -312,7 +378,7 @@ def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
     guardian = FakeGuardianStatusReader.from_payload(
         GuardianStatusPayload(
             instance_id="home-guardian",
-            mode=GuardianMode.NO_ACTIONS,
+            mode=GuardianMode.NORMAL,
             sequence=1,
             changed_at=fixed_time,
             reason_code="guardian.synthetic-telegram",
@@ -494,9 +560,10 @@ def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
             for component in health["components"]
             if component["component_id"] == "worker.synthetic-retention"
         )
-        assert retention_worker["state"] == "disabled"
+        assert retention_worker["state"] == "healthy"
         assert retention_worker["required"] is False
-        assert runtime.telegram_attachment_backend.sweeps == []
+        assert runtime.telegram_attachment_backend.sweeps
+        assert set(runtime.telegram_attachment_backend.sweeps) == {(fixed_time, 100)}
 
 
 def _wait_for_telegram_revision(runtime, revision: int) -> None:

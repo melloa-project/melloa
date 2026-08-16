@@ -43,6 +43,7 @@ from melloa.application.retention import (
     RetentionInspectionUnavailableError,
     RetentionOwnershipError,
 )
+from melloa.application.routing import ModelRouteOwnershipError, OwnerModelRouteService
 from melloa.application.status import SystemStatus, read_system_status
 from melloa.application.telegram import (
     TelegramAttachmentRetentionWorker,
@@ -51,6 +52,7 @@ from melloa.application.telegram import (
     TelegramPairingService,
     TelegramPairingUnavailableError,
     TelegramPollWorker,
+    TelegramReplyDispatcher,
     TelegramRetentionUnavailableError,
 )
 from melloa.domain.auth import AuthenticatedOwner
@@ -71,6 +73,7 @@ from melloa.domain.memory import (
     AssertionStateTransitionResult,
     MemoryInspection,
 )
+from melloa.domain.models import OwnerModelRouteReport
 from melloa.domain.operations import OwnerHealthReport, OwnerMediaCatalog
 from melloa.domain.retention import OwnerRetentionReport
 from melloa.domain.telegram import (
@@ -86,6 +89,7 @@ from melloa.ports.auth import (
     OwnerSessionManager,
     RecentAuthenticationRequired,
 )
+from melloa.ports.client import ClientAdapter
 from melloa.ports.conversation import ConversationConflictError, ConversationNotFoundError
 from melloa.ports.delivery import DeliveryConflictError, DeliveryNotFoundError
 from melloa.ports.guardian import GuardianStatusReader
@@ -231,14 +235,24 @@ async def _run_telegram_worker(
     worker: TelegramPollWorker,
     *,
     interval: float,
+    reply_dispatcher: TelegramReplyDispatcher | None = None,
 ) -> None:
     while True:
         try:
-            await asyncio.to_thread(worker.poll_once)
+            cycle = await asyncio.to_thread(worker.poll_once)
+            if reply_dispatcher is not None:
+                reply_dispatcher.observe_poll_cycle(cycle)
         except (TelegramIngestionUnavailableError, TelegramPollingError):
             pass
         except Exception:
             _LOGGER.exception("Telegram poll worker cycle failed")
+        if reply_dispatcher is not None:
+            try:
+                await asyncio.to_thread(reply_dispatcher.dispatch_ready)
+            except ConversationUnavailableError:
+                pass
+            except Exception:
+                _LOGGER.exception("Telegram reply dispatch cycle failed")
         await asyncio.sleep(interval)
 
 
@@ -327,6 +341,16 @@ def _configured_retention(request: Request) -> OwnerRetentionService:
     return retention_service
 
 
+def _configured_model_routes(request: Request) -> OwnerModelRouteService:
+    model_route_service: OwnerModelRouteService | None = request.app.state.model_route_service
+    if model_route_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model route inspection is not configured.",
+        )
+    return model_route_service
+
+
 def _configured_telegram_pairing(request: Request) -> TelegramPairingService:
     pairing_service: TelegramPairingService | None = request.app.state.telegram_pairing_service
     if pairing_service is None:
@@ -378,7 +402,10 @@ def create_app(
     telegram_worker: TelegramPollWorker | None = None,
     telegram_pairing_service: TelegramPairingService | None = None,
     telegram_retention_worker: TelegramAttachmentRetentionWorker | None = None,
+    telegram_reply_dispatcher: TelegramReplyDispatcher | None = None,
+    telegram_delivery_adapter: ClientAdapter | None = None,
     retention_service: OwnerRetentionService | None = None,
+    model_route_service: OwnerModelRouteService | None = None,
     *,
     secure_session_cookie: bool = True,
     run_conversation_worker: bool = False,
@@ -389,6 +416,7 @@ def create_app(
     telegram_worker_interval: float = 1.0,
     run_telegram_retention_worker: bool = False,
     telegram_retention_worker_interval: float = 60.0,
+    telegram_state_persistence: str = "process-only-preview",
 ) -> FastAPI:
     if conversation_worker_interval <= 0:
         raise ValueError("conversation worker interval must be positive")
@@ -398,6 +426,8 @@ def create_app(
         raise ValueError("Telegram worker interval must be positive")
     if telegram_retention_worker_interval <= 0:
         raise ValueError("Telegram retention worker interval must be positive")
+    if telegram_state_persistence not in {"process-only-preview", "postgresql"}:
+        raise ValueError("Telegram state persistence mode is not supported")
     if run_conversation_worker and conversation_service is None:
         raise ValueError("conversation worker requires a configured conversation service")
     if run_delivery_worker and delivery_service is None:
@@ -434,6 +464,7 @@ def create_app(
                     _run_telegram_worker(
                         telegram_worker,
                         interval=telegram_worker_interval,
+                        reply_dispatcher=telegram_reply_dispatcher,
                     )
                 )
             )
@@ -469,10 +500,14 @@ def create_app(
     app.state.inspection_service = inspection_service
     app.state.operations_service = operations_service
     app.state.retention_service = retention_service
+    app.state.model_route_service = model_route_service
     app.state.delivery_service = delivery_service
     app.state.telegram_worker = telegram_worker
     app.state.telegram_pairing_service = telegram_pairing_service
     app.state.telegram_retention_worker = telegram_retention_worker
+    app.state.telegram_reply_dispatcher = telegram_reply_dispatcher
+    app.state.telegram_delivery_adapter = telegram_delivery_adapter
+    app.state.telegram_state_persistence = telegram_state_persistence
 
     @app.middleware("http")
     async def security_headers(
@@ -740,6 +775,19 @@ def create_app(
             },
         )
 
+    @app.exception_handler(ModelRouteOwnershipError)
+    async def model_routes_not_found(
+        _request: Request,
+        _error: ModelRouteOwnershipError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "code": "model_routes_not_found",
+                "message": "Model route report not found.",
+            },
+        )
+
     @app.get("/health/live")
     async def liveness() -> dict[str, str]:
         return {"status": "live"}
@@ -802,6 +850,41 @@ def create_app(
             httponly=True,
             samesite="strict",
         )
+
+    @app.get(
+        "/api/v1/integrations/telegram/status",
+        response_model=JsonObject,
+    )
+    async def inspect_telegram_status(
+        request: Request,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+    ) -> JsonObject:
+        pairing_service = _configured_telegram_pairing(request)
+        pairing_service.inspect_active_pairing(principal)
+        worker: TelegramPollWorker | None = request.app.state.telegram_worker
+        dispatcher: TelegramReplyDispatcher | None = (
+            request.app.state.telegram_reply_dispatcher
+        )
+        adapter: ClientAdapter | None = request.app.state.telegram_delivery_adapter
+        state_persistence = str(request.app.state.telegram_state_persistence)
+        limitations = [
+            "text-only outbound replies",
+            "attachments rejected before fetch",
+            "ambiguous external sends are not automatically retried",
+            "pairing challenge sends are not transactionally deduplicated",
+        ]
+        if state_persistence != "postgresql":
+            limitations.append("pairing, offsets, and ingestion receipts are process-local")
+        return {
+            "configured": worker is not None,
+            "adapter_id": pairing_service.adapter_id,
+            "state_persistence": state_persistence,
+            "polling": None if worker is None else worker.health(),
+            "replies": None if dispatcher is None else dispatcher.health(),
+            "delivery": None if adapter is None else adapter.health(),
+            "capabilities": None if adapter is None else adapter.capabilities(),
+            "limitations": limitations,
+        }
 
     @app.get(
         "/api/v1/integrations/telegram/pairing/candidates",
@@ -1165,6 +1248,16 @@ def create_app(
             window_start=window_start,
             window_end=window_end,
         )
+
+    @app.get(
+        "/api/v1/providers/routes",
+        response_model=OwnerModelRouteReport,
+    )
+    def inspect_model_routes(
+        request: Request,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+    ) -> OwnerModelRouteReport:
+        return _configured_model_routes(request).report(principal)
 
     @app.get(
         "/api/v1/inspection/health",

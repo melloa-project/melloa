@@ -1,4 +1,4 @@
-"""Explicit process-local M1 runtime for private development and acceptance drills."""
+"""Explicit M1 runtime assembly with synthetic defaults and injectable durable stores."""
 
 from __future__ import annotations
 
@@ -24,26 +24,37 @@ from melloa.adapters.fakes.telegram import (
     InMemoryTelegramPollStateStore,
     RejectingTelegramAttachmentBackend,
 )
-from melloa.application.conversation import ConversationService
+from melloa.application.conversation import ConversationRoutePolicy, ConversationService
 from melloa.application.delivery import ClientDeliveryRoute, DeliveryService
 from melloa.application.inspection import OwnerInspectionService
 from melloa.application.memory import MemoryService
 from melloa.application.operations import OwnerOperationsService
 from melloa.application.retention import OwnerRetentionService
 from melloa.application.retrieval import PolicyConstrainedRetriever
-from melloa.application.routing import DeterministicModelRouter, ModelRouteBinding
+from melloa.application.routing import (
+    DeterministicModelRouter,
+    ModelRouteBinding,
+    OwnerModelRouteService,
+)
 from melloa.application.telegram import (
     TelegramAttachmentRetentionWorker,
+    TelegramDeliveryRouteResolver,
     TelegramIngestionService,
     TelegramPairingService,
     TelegramPollWorker,
+    TelegramReplyDispatcher,
 )
 from melloa.apps.core import create_app
 from melloa.domain.base import JsonObject, QualifiedName, RecordId, new_record_id, utc_now
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import ConversationThread
 from melloa.domain.memory import Assertion, AssertionStatus
-from melloa.domain.models import ModelRouteRequest, ProcessingLocation, RegisteredModelRoute
+from melloa.domain.models import (
+    ModelRouteKind,
+    ModelRouteRequest,
+    ProcessingLocation,
+    RegisteredModelRoute,
+)
 from melloa.domain.operations import (
     ComponentHealth,
     HealthCategory,
@@ -61,7 +72,18 @@ from melloa.domain.retention import (
     RetentionMode,
     RetentionPolicyStatus,
 )
+from melloa.ports.client import ClientAdapter
+from melloa.ports.conversation import ConversationNotFoundError, ConversationStore
+from melloa.ports.delivery import DeliveryStore
 from melloa.ports.guardian import GuardianStatusReader
+from melloa.ports.memory import MemoryStore
+from melloa.ports.telegram import (
+    TelegramPairingChallengePublisher,
+    TelegramPairingCodeIssuer,
+    TelegramPairingStateStore,
+    TelegramPollStateStore,
+    TelegramUpdateSource,
+)
 
 SYNTHETIC_OWNER_ID: RecordId = "owner_00000000000000000000000000000001"
 SYNTHETIC_INTELLIGENCE_ID: RecordId = "intelligence_00000000000000000000000000000001"
@@ -71,20 +93,63 @@ SYNTHETIC_TELEGRAM_ADAPTER_ID: QualifiedName = "client.telegram.synthetic"
 
 
 @dataclass(frozen=True)
+class RuntimePersistenceStatus:
+    mode: str
+    durable_state: tuple[str, ...]
+    ephemeral_state: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DurableRuntimeStores:
+    seeded_at: datetime
+    conversation_store: ConversationStore
+    memory_store: MemoryStore
+    delivery_store: DeliveryStore
+    database_health_reader: Callable[[], ComponentHealth]
+    status: RuntimePersistenceStatus
+    telegram_pairing_store: TelegramPairingStateStore | None = None
+    telegram_poll_state_store: TelegramPollStateStore | None = None
+
+
+@dataclass(frozen=True)
 class SyntheticRuntime:
     app: FastAPI
     owner_id: RecordId
     intelligence_id: RecordId
     seed_assertion_id: RecordId
     telegram_thread_id: RecordId
-    telegram_source: FakeTelegramUpdateSource
-    telegram_poll_state_store: InMemoryTelegramPollStateStore
+    telegram_source: TelegramUpdateSource
+    telegram_poll_state_store: TelegramPollStateStore
     telegram_pairing_service: TelegramPairingService
-    telegram_challenge_publisher: FakeTelegramPairingChallengePublisher
+    telegram_challenge_publisher: TelegramPairingChallengePublisher
     telegram_attachment_backend: RejectingTelegramAttachmentBackend
     telegram_retention_worker: TelegramAttachmentRetentionWorker
     telegram_worker: TelegramPollWorker
+    telegram_delivery_adapter: ClientAdapter | None
+    telegram_reply_dispatcher: TelegramReplyDispatcher | None
+    delivery_store: DeliveryStore
     retention_service: OwnerRetentionService
+    model_route_ids: tuple[QualifiedName, ...]
+    persistence: RuntimePersistenceStatus
+
+
+def synthetic_seed_assertion(seeded_at: datetime) -> Assertion:
+    return Assertion(
+        assertion_id=SYNTHETIC_ASSERTION_ID,
+        subject_id=SYNTHETIC_OWNER_ID,
+        predicate="owner.preference.synthetic-activity",
+        value={
+            "activity": "reading",
+            "fixture": True,
+            "note": "Synthetic acceptance record; never owner data.",
+        },
+        epistemic_status=EpistemicStatus.OWNER_CONFIRMED,
+        status=AssertionStatus.CONFIRMED,
+        confidence=1.0,
+        source_authority=TrustLabel.OWNER_AUTHORED,
+        sensitivity=Sensitivity.PERSONAL,
+        observed_at=seeded_at,
+    )
 
 
 def build_synthetic_runtime(
@@ -95,67 +160,102 @@ def build_synthetic_runtime(
     id_factory: Callable[[str], str] = new_record_id,
     telegram_worker_interval: float = 1.0,
     telegram_retention_worker_interval: float = 60.0,
+    configured_model_bindings: tuple[ModelRouteBinding, ...] = (),
+    conversation_route_policy: ConversationRoutePolicy | None = None,
+    runtime_version: str = "melloa-core/0.1.0-synthetic",
+    telegram_adapter_id: QualifiedName = SYNTHETIC_TELEGRAM_ADAPTER_ID,
+    telegram_source: TelegramUpdateSource | None = None,
+    telegram_challenge_publisher: TelegramPairingChallengePublisher | None = None,
+    telegram_code_issuer: TelegramPairingCodeIssuer | None = None,
+    telegram_delivery_adapter_factory: (
+        Callable[[TelegramPairingService], ClientAdapter] | None
+    ) = None,
+    telegram_external_destination: str = "synthetic:owner",
+    telegram_maximum_sensitivity: Sensitivity = Sensitivity.PERSONAL,
+    telegram_poll_timeout_seconds: int = 1,
+    telegram_thread_title: str = "Synthetic Telegram intake",
+    durable_stores: DurableRuntimeStores | None = None,
 ) -> SyntheticRuntime:
-    """Compose an in-memory runtime that performs no provider or channel network calls."""
+    """Compose the MVP runtime with explicit injectable provider, channel, and store ports."""
 
-    seeded_at = clock()
-    assertion = Assertion(
-        assertion_id=SYNTHETIC_ASSERTION_ID,
-        subject_id=SYNTHETIC_OWNER_ID,
-        predicate="owner.preference.synthetic-activity",
-        value={
-            "activity": "reading",
-            "fixture": True,
-            "note": "Synthetic process-local acceptance record.",
-        },
-        epistemic_status=EpistemicStatus.OWNER_CONFIRMED,
-        status=AssertionStatus.CONFIRMED,
-        confidence=1.0,
-        source_authority=TrustLabel.OWNER_AUTHORED,
-        sensitivity=Sensitivity.PERSONAL,
-        observed_at=seeded_at,
-    )
-    memory_store = InMemoryMemoryRepository((assertion,))
-    conversation_store = InMemoryConversationStore(id_factory=id_factory)
-    conversation_store.create_thread(
+    seeded_at = clock() if durable_stores is None else durable_stores.seeded_at
+    assertion = synthetic_seed_assertion(seeded_at)
+    if durable_stores is None:
+        memory_store: MemoryStore = InMemoryMemoryRepository((assertion,))
+        conversation_store: ConversationStore = InMemoryConversationStore(
+            id_factory=id_factory
+        )
+        delivery_store: DeliveryStore = InMemoryDeliveryStore(id_factory=id_factory)
+        persistence = RuntimePersistenceStatus(
+            mode="process-only-preview",
+            durable_state=(),
+            ephemeral_state=(
+                "authentication sessions",
+                "canonical conversations and model provenance",
+                "memory assertions and corrections",
+                "reply and delivery retry state",
+                "Telegram pairing, offsets, and attachment quarantine",
+            ),
+        )
+    else:
+        memory_store = durable_stores.memory_store
+        conversation_store = durable_stores.conversation_store
+        delivery_store = durable_stores.delivery_store
+        persistence = durable_stores.status
+        if memory_store.get_assertion(assertion.assertion_id) != assertion:
+            raise ValueError("durable runtime seed assertion conflicts with canonical data")
+    _ensure_runtime_thread(
+        conversation_store,
         ConversationThread(
             thread_id=SYNTHETIC_TELEGRAM_THREAD_ID,
             owner_id=SYNTHETIC_OWNER_ID,
             intelligence_id=SYNTHETIC_INTELLIGENCE_ID,
-            title="Synthetic Telegram intake",
+            title=telegram_thread_title,
             sensitivity=Sensitivity.PERSONAL,
             retention_policy="retention.owner-conversation",
             created_at=seeded_at,
             updated_at=seeded_at,
-        )
+        ),
     )
     model_backend = FakeModelGateway(
         _synthetic_conversation_response,
         clock=clock,
         id_factory=id_factory,
     )
+    synthetic_binding = ModelRouteBinding(
+        route=RegisteredModelRoute(
+            route_id="model.fake.deterministic",
+            provider_id="provider.synthetic",
+            model_id="deterministic-fixture-v1",
+            processing_location=ProcessingLocation.DEVICE,
+            supported_modalities=frozenset({"text"}),
+            quality_profiles=frozenset(
+                {"quality.conversation", "quality.conversation-synthetic"}
+            ),
+            allowed_sensitivities=frozenset(Sensitivity),
+            provider_retention_policies=frozenset({"retention.no-training"}),
+            max_input_tokens=4_096,
+            max_output_tokens=1_024,
+            estimated_max_cost_gbp=0.0,
+            reliability=1.0,
+            priority=10_000,
+            external_disclosure=False,
+        ),
+        backend=model_backend,
+        display_name="Deterministic synthetic fixture",
+        route_kind=ModelRouteKind.SYNTHETIC,
+        timeout_ms=1_000,
+    )
     model_router = DeterministicModelRouter(
         (
-            ModelRouteBinding(
-                route=RegisteredModelRoute(
-                    route_id="model.fake.deterministic",
-                    provider_id="provider.synthetic",
-                    model_id="deterministic-fixture-v1",
-                    processing_location=ProcessingLocation.DEVICE,
-                    supported_modalities=frozenset({"text"}),
-                    quality_profiles=frozenset({"quality.conversation-synthetic"}),
-                    allowed_sensitivities=frozenset(Sensitivity),
-                    provider_retention_policies=frozenset({"retention.no-training"}),
-                    max_input_tokens=4_096,
-                    max_output_tokens=1_024,
-                    estimated_max_cost_gbp=0.0,
-                    reliability=1.0,
-                    priority=0,
-                    external_disclosure=False,
-                ),
-                backend=model_backend,
-            ),
+            *configured_model_bindings,
+            synthetic_binding,
         ),
+        clock=clock,
+    )
+    model_routes = OwnerModelRouteService(
+        owner_id=SYNTHETIC_OWNER_ID,
+        router=model_router,
         clock=clock,
     )
     sessions = InMemoryOwnerSessionManager(
@@ -176,24 +276,34 @@ def build_synthetic_runtime(
         guardian_reader=guardian_reader,
         clock=clock,
         id_factory=id_factory,
-        runtime_version="melloa-core/0.1.0-synthetic",
+        runtime_version=runtime_version,
+        route_policy=conversation_route_policy,
     )
-    telegram_source = FakeTelegramUpdateSource(adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID)
-    telegram_poll_state_store = InMemoryTelegramPollStateStore(
-        adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
+    resolved_telegram_source = telegram_source or FakeTelegramUpdateSource(
+        adapter_id=telegram_adapter_id
+    )
+    telegram_poll_state_store = (
+        None if durable_stores is None else durable_stores.telegram_poll_state_store
+    ) or InMemoryTelegramPollStateStore(
+        adapter_id=telegram_adapter_id,
         clock=lambda: seeded_at,
     )
-    telegram_challenge_publisher = FakeTelegramPairingChallengePublisher()
+    resolved_challenge_publisher = (
+        telegram_challenge_publisher or FakeTelegramPairingChallengePublisher()
+    )
     telegram_attachment_backend = RejectingTelegramAttachmentBackend(
         owner_id=SYNTHETIC_OWNER_ID,
         clock=clock,
     )
     telegram_pairing_service = TelegramPairingService(
         owner_id=SYNTHETIC_OWNER_ID,
-        adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
-        store=InMemoryTelegramPairingStateStore(),
-        code_issuer=DeterministicTelegramPairingCodeIssuer(),
-        challenge_publisher=telegram_challenge_publisher,
+        adapter_id=telegram_adapter_id,
+        store=(
+            None if durable_stores is None else durable_stores.telegram_pairing_store
+        )
+        or InMemoryTelegramPairingStateStore(),
+        code_issuer=telegram_code_issuer or DeterministicTelegramPairingCodeIssuer(),
+        challenge_publisher=resolved_challenge_publisher,
         guardian_reader=guardian_reader,
         clock=clock,
         id_factory=id_factory,
@@ -201,7 +311,7 @@ def build_synthetic_runtime(
     telegram_ingestion = TelegramIngestionService(
         owner_id=SYNTHETIC_OWNER_ID,
         thread_id=SYNTHETIC_TELEGRAM_THREAD_ID,
-        adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
+        adapter_id=telegram_adapter_id,
         pairing_service=telegram_pairing_service,
         attachment_backend=telegram_attachment_backend,
         conversation_store=conversation_store,
@@ -211,12 +321,12 @@ def build_synthetic_runtime(
         id_factory=id_factory,
     )
     telegram_worker = TelegramPollWorker(
-        adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
-        source=telegram_source,
+        adapter_id=telegram_adapter_id,
+        source=resolved_telegram_source,
         poll_state_store=telegram_poll_state_store,
         ingestion_service=telegram_ingestion,
         guardian_reader=guardian_reader,
-        timeout_seconds=1,
+        timeout_seconds=telegram_poll_timeout_seconds,
         batch_limit=25,
         clock=clock,
     )
@@ -238,11 +348,29 @@ def build_synthetic_runtime(
         clock=clock,
         id_factory=id_factory,
     )
+    telegram_delivery_adapter = (
+        None
+        if telegram_delivery_adapter_factory is None
+        else telegram_delivery_adapter_factory(telegram_pairing_service)
+    )
+    telegram_route_resolvers = (
+        ()
+        if telegram_delivery_adapter is None
+        else (
+            TelegramDeliveryRouteResolver(
+                adapter_id=telegram_adapter_id,
+                pairing_service=telegram_pairing_service,
+                adapter=telegram_delivery_adapter,
+                external_destination=telegram_external_destination,
+                maximum_sensitivity=telegram_maximum_sensitivity,
+            ),
+        )
+    )
     delivery = DeliveryService(
         owner_id=SYNTHETIC_OWNER_ID,
         intelligence_id=SYNTHETIC_INTELLIGENCE_ID,
         conversation_store=conversation_store,
-        delivery_store=InMemoryDeliveryStore(id_factory=id_factory),
+        delivery_store=delivery_store,
         routes=(
             ClientDeliveryRoute(
                 adapter_id="client.fake",
@@ -254,8 +382,22 @@ def build_synthetic_runtime(
             ),
         ),
         guardian_reader=guardian_reader,
+        route_resolvers=telegram_route_resolvers,
         clock=clock,
         id_factory=id_factory,
+    )
+    telegram_reply_dispatcher = (
+        None
+        if telegram_delivery_adapter is None
+        else TelegramReplyDispatcher(
+            owner_id=SYNTHETIC_OWNER_ID,
+            thread_id=SYNTHETIC_TELEGRAM_THREAD_ID,
+            adapter_id=telegram_adapter_id,
+            conversation_store=conversation_store,
+            delivery_service=delivery,
+            delivery_store=delivery_store,
+            receipt_store=telegram_poll_state_store,
+        )
     )
     inspection = OwnerInspectionService(
         owner_id=SYNTHETIC_OWNER_ID,
@@ -273,8 +415,8 @@ def build_synthetic_runtime(
                     state=HealthState.HEALTHY,
                     required=True,
                     observed_at=seeded_at,
-                    summary="Synthetic private core is serving authenticated requests.",
-                    version="0.1.0-synthetic",
+                    summary="Private Melloa core is serving authenticated owner requests.",
+                    version=runtime_version,
                 ),
                 ComponentHealth(
                     component_id="worker.synthetic-reply",
@@ -282,7 +424,7 @@ def build_synthetic_runtime(
                     state=HealthState.HEALTHY,
                     required=True,
                     observed_at=seeded_at,
-                    summary="Process-local worker resumes due canonical reply work.",
+                    summary="Runtime worker resumes due canonical reply work.",
                 ),
                 ComponentHealth(
                     component_id="worker.synthetic-delivery",
@@ -290,23 +432,11 @@ def build_synthetic_runtime(
                     state=HealthState.HEALTHY,
                     required=True,
                     observed_at=seeded_at,
-                    summary="Process-local worker resumes due exact-authority delivery work.",
+                    summary="Runtime worker resumes due exact-authority delivery work.",
                 ),
-                ComponentHealth(
-                    component_id="database.not-configured",
-                    category=HealthCategory.DATABASE,
-                    state=HealthState.DISABLED,
-                    required=False,
-                    observed_at=seeded_at,
-                    summary="PostgreSQL is not used by the process-local acceptance runtime.",
-                ),
-                ComponentHealth(
-                    component_id="queue.process-memory",
-                    category=HealthCategory.QUEUE,
-                    state=HealthState.DEGRADED,
-                    required=True,
-                    observed_at=seeded_at,
-                    summary="Retry state is process-local and is discarded on restart.",
+                *_runtime_persistence_components(
+                    seeded_at,
+                    durable=durable_stores is not None,
                 ),
                 ComponentHealth(
                     component_id="provider.synthetic-device",
@@ -326,32 +456,21 @@ def build_synthetic_runtime(
                     summary="Camera capture remains disabled until its later milestone.",
                 ),
                 ComponentHealth(
-                    component_id="storage.process-memory",
-                    category=HealthCategory.STORAGE,
-                    state=HealthState.DEGRADED,
-                    required=True,
-                    observed_at=seeded_at,
-                    summary="State is process-local and is discarded on restart.",
-                ),
-                ComponentHealth(
-                    component_id="backup.not-configured",
-                    category=HealthCategory.BACKUP,
-                    state=HealthState.DISABLED,
-                    required=False,
-                    observed_at=seeded_at,
-                    summary="No backup is configured for intentionally ephemeral fixture data.",
-                ),
-                ComponentHealth(
                     component_id="deployment.synthetic-process",
                     category=HealthCategory.DEPLOYMENT,
                     state=HealthState.HEALTHY,
                     required=False,
                     observed_at=seeded_at,
                     summary="Explicit synthetic acceptance mode is active.",
-                    version="0.1.0-synthetic",
+                    version=runtime_version,
                 ),
             ),
             component_readers=(
+                *(
+                    ()
+                    if durable_stores is None
+                    else (durable_stores.database_health_reader,)
+                ),
                 lambda: _synthetic_telegram_component(telegram_worker, clock),
                 lambda: _synthetic_retention_component(
                     telegram_retention_worker,
@@ -396,26 +515,142 @@ def build_synthetic_runtime(
             telegram_worker,
             telegram_pairing_service,
             telegram_retention_worker,
+            telegram_reply_dispatcher,
+            telegram_delivery_adapter,
             retention_service=retention,
+            model_route_service=model_routes,
             run_conversation_worker=True,
             run_delivery_worker=True,
             run_telegram_worker=True,
             telegram_worker_interval=telegram_worker_interval,
             run_telegram_retention_worker=True,
             telegram_retention_worker_interval=telegram_retention_worker_interval,
+            telegram_state_persistence=(
+                "postgresql"
+                if persistence.mode == "postgresql-partial-preview"
+                else "process-only-preview"
+            ),
         ),
         owner_id=SYNTHETIC_OWNER_ID,
         intelligence_id=SYNTHETIC_INTELLIGENCE_ID,
         seed_assertion_id=SYNTHETIC_ASSERTION_ID,
         telegram_thread_id=SYNTHETIC_TELEGRAM_THREAD_ID,
-        telegram_source=telegram_source,
+        telegram_source=resolved_telegram_source,
         telegram_poll_state_store=telegram_poll_state_store,
         telegram_pairing_service=telegram_pairing_service,
-        telegram_challenge_publisher=telegram_challenge_publisher,
+        telegram_challenge_publisher=resolved_challenge_publisher,
         telegram_attachment_backend=telegram_attachment_backend,
         telegram_retention_worker=telegram_retention_worker,
         telegram_worker=telegram_worker,
+        telegram_delivery_adapter=telegram_delivery_adapter,
+        telegram_reply_dispatcher=telegram_reply_dispatcher,
+        delivery_store=delivery_store,
         retention_service=retention,
+        model_route_ids=tuple(
+            binding.route.route_id
+            for binding in (*configured_model_bindings, synthetic_binding)
+        ),
+        persistence=persistence,
+    )
+
+
+def _ensure_runtime_thread(
+    conversation_store: ConversationStore,
+    expected: ConversationThread,
+) -> None:
+    try:
+        existing = conversation_store.get_thread(expected.thread_id)
+    except ConversationNotFoundError:
+        conversation_store.create_thread(expected)
+        return
+    if existing.model_copy(update={"updated_at": expected.updated_at}) != expected:
+        raise ValueError("runtime Telegram thread conflicts with canonical data")
+
+
+def _runtime_persistence_components(
+    observed_at: datetime,
+    *,
+    durable: bool,
+) -> tuple[ComponentHealth, ...]:
+    if not durable:
+        return (
+            ComponentHealth(
+                component_id="database.not-configured",
+                category=HealthCategory.DATABASE,
+                state=HealthState.DISABLED,
+                required=False,
+                observed_at=observed_at,
+                summary="PostgreSQL is not used by the process-local acceptance runtime.",
+            ),
+            ComponentHealth(
+                component_id="queue.process-memory",
+                category=HealthCategory.QUEUE,
+                state=HealthState.DEGRADED,
+                required=True,
+                observed_at=observed_at,
+                summary="Retry state is process-local and is discarded on restart.",
+            ),
+            ComponentHealth(
+                component_id="storage.process-memory",
+                category=HealthCategory.STORAGE,
+                state=HealthState.DEGRADED,
+                required=True,
+                observed_at=observed_at,
+                summary="Application state is process-local and is discarded on restart.",
+            ),
+            ComponentHealth(
+                component_id="backup.not-configured",
+                category=HealthCategory.BACKUP,
+                state=HealthState.DISABLED,
+                required=False,
+                observed_at=observed_at,
+                summary="No backup is configured for intentionally ephemeral fixture data.",
+            ),
+        )
+    return (
+        ComponentHealth(
+            component_id="queue.postgresql-durable",
+            category=HealthCategory.QUEUE,
+            state=HealthState.HEALTHY,
+            required=True,
+            observed_at=observed_at,
+            summary=(
+                "Reply and outbound-delivery leases, retries, and resumptions survive core restart."
+            ),
+        ),
+        ComponentHealth(
+            component_id="storage.postgresql-canonical",
+            category=HealthCategory.STORAGE,
+            state=HealthState.HEALTHY,
+            required=True,
+            observed_at=observed_at,
+            summary=(
+                "Canonical conversations, turn/model provenance, memory corrections, "
+                "delivery records, and Telegram control state survive core restart."
+            ),
+        ),
+        ComponentHealth(
+            component_id="storage.process-local-control-state",
+            category=HealthCategory.STORAGE,
+            state=HealthState.DEGRADED,
+            required=False,
+            observed_at=observed_at,
+            summary=(
+                "Owner sessions, provider health observations, Telegram challenge-send "
+                "observation, and attachment quarantine bytes remain process-local."
+            ),
+        ),
+        ComponentHealth(
+            component_id="backup.not-configured",
+            category=HealthCategory.BACKUP,
+            state=HealthState.DISABLED,
+            required=False,
+            observed_at=observed_at,
+            summary=(
+                "PostgreSQL restart durability is enabled, but no backup or restore path is "
+                "configured."
+            ),
+        ),
     )
 
 

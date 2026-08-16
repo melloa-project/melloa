@@ -407,6 +407,7 @@ def test_paired_text_becomes_one_channel_neutral_canonical_message(
     assert message.observed_at == update.message.sent_at
     assert result.receipt.disposition is TelegramUpdateDisposition.INGESTED
     assert result.receipt.canonical_message_id == message.message_id
+    assert result.receipt.pairing_id == record_id("tgpairing", 1)
     assert result.poll_state.next_offset == update.update_id + 1
     assert poll_store.get_update(ADAPTER_ID, update.update_id) == update
     assert (
@@ -888,7 +889,7 @@ def test_pairing_and_canonical_idempotency_cannot_cross_owner_or_source(
 def test_private_start_requires_local_recent_auth_confirmation_before_ingestion(
     fixed_time: datetime,
 ) -> None:
-    guardian_reader = guardian(fixed_time)
+    guardian_reader = guardian(fixed_time, GuardianMode.NORMAL)
     clock = MutableClock(fixed_time + timedelta(minutes=3))
     pairing_service, pairing_store, publisher = configured_pairing_service(
         fixed_time,
@@ -983,7 +984,7 @@ def test_private_start_requires_local_recent_auth_confirmation_before_ingestion(
 def test_pairing_candidate_and_challenge_replay_after_cursor_commit_crash(
     fixed_time: datetime,
 ) -> None:
-    guardian_reader = guardian(fixed_time)
+    guardian_reader = guardian(fixed_time, GuardianMode.NORMAL)
     pairing_service, pairing_store, publisher = configured_pairing_service(
         fixed_time,
         guardian_reader,
@@ -1021,7 +1022,7 @@ def test_pairing_candidate_and_challenge_replay_after_cursor_commit_crash(
 def test_pairing_confirmation_requires_owner_recent_auth_and_permitted_guardian(
     fixed_time: datetime,
 ) -> None:
-    guardian_reader = guardian(fixed_time)
+    guardian_reader = guardian(fixed_time, GuardianMode.NORMAL)
     pairing_service, store, publisher = configured_pairing_service(
         fixed_time,
         guardian_reader,
@@ -1074,10 +1075,59 @@ def test_pairing_confirmation_requires_owner_recent_auth_and_permitted_guardian(
     ).revoked_at == fixed_time + timedelta(minutes=3)
 
 
+def test_no_actions_forbids_pairing_challenge_publication(
+    fixed_time: datetime,
+) -> None:
+    pairing_service, store, publisher = configured_pairing_service(
+        fixed_time,
+        guardian(fixed_time, GuardianMode.NO_ACTIONS),
+        pairing=None,
+    )
+
+    with pytest.raises(TelegramPairingUnavailableError, match="no-actions"):
+        pairing_service.begin_candidate(
+            inbound_update(fixed_time, update_id=31, text="/start")
+        )
+
+    assert store.list_candidates(ADAPTER_ID, OWNER_ID) == ()
+    assert publisher.published == []
+
+
+def test_no_actions_forbids_pairing_confirmation(fixed_time: datetime) -> None:
+    pairing_service, store, publisher = configured_pairing_service(
+        fixed_time,
+        guardian(fixed_time, GuardianMode.NORMAL),
+        pairing=None,
+    )
+    candidate = pairing_service.begin_candidate(
+        inbound_update(fixed_time, update_id=32, text="/start")
+    )
+    challenge = publisher.challenge_for(candidate.candidate_id)
+    no_actions_service = TelegramPairingService(
+        owner_id=OWNER_ID,
+        adapter_id=ADAPTER_ID,
+        store=store,
+        code_issuer=DeterministicTelegramPairingCodeIssuer(),
+        challenge_publisher=publisher,
+        guardian_reader=guardian(fixed_time, GuardianMode.NO_ACTIONS),
+        clock=lambda: fixed_time + timedelta(minutes=3),
+        id_factory=sequential_id_factory(),
+    )
+
+    with pytest.raises(TelegramPairingUnavailableError, match="no-actions"):
+        no_actions_service.confirm(
+            owner_principal(fixed_time),
+            candidate.candidate_id,
+            challenge.confirmation_code,
+        )
+
+    assert store.active_pairing(ADAPTER_ID, OWNER_ID) is None
+
+
 def test_invalid_unpaired_start_is_rejected_without_challenge_or_canonical_write(
     fixed_time: datetime,
 ) -> None:
-    guardian_reader = guardian(fixed_time)
+    guardian_reader = guardian(fixed_time, GuardianMode.NORMAL)
     pairing_service, _store, publisher = configured_pairing_service(
         fixed_time,
         guardian_reader,

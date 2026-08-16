@@ -48,6 +48,7 @@ from melloa.domain.models import (
     ConversationModelOutput,
     ModelResult,
     ModelRouteRequest,
+    OwnerModelRouteReport,
     RegisteredModelRoute,
 )
 from melloa.domain.operations import OwnerHealthReport, OwnerMediaCatalog
@@ -152,6 +153,10 @@ REGISTRY: dict[str, tuple[str, type[BaseModel]]] = {
     "models/route-request-v1.json": ("model-route-request", ModelRouteRequest),
     "models/result-v1.json": ("model-result", ModelResult),
     "models/registered-route-v1.json": ("registered-model-route", RegisteredModelRoute),
+    "models/owner-route-report-v1.json": (
+        "owner-model-route-report",
+        OwnerModelRouteReport,
+    ),
     "retrieval/citation-v1.json": ("memory-citation", MemoryCitation),
     "retrieval/manifest-v1.json": ("retrieval-manifest", RetrievalManifest),
     "retention/deletion-receipt-v1.json": (

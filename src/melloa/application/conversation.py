@@ -82,6 +82,31 @@ class ConversationReply:
     duplicate: bool
 
 
+@dataclass(frozen=True)
+class ConversationRoutePolicy:
+    minimum_quality_profile: QualifiedName = "quality.conversation-synthetic"
+    latency_deadline_ms: int = 30_000
+    max_input_tokens: int = 4_096
+    max_output_tokens: int = 1_024
+    cost_ceiling_gbp: float = 0.0
+    provider_retention_policy: QualifiedName = "retention.no-training"
+    minimum_reliability: float = 0.0
+    fallback_route_ids: tuple[QualifiedName, ...] = ()
+    prompt_version: str = "m1-conversation-v1"
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.latency_deadline_ms <= 3_600_000:
+            raise ValueError("conversation route deadline must be between 1 ms and 1 hour")
+        if self.max_input_tokens <= 0 or self.max_output_tokens <= 0:
+            raise ValueError("conversation route token ceilings must be positive")
+        if self.cost_ceiling_gbp < 0:
+            raise ValueError("conversation route cost ceiling cannot be negative")
+        if not 0.0 <= self.minimum_reliability <= 1.0:
+            raise ValueError("conversation route reliability must be between zero and one")
+        if len(set(self.fallback_route_ids)) != len(self.fallback_route_ids):
+            raise ValueError("conversation fallback route IDs must be unique")
+
+
 class ConversationService:
     def __init__(
         self,
@@ -95,6 +120,7 @@ class ConversationService:
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
         runtime_version: str = "melloa-core/0.1.0",
+        route_policy: ConversationRoutePolicy | None = None,
         max_processing_attempts: int = 3,
         processing_lease: timedelta = timedelta(seconds=45),
         retry_base: timedelta = timedelta(seconds=1),
@@ -115,6 +141,7 @@ class ConversationService:
         self._clock = clock
         self._id_factory = id_factory
         self._runtime_version = runtime_version
+        self._route_policy = route_policy or ConversationRoutePolicy()
         self._max_processing_attempts = max_processing_attempts
         self._processing_lease = processing_lease
         self._retry_base = retry_base
@@ -554,7 +581,7 @@ class ConversationService:
     ) -> ModelRouteRequest:
         locations = frozenset({ProcessingLocation.DEVICE})
         if (
-            guardian_mode is not GuardianMode.OFFLINE
+            guardian_mode is GuardianMode.NORMAL
             and route_sensitivity is not Sensitivity.DEVICE_ONLY
         ):
             locations = frozenset(
@@ -568,18 +595,18 @@ class ConversationService:
             request_id=self._id_factory("request"),
             task_type="conversation.owner-reply",
             required_modalities=("text",),
-            minimum_quality_profile="quality.conversation-synthetic",
+            minimum_quality_profile=self._route_policy.minimum_quality_profile,
             sensitivity=route_sensitivity,
             allowed_processing_locations=locations,
-            latency_deadline_ms=30_000,
-            max_input_tokens=4_096,
-            max_output_tokens=1_024,
-            cost_ceiling_gbp=0.0,
-            provider_retention_policy="retention.no-training",
-            minimum_reliability=0.0,
-            fallback_route_ids=(),
+            latency_deadline_ms=self._route_policy.latency_deadline_ms,
+            max_input_tokens=self._route_policy.max_input_tokens,
+            max_output_tokens=self._route_policy.max_output_tokens,
+            cost_ceiling_gbp=self._route_policy.cost_ceiling_gbp,
+            provider_retention_policy=self._route_policy.provider_retention_policy,
+            minimum_reliability=self._route_policy.minimum_reliability,
+            fallback_route_ids=self._route_policy.fallback_route_ids,
             output_schema_id="schema.conversation-response.v1",
-            prompt_version="m1-conversation-v1",
+            prompt_version=self._route_policy.prompt_version,
             input={
                 "thread_id": thread.thread_id,
                 "message_id": message.message_id,

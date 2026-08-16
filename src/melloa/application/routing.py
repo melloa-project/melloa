@@ -6,15 +6,21 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from melloa.domain.base import canonical_json_bytes, utc_now
+from melloa.domain.auth import AuthenticatedOwner
+from melloa.domain.base import RecordId, canonical_json_bytes, utc_now
 from melloa.domain.models import (
     ModelAttemptOutcome,
+    ModelGatewayHealth,
     ModelResult,
     ModelRouteAttempt,
+    ModelRouteHealthState,
+    ModelRouteKind,
     ModelRouteRequest,
+    ModelRouteStatus,
+    OwnerModelRouteReport,
     RegisteredModelRoute,
 )
-from melloa.ports.model import ModelGateway
+from melloa.ports.model import HealthCheckingModelGateway, ModelGateway
 
 
 class ModelRoutingError(RuntimeError):
@@ -24,10 +30,17 @@ class ModelRoutingError(RuntimeError):
         self.attempts = attempts
 
 
+class ModelRouteOwnershipError(PermissionError):
+    """An authenticated owner attempted to inspect another runtime's routes."""
+
+
 @dataclass(frozen=True)
 class ModelRouteBinding:
     route: RegisteredModelRoute
     backend: ModelGateway
+    display_name: str = "Configured model route"
+    route_kind: ModelRouteKind = ModelRouteKind.SYNTHETIC
+    timeout_ms: int = 30_000
 
 
 class DeterministicModelRouter:
@@ -74,6 +87,42 @@ class DeterministicModelRouter:
             return ModelResult.model_validate_json(canonical_json_bytes(document))
         reason = "model.all_eligible_routes_failed" if attempts else "model.no_eligible_route"
         raise ModelRoutingError(reason, tuple(attempts))
+
+    def route_statuses(self) -> tuple[ModelRouteStatus, ...]:
+        statuses: list[ModelRouteStatus] = []
+        for binding in self._bindings:
+            if isinstance(binding.backend, HealthCheckingModelGateway):
+                try:
+                    health = binding.backend.health()
+                except Exception:
+                    health = ModelGatewayHealth(
+                        state=ModelRouteHealthState.UNAVAILABLE,
+                        checked_at=self._clock(),
+                        latency_ms=None,
+                        reason_code="model.health_probe_failed",
+                    )
+            else:
+                health = ModelGatewayHealth(
+                    state=ModelRouteHealthState.UNKNOWN,
+                    checked_at=self._clock(),
+                    latency_ms=None,
+                    reason_code="model.health_not_supported",
+                )
+            statuses.append(
+                ModelRouteStatus(
+                    route_id=binding.route.route_id,
+                    display_name=binding.display_name,
+                    route_kind=binding.route_kind,
+                    provider_id=binding.route.provider_id,
+                    model_id=binding.route.model_id,
+                    processing_location=binding.route.processing_location,
+                    external_disclosure=binding.route.external_disclosure,
+                    timeout_ms=binding.timeout_ms,
+                    estimated_max_cost_gbp=binding.route.estimated_max_cost_gbp,
+                    health=health,
+                )
+            )
+        return tuple(sorted(statuses, key=lambda status: status.route_id))
 
     def _eligible_bindings(
         self,
@@ -159,4 +208,28 @@ class DeterministicModelRouter:
             completed_at=max(self._clock(), started_at),
             external_disclosure=route.external_disclosure,
             error_code=error_code,
+        )
+
+
+class OwnerModelRouteService:
+    def __init__(
+        self,
+        *,
+        owner_id: RecordId,
+        router: DeterministicModelRouter,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
+        self._owner_id = owner_id
+        self._router = router
+        self._clock = clock
+
+    def report(self, principal: AuthenticatedOwner) -> OwnerModelRouteReport:
+        if principal.owner_id != self._owner_id:
+            raise ModelRouteOwnershipError(
+                "authenticated principal does not own this runtime"
+            )
+        return OwnerModelRouteReport(
+            owner_id=self._owner_id,
+            generated_at=self._clock(),
+            routes=self._router.route_statuses(),
         )
