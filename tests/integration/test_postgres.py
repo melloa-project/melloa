@@ -1592,6 +1592,11 @@ def test_postgres_outbound_completion_is_atomic_idempotent_and_role_scoped(
     connection.execute("SET ROLE melloa_readonly")
     try:
         assert store.status(work.work_id) == completed
+        inventory = store.retention_inventory(record_id("owner", 1))
+        assert inventory.retained_objects == 2
+        assert inventory.retained_bytes > 0
+        assert inventory.oldest_retained_at == fixed_time
+        assert store.retention_inventory(record_id("owner", 2)).retained_objects == 0
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 """

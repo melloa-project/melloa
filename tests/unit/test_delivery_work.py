@@ -450,6 +450,11 @@ def test_in_memory_delivery_store_leases_retries_and_completes_idempotently(
 
     assert enqueued.created is True
     assert duplicate.created is False
+    initial_inventory = store.retention_inventory(record_id("owner", 1))
+    assert initial_inventory.retained_objects == 1
+    assert initial_inventory.retained_bytes > 0
+    assert initial_inventory.oldest_retained_at == fixed_time
+    assert store.retention_inventory(record_id("owner", 2)).retained_objects == 0
     assert store.list_status(delivery_work.thread_id) == (enqueued.status,)
     assert store.find_by_message(delivery_work.message_id) == (enqueued.status,)
     assert (
@@ -535,6 +540,10 @@ def test_in_memory_delivery_store_leases_retries_and_completes_idempotently(
         started_at=retry.retry_at,
     )
     completed = store.complete(second_claim, success)
+    final_inventory = store.retention_inventory(record_id("owner", 1))
+    assert final_inventory.retained_objects == 3
+    assert final_inventory.retained_bytes > initial_inventory.retained_bytes
+    assert final_inventory.oldest_retained_at == fixed_time
     assert store.complete(second_claim, success) == completed
     with pytest.raises(DeliveryConflictError, match="stale"):
         store.complete(

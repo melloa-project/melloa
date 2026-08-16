@@ -39,6 +39,13 @@ class ClaimedDeliveryWork:
     lease_expires_at: datetime
 
 
+@dataclass(frozen=True)
+class DeliveryRetentionInventory:
+    retained_objects: int
+    retained_bytes: int
+    oldest_retained_at: datetime | None
+
+
 class DeliveryStore(Protocol):
     def enqueue(
         self,
@@ -95,6 +102,9 @@ class DeliveryStore(Protocol):
         message_id: RecordId,
     ) -> tuple[DeliveryWorkStatus, ...]:
         """Return every channel delivery for one canonical message."""
+
+    def retention_inventory(self, owner_id: RecordId) -> DeliveryRetentionInventory:
+        """Return aggregate owner-scoped outbound delivery retention counts."""
 
     def resume(
         self,

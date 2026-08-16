@@ -28,6 +28,7 @@ from melloa.ports.delivery import (
     ClaimedDeliveryWork,
     DeliveryConflictError,
     DeliveryNotFoundError,
+    DeliveryRetentionInventory,
     EnqueuedDeliveryWork,
 )
 
@@ -304,6 +305,48 @@ class PostgresDeliveryStore:
         for record in records:
             self._verify_history(record.work)
         return tuple(self._status(record) for record in records)
+
+    def retention_inventory(self, owner_id: RecordId) -> DeliveryRetentionInventory:
+        row = self._connection.execute(
+            """
+            WITH owned_delivery AS (
+                SELECT work_id, document, created_at
+                  FROM melloa.outbound_deliveries
+                 WHERE requested_by = %s
+            ),
+            delivery_documents AS (
+                SELECT document::text AS document_text, created_at AS retained_at
+                  FROM owned_delivery
+                UNION ALL
+                SELECT attempt.document::text, attempt.started_at
+                  FROM melloa.delivery_work_attempts AS attempt
+                  JOIN owned_delivery AS delivery
+                    ON delivery.work_id = attempt.work_id
+                UNION ALL
+                SELECT resumption.document::text, resumption.requested_at
+                  FROM melloa.delivery_work_resumptions AS resumption
+                  JOIN owned_delivery AS delivery
+                    ON delivery.work_id = resumption.work_id
+            )
+            SELECT
+                count(*)::bigint,
+                coalesce(sum(octet_length(document_text)), 0)::bigint,
+                min(retained_at)
+              FROM delivery_documents
+            """,
+            (owner_id,),
+        ).fetchone()
+        if row is None:
+            return DeliveryRetentionInventory(
+                retained_objects=0,
+                retained_bytes=0,
+                oldest_retained_at=None,
+            )
+        return DeliveryRetentionInventory(
+            retained_objects=int(row[0]),
+            retained_bytes=int(row[1]),
+            oldest_retained_at=cast(datetime | None, row[2]),
+        )
 
     def resume(
         self,

@@ -18,6 +18,7 @@ from melloa.adapters.fakes.operations import InMemoryOperationsReader
 from melloa.adapters.fakes.retention import (
     AuditBackedRetentionReader,
     ConversationBackedRetentionReader,
+    DeliveryBackedRetentionReader,
     InMemoryRetentionReader,
     MemoryBackedRetentionReader,
     TelegramQuarantineBackedRetentionReader,
@@ -521,17 +522,20 @@ def build_synthetic_runtime(
         owner_id=SYNTHETIC_OWNER_ID,
         reader=AuditBackedRetentionReader(
             ConversationBackedRetentionReader(
-                MemoryBackedRetentionReader(
-                    TelegramQuarantineBackedRetentionReader(
-                        InMemoryRetentionReader(
-                            SYNTHETIC_OWNER_ID,
-                            policies=_synthetic_retention_policies(),
-                            inventory=_synthetic_retention_inventory(),
-                            backup_expiry=backup_expiry,
+                DeliveryBackedRetentionReader(
+                    MemoryBackedRetentionReader(
+                        TelegramQuarantineBackedRetentionReader(
+                            InMemoryRetentionReader(
+                                SYNTHETIC_OWNER_ID,
+                                policies=_synthetic_retention_policies(),
+                                inventory=_synthetic_retention_inventory(),
+                                backup_expiry=backup_expiry,
+                            ),
+                            telegram_attachment_backend,
                         ),
-                        telegram_attachment_backend,
+                        memory_store,
                     ),
-                    memory_store,
+                    delivery_store,
                 ),
                 conversation_store,
             ),
@@ -741,6 +745,21 @@ def _synthetic_retention_policies() -> tuple[RetentionPolicyStatus, ...]:
             status_reason="retention.owner_memory.content_deletion_available",
         ),
         RetentionPolicyStatus(
+            policy_id="retention.owner-delivery",
+            data_category="data.owner-delivery",
+            summary=(
+                "Outbound delivery work and append-only delivery history are "
+                "inventory-backed; deletion is not assembled yet."
+            ),
+            mode=RetentionMode.OWNER_LIFECYCLE,
+            automatic_expiry=False,
+            deletion_control=RetentionDeletionControl.NOT_IMPLEMENTED,
+            tombstone_retained=True,
+            derived_rebuild_required=True,
+            external_copy_state=RetentionExternalCopyState.SOURCE_CONTROLLED,
+            status_reason="retention.owner_delivery.inventory_available",
+        ),
+        RetentionPolicyStatus(
             policy_id="retention.telegram-quarantine",
             data_category="data.telegram-quarantine",
             summary="Quarantined attachment bytes expire automatically under a hard local bound.",
@@ -764,6 +783,7 @@ def _synthetic_retention_inventory() -> tuple[RetentionInventoryStatus, ...]:
     unavailable = {
         "retention.audit-ledger": "retention.inventory.audit_not_assembled",
         "retention.owner-conversation": "retention.inventory.not_assembled",
+        "retention.owner-delivery": "retention.inventory.not_assembled",
         "retention.owner-memory": "retention.inventory.not_assembled",
     }
     unavailable_inventory = tuple(

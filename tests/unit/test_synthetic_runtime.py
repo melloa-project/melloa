@@ -170,6 +170,19 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert conversation_inventory["retained_bytes"] > 0
     assert conversation_inventory["deletion_receipts"] == 0
     assert conversation_inventory["oldest_retained_at"] is not None
+    assert policies["retention.owner-delivery"]["deletion_control"] == (
+        "not-implemented"
+    )
+    delivery_inventory = next(
+        item
+        for item in retention_report["inventory"]
+        if item["policy_id"] == "retention.owner-delivery"
+    )
+    assert delivery_inventory["coverage"] == "complete"
+    assert delivery_inventory["retained_objects"] == 0
+    assert delivery_inventory["retained_bytes"] == 0
+    assert delivery_inventory["deletion_receipts"] == 0
+    assert delivery_inventory["status_reason"] == "retention.inventory.owner_delivery"
     assert policies["retention.owner-memory"]["deletion_control"] == "owner-request"
     assert policies["retention.owner-memory"]["owner_deletion_scopes"] == [
         "memory-claim"
@@ -437,6 +450,17 @@ def test_synthetic_runtime_delivers_canonical_output_without_channel_network(
         assert duplicate.json()["created"] is False
         assert duplicate.json()["delivery"] == status
         assert client.get(delivery_path).json() == [status]
+        retention = client.get("/api/v1/retention").json()
+        delivery_inventory = next(
+            item
+            for item in retention["inventory"]
+            if item["policy_id"] == "retention.owner-delivery"
+        )
+        assert delivery_inventory["coverage"] == "complete"
+        assert delivery_inventory["retained_objects"] == 2
+        assert delivery_inventory["retained_bytes"] > 0
+        assert delivery_inventory["deletion_receipts"] == 0
+        assert delivery_inventory["oldest_retained_at"] is not None
 
         health = client.get("/api/v1/inspection/health").json()
         delivery_worker = next(

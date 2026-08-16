@@ -10,6 +10,7 @@ from melloa.domain.retention import (
     RetentionPolicyStatus,
 )
 from melloa.ports.conversation import ConversationStore
+from melloa.ports.delivery import DeliveryStore
 from melloa.ports.memory import MemoryRepository
 from melloa.ports.retention import OwnerRetentionReader
 from melloa.ports.store import EventAuditStore
@@ -154,6 +155,46 @@ class AuditBackedRetentionReader:
         )
         return tuple(
             audit_item if item.policy_id == self._audit_policy_id else item
+            for item in inventory
+        )
+
+    def backup_expiry(self, owner_id: RecordId) -> BackupExpiryDisclosure | None:
+        return self._base_reader.backup_expiry(owner_id)
+
+
+class DeliveryBackedRetentionReader:
+    def __init__(
+        self,
+        base_reader: OwnerRetentionReader,
+        delivery_store: DeliveryStore,
+        *,
+        delivery_policy_id: str = "retention.owner-delivery",
+    ) -> None:
+        self._base_reader = base_reader
+        self._delivery_store = delivery_store
+        self._delivery_policy_id = delivery_policy_id
+
+    def policies(self, owner_id: RecordId) -> tuple[RetentionPolicyStatus, ...]:
+        return self._base_reader.policies(owner_id)
+
+    def inventory(self, owner_id: RecordId) -> tuple[RetentionInventoryStatus, ...]:
+        inventory = self._base_reader.inventory(owner_id)
+        if not inventory:
+            return inventory
+        delivery_inventory = self._delivery_store.retention_inventory(owner_id)
+        delivery_item = RetentionInventoryStatus(
+            policy_id=self._delivery_policy_id,
+            coverage=RetentionInventoryCoverage.COMPLETE,
+            retained_objects=delivery_inventory.retained_objects,
+            retained_bytes=delivery_inventory.retained_bytes,
+            overdue_objects=0,
+            pending_deletions=0,
+            deletion_receipts=0,
+            oldest_retained_at=delivery_inventory.oldest_retained_at,
+            status_reason="retention.inventory.owner_delivery",
+        )
+        return tuple(
+            delivery_item if item.policy_id == self._delivery_policy_id else item
             for item in inventory
         )
 

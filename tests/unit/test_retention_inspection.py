@@ -7,10 +7,12 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from melloa.adapters.fakes.auth import InMemoryOwnerSessionManager
+from melloa.adapters.fakes.delivery import InMemoryDeliveryStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.retention import (
     AuditBackedRetentionReader,
+    DeliveryBackedRetentionReader,
     InMemoryRetentionReader,
     MemoryBackedRetentionReader,
     TelegramQuarantineBackedRetentionReader,
@@ -51,6 +53,7 @@ from melloa.domain.telegram import (
 )
 from melloa.ports.memory import AssertionContentDeletionWrite
 from tests.conftest import record_id
+from tests.unit.test_delivery_work import failed_attempt, work
 
 _BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
 
@@ -362,6 +365,51 @@ def test_audit_backed_retention_reader_counts_append_store(
     assert item.retained_bytes is not None and item.retained_bytes > 0
     assert item.deletion_receipts == 0
     assert item.oldest_retained_at == audit_content.occurred_at
+    assert reader.inventory(record_id("owner", 2)) == ()
+
+
+def test_delivery_backed_retention_reader_counts_owner_delivery_history(
+    fixed_time: datetime,
+) -> None:
+    owner_id = record_id("owner", 1)
+    delivery_store = InMemoryDeliveryStore()
+    delivery_work = work(fixed_time)
+    delivery_store.enqueue(delivery_work, max_attempts=1)
+    claim = delivery_store.claim_work(
+        delivery_work.work_id,
+        lease_owner=record_id("worker", 1),
+        now=fixed_time,
+        lease_expires_at=fixed_time + timedelta(seconds=1),
+    )
+    assert claim is not None
+    delivery_store.record_failure(
+        claim,
+        failed_attempt(
+            delivery_work,
+            attempt=1,
+            started_at=fixed_time,
+            terminal=True,
+        ),
+    )
+    reader = DeliveryBackedRetentionReader(
+        InMemoryRetentionReader(
+            owner_id,
+            policies=(policy("retention.owner-delivery", automatic=False),),
+            inventory=(inventory("retention.owner-delivery"),),
+            backup_expiry=backup(),
+        ),
+        delivery_store,
+    )
+
+    item = reader.inventory(owner_id)[0]
+
+    assert item.policy_id == "retention.owner-delivery"
+    assert item.coverage is RetentionInventoryCoverage.COMPLETE
+    assert item.retained_objects == 2
+    assert item.retained_bytes is not None and item.retained_bytes > 0
+    assert item.deletion_receipts == 0
+    assert item.oldest_retained_at == fixed_time
+    assert item.status_reason == "retention.inventory.owner_delivery"
     assert reader.inventory(record_id("owner", 2)) == ()
 
 

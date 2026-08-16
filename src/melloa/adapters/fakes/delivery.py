@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from threading import RLock
 
-from melloa.domain.base import RecordId, new_record_id
+from melloa.domain.base import RecordId, canonical_json_bytes, new_record_id
 from melloa.domain.delivery import (
     DeliveryWorkAttempt,
     DeliveryWorkOutcome,
@@ -20,6 +20,7 @@ from melloa.ports.delivery import (
     ClaimedDeliveryWork,
     DeliveryConflictError,
     DeliveryNotFoundError,
+    DeliveryRetentionInventory,
     EnqueuedDeliveryWork,
 )
 
@@ -241,6 +242,36 @@ class InMemoryDeliveryStore:
                     ),
                 )
             )
+
+    def retention_inventory(self, owner_id: RecordId) -> DeliveryRetentionInventory:
+        with self._lock:
+            records = tuple(
+                record for record in self._records.values() if record.work.requested_by == owner_id
+            )
+        retained_objects = 0
+        retained_bytes = 0
+        oldest_retained_at: datetime | None = None
+        for record in records:
+            documents = (
+                record.work,
+                *record.work.attempts,
+                *record.work.resumptions,
+            )
+            retained_objects += len(documents)
+            retained_bytes += sum(
+                len(canonical_json_bytes(document.model_dump(mode="json")))
+                for document in documents
+            )
+            oldest_retained_at = (
+                record.work.created_at
+                if oldest_retained_at is None
+                else min(oldest_retained_at, record.work.created_at)
+            )
+        return DeliveryRetentionInventory(
+            retained_objects=retained_objects,
+            retained_bytes=retained_bytes,
+            oldest_retained_at=oldest_retained_at,
+        )
 
     def resume(
         self,
