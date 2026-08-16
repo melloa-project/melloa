@@ -1125,6 +1125,14 @@ def test_postgres_memory_content_deletion_is_durable_and_role_bounded(
 
     connection.execute("SET ROLE melloa_core")
     try:
+        before_inventory = PostgresMemoryRepository(
+            connection
+        ).assertion_content_retention_inventory(owner_id)
+        assert before_inventory.retained_objects == 1
+        assert before_inventory.retained_bytes > 0
+        assert before_inventory.deletion_receipts == 0
+        assert before_inventory.oldest_retained_at == fixed_time
+
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 "DELETE FROM melloa.assertion_contents WHERE assertion_id = %s",
@@ -1148,6 +1156,11 @@ def test_postgres_memory_content_deletion_is_durable_and_role_bounded(
         with pytest.raises(MemoryContentDeletedError):
             durable.get_assertion(original.assertion_id)
         assert durable.list_assertions(owner_id) == ()
+        after_inventory = durable.assertion_content_retention_inventory(owner_id)
+        assert after_inventory.retained_objects == 0
+        assert after_inventory.retained_bytes == 0
+        assert after_inventory.deletion_receipts == 1
+        assert after_inventory.oldest_retained_at is None
 
         inspection = service.inspect(principal, original.assertion_id)
         assert inspection.deletion_tombstone == result.tombstone

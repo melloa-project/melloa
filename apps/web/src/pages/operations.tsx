@@ -191,9 +191,12 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
               <dl className="detail-list">
                 <div><dt>Coverage</dt><dd>{titleCase(inventory?.coverage ?? "unknown")}</dd></div>
                 <div><dt>Retained</dt><dd>{formatCount(inventory?.retained_objects ?? 0)} objects</dd></div>
+                <div><dt>Retained bytes</dt><dd>{formatBytes(inventory?.retained_bytes ?? 0)}</dd></div>
                 <div><dt>Pending deletion</dt><dd>{formatCount(inventory?.pending_deletions ?? 0)}</dd></div>
+                <div><dt>Deletion receipts</dt><dd>{formatCount(inventory?.deletion_receipts ?? 0)}</dd></div>
                 <div><dt>External copies</dt><dd>{titleCase(policy.external_copy_state)}</dd></div>
                 <div><dt>Owner deletion</dt><dd>{titleCase(policy.deletion_control)}</dd></div>
+                <div><dt>Oldest retained</dt><dd>{formatInstant(inventory?.oldest_retained_at)}</dd></div>
                 <div><dt>Next expiry</dt><dd>{formatInstant(inventory?.next_expiry_at)}</dd></div>
               </dl>
               <p className="retention-reason"><ShieldCheck size={14} /> {policy.status_reason}</p>

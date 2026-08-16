@@ -25,6 +25,7 @@ from melloa.domain.memory import (
 from melloa.ports.memory import (
     AssertionContentDeletionStoreResult,
     AssertionContentDeletionWrite,
+    AssertionContentRetentionInventory,
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
@@ -167,8 +168,49 @@ class PostgresMemoryRepository:
                 "SELECT 1 FROM melloa.assertions WHERE assertion_id = %s",
                 (assertion_id,),
             ).fetchone() is None:
-                raise MemoryNotFoundError(f"assertion state history not found: {assertion_id}")
+                raise MemoryNotFoundError(
+                    f"assertion state history not found: {assertion_id}"
+                )
         return tuple(self._parse_change(row[0]) for row in rows)
+
+    def assertion_content_retention_inventory(
+        self,
+        owner_id: RecordId,
+    ) -> AssertionContentRetentionInventory:
+        row = self._connection.execute(
+            """
+            WITH retained AS (
+                SELECT content.size_bytes, content.retained_at
+                  FROM melloa.assertions AS assertion
+                  JOIN melloa.assertion_contents AS content
+                    ON content.assertion_id = assertion.assertion_id
+                 WHERE assertion.subject_id = %s
+            ),
+            deleted AS (
+                SELECT tombstone_id
+                  FROM melloa.assertion_content_deletions
+                 WHERE owner_id = %s
+            )
+            SELECT (SELECT count(*) FROM retained),
+                   COALESCE((SELECT sum(size_bytes) FROM retained), 0),
+                   (SELECT min(retained_at) FROM retained),
+                   (SELECT count(*) FROM deleted)
+            """,
+            (owner_id, owner_id),
+        ).fetchone()
+        if row is None:
+            return AssertionContentRetentionInventory(
+                retained_objects=0,
+                retained_bytes=0,
+                deletion_receipts=0,
+                oldest_retained_at=None,
+            )
+        return AssertionContentRetentionInventory(
+            retained_objects=int(row[0]),
+            retained_bytes=int(row[1]),
+            oldest_retained_at=row[2],
+            deletion_receipts=int(row[3]),
+        )
 
     def apply_correction(
         self,

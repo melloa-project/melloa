@@ -15,7 +15,10 @@ from melloa.adapters.fakes.delivery import InMemoryDeliveryStore
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.fakes.operations import InMemoryOperationsReader
-from melloa.adapters.fakes.retention import InMemoryRetentionReader
+from melloa.adapters.fakes.retention import (
+    InMemoryRetentionReader,
+    MemoryBackedRetentionReader,
+)
 from melloa.adapters.fakes.telegram import (
     DeterministicTelegramPairingCodeIssuer,
     FakeTelegramPairingChallengePublisher,
@@ -65,6 +68,7 @@ from melloa.domain.retention import (
     BackupExpiryDisclosure,
     BackupExpiryState,
     RetentionDeletionControl,
+    RetentionDeletionScope,
     RetentionDurationBounds,
     RetentionExternalCopyState,
     RetentionInventoryCoverage,
@@ -500,11 +504,14 @@ def build_synthetic_runtime(
     )
     retention = OwnerRetentionService(
         owner_id=SYNTHETIC_OWNER_ID,
-        reader=InMemoryRetentionReader(
-            SYNTHETIC_OWNER_ID,
-            policies=_synthetic_retention_policies(),
-            inventory=_synthetic_retention_inventory(),
-            backup_expiry=backup_expiry,
+        reader=MemoryBackedRetentionReader(
+            InMemoryRetentionReader(
+                SYNTHETIC_OWNER_ID,
+                policies=_synthetic_retention_policies(),
+                inventory=_synthetic_retention_inventory(),
+                backup_expiry=backup_expiry,
+            ),
+            memory_store,
         ),
         clock=clock,
     )
@@ -692,16 +699,17 @@ def _synthetic_retention_policies() -> tuple[RetentionPolicyStatus, ...]:
             policy_id="retention.owner-memory",
             data_category="data.memory-assertion",
             summary=(
-                "Memory supports correction and retraction; content deletion is not "
-                "assembled yet."
+                "Memory assertions keep metadata and provenance; retained values can be "
+                "deleted by owner request."
             ),
             mode=RetentionMode.OWNER_LIFECYCLE,
             automatic_expiry=False,
-            deletion_control=RetentionDeletionControl.NOT_IMPLEMENTED,
+            deletion_control=RetentionDeletionControl.OWNER_REQUEST,
+            owner_deletion_scopes=(RetentionDeletionScope.MEMORY_CLAIM,),
             tombstone_retained=True,
             derived_rebuild_required=True,
             external_copy_state=RetentionExternalCopyState.PROVIDER_CONTROLLED,
-            status_reason="retention.owner_control.not_implemented",
+            status_reason="retention.owner_memory.content_deletion_available",
         ),
         RetentionPolicyStatus(
             policy_id="retention.telegram-quarantine",

@@ -149,6 +149,20 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert policies["retention.owner-conversation"]["deletion_control"] == (
         "not-implemented"
     )
+    assert policies["retention.owner-memory"]["deletion_control"] == "owner-request"
+    assert policies["retention.owner-memory"]["owner_deletion_scopes"] == [
+        "memory-claim"
+    ]
+    memory_inventory = next(
+        item
+        for item in retention_report["inventory"]
+        if item["policy_id"] == "retention.owner-memory"
+    )
+    assert memory_inventory["coverage"] == "complete"
+    assert memory_inventory["retained_objects"] == 1
+    assert memory_inventory["retained_bytes"] > 0
+    assert memory_inventory["deletion_receipts"] == 0
+    assert memory_inventory["oldest_retained_at"] is not None
     quarantine_policy = policies["retention.telegram-quarantine"]
     assert quarantine_policy["duration_bounds"] == {
         "minimum_seconds": 3_600,

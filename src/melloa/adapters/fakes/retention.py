@@ -5,9 +5,12 @@ from __future__ import annotations
 from melloa.domain.base import RecordId
 from melloa.domain.retention import (
     BackupExpiryDisclosure,
+    RetentionInventoryCoverage,
     RetentionInventoryStatus,
     RetentionPolicyStatus,
 )
+from melloa.ports.memory import MemoryRepository
+from melloa.ports.retention import OwnerRetentionReader
 
 
 class InMemoryRetentionReader:
@@ -38,3 +41,45 @@ class InMemoryRetentionReader:
 
     def backup_expiry(self, owner_id: RecordId) -> BackupExpiryDisclosure | None:
         return self._backup_expiry if owner_id == self._owner_id else None
+
+
+class MemoryBackedRetentionReader:
+    def __init__(
+        self,
+        base_reader: OwnerRetentionReader,
+        memory_repository: MemoryRepository,
+        *,
+        memory_policy_id: str = "retention.owner-memory",
+    ) -> None:
+        self._base_reader = base_reader
+        self._memory_repository = memory_repository
+        self._memory_policy_id = memory_policy_id
+
+    def policies(self, owner_id: RecordId) -> tuple[RetentionPolicyStatus, ...]:
+        return self._base_reader.policies(owner_id)
+
+    def inventory(self, owner_id: RecordId) -> tuple[RetentionInventoryStatus, ...]:
+        inventory = self._base_reader.inventory(owner_id)
+        if not inventory:
+            return inventory
+        memory_inventory = self._memory_repository.assertion_content_retention_inventory(
+            owner_id
+        )
+        memory_item = RetentionInventoryStatus(
+            policy_id=self._memory_policy_id,
+            coverage=RetentionInventoryCoverage.COMPLETE,
+            retained_objects=memory_inventory.retained_objects,
+            retained_bytes=memory_inventory.retained_bytes,
+            overdue_objects=0,
+            pending_deletions=0,
+            deletion_receipts=memory_inventory.deletion_receipts,
+            oldest_retained_at=memory_inventory.oldest_retained_at,
+            status_reason="retention.inventory.canonical_memory",
+        )
+        return tuple(
+            memory_item if item.policy_id == self._memory_policy_id else item
+            for item in inventory
+        )
+
+    def backup_expiry(self, owner_id: RecordId) -> BackupExpiryDisclosure | None:
+        return self._base_reader.backup_expiry(owner_id)

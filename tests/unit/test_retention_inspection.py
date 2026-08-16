@@ -8,7 +8,8 @@ from pydantic import ValidationError
 
 from melloa.adapters.fakes.auth import InMemoryOwnerSessionManager
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
-from melloa.adapters.fakes.retention import InMemoryRetentionReader
+from melloa.adapters.fakes.memory import InMemoryMemoryRepository
+from melloa.adapters.fakes.retention import InMemoryRetentionReader, MemoryBackedRetentionReader
 from melloa.application.retention import (
     OwnerRetentionService,
     RetentionInspectionUnavailableError,
@@ -16,7 +17,10 @@ from melloa.application.retention import (
 )
 from melloa.apps.core import create_app
 from melloa.domain.auth import AuthenticatedOwner
+from melloa.domain.base import canonical_json_bytes
+from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
+from melloa.domain.memory import Assertion, AssertionStatus
 from melloa.domain.retention import (
     BackupExpiryDisclosure,
     BackupExpiryState,
@@ -30,6 +34,7 @@ from melloa.domain.retention import (
     RetentionMode,
     RetentionPolicyStatus,
 )
+from melloa.ports.memory import AssertionContentDeletionWrite
 from tests.conftest import record_id
 
 _BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
@@ -114,6 +119,26 @@ def guardian(fixed_time: datetime) -> FakeGuardianStatusReader:
             reason_code="guardian.synthetic-retention-inspection",
         ),
         receipt_hash="sha256:" + "8" * 64,
+    )
+
+
+def memory_assertion(
+    fixed_time: datetime,
+    *,
+    assertion_number: int = 1,
+    owner_number: int = 1,
+) -> Assertion:
+    return Assertion(
+        assertion_id=record_id("assertion", assertion_number),
+        subject_id=record_id("owner", owner_number),
+        predicate="owner.preference.synthetic",
+        value={"fixture": True, "number": assertion_number},
+        epistemic_status=EpistemicStatus.OWNER_CONFIRMED,
+        status=AssertionStatus.CONFIRMED,
+        confidence=1.0,
+        source_authority=TrustLabel.OWNER_AUTHORED,
+        sensitivity=Sensitivity.PERSONAL,
+        observed_at=fixed_time,
     )
 
 
@@ -238,6 +263,56 @@ def test_retention_service_sorts_scopes_and_conceals_other_owners(
             inventory=(inventory("retention.z"),),
             backup_expiry=backup(),
         )
+
+
+def test_memory_backed_retention_reader_counts_canonical_assertion_content(
+    fixed_time: datetime,
+) -> None:
+    owner_id = record_id("owner", 1)
+    owned = memory_assertion(fixed_time)
+    foreign = memory_assertion(
+        fixed_time + timedelta(minutes=1),
+        assertion_number=2,
+        owner_number=2,
+    )
+    repository = InMemoryMemoryRepository((owned, foreign))
+    reader = MemoryBackedRetentionReader(
+        InMemoryRetentionReader(
+            owner_id,
+            policies=(policy("retention.owner-memory", automatic=False),),
+            inventory=(inventory("retention.owner-memory"),),
+            backup_expiry=backup(),
+        ),
+        repository,
+    )
+
+    item = reader.inventory(owner_id)[0]
+
+    assert item.policy_id == "retention.owner-memory"
+    assert item.coverage is RetentionInventoryCoverage.COMPLETE
+    assert item.retained_objects == 1
+    assert item.retained_bytes == len(canonical_json_bytes(owned.value))
+    assert item.deletion_receipts == 0
+    assert item.oldest_retained_at == fixed_time
+
+    repository.delete_assertion_content(
+        AssertionContentDeletionWrite(
+            assertion_id=owned.assertion_id,
+            owner_id=owner_id,
+            tombstone_id=record_id("deletion", 1),
+            rebuild_work_id=record_id("work", 1),
+            deleted_by_record_id=owner_id,
+            deleted_at=fixed_time + timedelta(minutes=2),
+            reason_code="memory.assertion-content-owner-deleted",
+        )
+    )
+    after_delete = reader.inventory(owner_id)[0]
+
+    assert after_delete.retained_objects == 0
+    assert after_delete.retained_bytes == 0
+    assert after_delete.deletion_receipts == 1
+    assert after_delete.oldest_retained_at is None
+    assert reader.inventory(record_id("owner", 2)) == ()
 
 
 class IncompleteRetentionReader:
