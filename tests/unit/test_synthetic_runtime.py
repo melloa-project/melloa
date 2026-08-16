@@ -152,9 +152,11 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         for item in retention_report["inventory"]
         if item["policy_id"] == "retention.audit-ledger"
     )
-    assert audit_inventory["coverage"] == "unavailable"
-    assert audit_inventory["retained_objects"] is None
-    assert audit_inventory["status_reason"] == "retention.inventory.audit_not_assembled"
+    assert audit_inventory["coverage"] == "complete"
+    assert audit_inventory["retained_objects"] == 0
+    assert audit_inventory["retained_bytes"] == 0
+    assert audit_inventory["deletion_receipts"] == 0
+    assert audit_inventory["status_reason"] == "retention.inventory.audit_event_store"
     assert policies["retention.owner-conversation"]["deletion_control"] == (
         "not-implemented"
     )

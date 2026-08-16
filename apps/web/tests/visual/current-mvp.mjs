@@ -76,7 +76,7 @@ try {
 
   await page.getByRole("tab", { name: "Retention" }).click();
   await page.getByText("Backup expiry", { exact: true }).waitFor();
-  await page.getByText("Not measured", { exact: true }).first().waitFor();
+  await page.getByText("0 objects", { exact: true }).first().waitFor();
   await page.screenshot({
     path: `${outputDirectory}/operations-retention-desktop.png`,
     fullPage: true,

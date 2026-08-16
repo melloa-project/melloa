@@ -14,6 +14,8 @@ from melloa.ports.memory import MemoryRepository
 from melloa.ports.retention import OwnerRetentionReader
 from melloa.ports.telegram import TelegramAttachmentBackend
 
+from .store import InMemoryEventAuditStore
+
 
 class InMemoryRetentionReader:
     def __init__(
@@ -120,6 +122,39 @@ class TelegramQuarantineBackedRetentionReader:
         )
         return tuple(
             quarantine_item if item.policy_id == self._quarantine_policy_id else item
+            for item in inventory
+        )
+
+    def backup_expiry(self, owner_id: RecordId) -> BackupExpiryDisclosure | None:
+        return self._base_reader.backup_expiry(owner_id)
+
+
+class AuditBackedRetentionReader:
+    def __init__(
+        self,
+        base_reader: OwnerRetentionReader,
+        owner_id: RecordId,
+        event_audit_store: InMemoryEventAuditStore,
+        *,
+        audit_policy_id: str = "retention.audit-ledger",
+    ) -> None:
+        self._base_reader = base_reader
+        self._owner_id = owner_id
+        self._event_audit_store = event_audit_store
+        self._audit_policy_id = audit_policy_id
+
+    def policies(self, owner_id: RecordId) -> tuple[RetentionPolicyStatus, ...]:
+        return self._base_reader.policies(owner_id)
+
+    def inventory(self, owner_id: RecordId) -> tuple[RetentionInventoryStatus, ...]:
+        inventory = self._base_reader.inventory(owner_id)
+        if not inventory or owner_id != self._owner_id:
+            return inventory
+        audit_item = self._event_audit_store.audit_retention_inventory(
+            policy_id=self._audit_policy_id
+        )
+        return tuple(
+            audit_item if item.policy_id == self._audit_policy_id else item
             for item in inventory
         )
 

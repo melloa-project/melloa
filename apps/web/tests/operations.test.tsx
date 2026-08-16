@@ -78,8 +78,13 @@ describe("OperationsPage retention view", () => {
       inventory: [
         {
           policy_id: "retention.audit-ledger",
-          coverage: "unavailable",
-          status_reason: "retention.inventory.audit_not_assembled",
+          coverage: "complete",
+          retained_objects: 0,
+          retained_bytes: 0,
+          overdue_objects: 0,
+          pending_deletions: 0,
+          deletion_receipts: 0,
+          status_reason: "retention.inventory.audit_event_store",
         },
         {
           policy_id: "retention.owner-memory",
@@ -151,8 +156,9 @@ describe("OperationsPage retention view", () => {
     const retention = screen.getByLabelText("Retention policies");
     expect(within(retention).getAllByText("Retained bytes")).toHaveLength(2);
     expect(within(retention).getByText("12.0 KiB")).toBeInTheDocument();
-    expect(within(retention).getByText("Unavailable")).toBeInTheDocument();
-    expect(within(retention).getAllByText("Not measured")).toHaveLength(4);
+    expect(within(retention).getByText("0 objects")).toBeInTheDocument();
+    expect(within(retention).getByText("0 B")).toBeInTheDocument();
+    expect(within(retention).getAllByText("Not available")).toHaveLength(3);
     expect(within(retention).getAllByText("Deletion receipts")).toHaveLength(2);
     expect(within(retention).getByText("Owner Request")).toBeInTheDocument();
     expect(within(retention).getAllByText("Oldest retained")).toHaveLength(2);

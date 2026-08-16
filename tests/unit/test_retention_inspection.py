@@ -10,10 +10,12 @@ from melloa.adapters.fakes.auth import InMemoryOwnerSessionManager
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.retention import (
+    AuditBackedRetentionReader,
     InMemoryRetentionReader,
     MemoryBackedRetentionReader,
     TelegramQuarantineBackedRetentionReader,
 )
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.adapters.fakes.telegram import (
     InMemoryTelegramAttachmentQuarantine,
     SyntheticTelegramAttachmentPayload,
@@ -325,6 +327,41 @@ def test_memory_backed_retention_reader_counts_canonical_assertion_content(
     assert after_delete.retained_bytes == 0
     assert after_delete.deletion_receipts == 1
     assert after_delete.oldest_retained_at is None
+    assert reader.inventory(record_id("owner", 2)) == ()
+
+
+def test_audit_backed_retention_reader_counts_append_store(
+    event,
+    audit_content,
+) -> None:
+    owner_id = record_id("owner", 1)
+    store = InMemoryEventAuditStore()
+    reader = AuditBackedRetentionReader(
+        InMemoryRetentionReader(
+            owner_id,
+            policies=(policy("retention.audit-ledger", automatic=False),),
+            inventory=(inventory("retention.audit-ledger"),),
+            backup_expiry=backup(),
+        ),
+        owner_id,
+        store,
+    )
+
+    empty = reader.inventory(owner_id)[0]
+    assert empty.coverage is RetentionInventoryCoverage.COMPLETE
+    assert empty.retained_objects == 0
+    assert empty.retained_bytes == 0
+    assert empty.status_reason == "retention.inventory.audit_event_store"
+
+    store.append_event(event, audit_content)
+    item = reader.inventory(owner_id)[0]
+
+    assert item.policy_id == "retention.audit-ledger"
+    assert item.coverage is RetentionInventoryCoverage.COMPLETE
+    assert item.retained_objects == 1
+    assert item.retained_bytes is not None and item.retained_bytes > 0
+    assert item.deletion_receipts == 0
+    assert item.oldest_retained_at == audit_content.occurred_at
     assert reader.inventory(record_id("owner", 2)) == ()
 
 

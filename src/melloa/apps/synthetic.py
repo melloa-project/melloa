@@ -16,11 +16,13 @@ from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.fakes.operations import InMemoryOperationsReader
 from melloa.adapters.fakes.retention import (
+    AuditBackedRetentionReader,
     ConversationBackedRetentionReader,
     InMemoryRetentionReader,
     MemoryBackedRetentionReader,
     TelegramQuarantineBackedRetentionReader,
 )
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.adapters.fakes.telegram import (
     DeterministicTelegramPairingCodeIssuer,
     FakeTelegramPairingChallengePublisher,
@@ -134,6 +136,7 @@ class SyntheticRuntime:
     telegram_delivery_adapter: ClientAdapter | None
     telegram_reply_dispatcher: TelegramReplyDispatcher | None
     delivery_store: DeliveryStore
+    event_audit_store: InMemoryEventAuditStore
     conversation_service: ConversationService
     memory_service: MemoryService
     memory_store: MemoryStore
@@ -226,6 +229,7 @@ def build_synthetic_runtime(
             updated_at=seeded_at,
         ),
     )
+    event_audit_store = InMemoryEventAuditStore()
     model_backend = FakeModelGateway(
         _synthetic_conversation_response,
         clock=clock,
@@ -508,20 +512,24 @@ def build_synthetic_runtime(
     )
     retention = OwnerRetentionService(
         owner_id=SYNTHETIC_OWNER_ID,
-        reader=ConversationBackedRetentionReader(
-            MemoryBackedRetentionReader(
-                TelegramQuarantineBackedRetentionReader(
-                    InMemoryRetentionReader(
-                        SYNTHETIC_OWNER_ID,
-                        policies=_synthetic_retention_policies(),
-                        inventory=_synthetic_retention_inventory(),
-                        backup_expiry=backup_expiry,
+        reader=AuditBackedRetentionReader(
+            ConversationBackedRetentionReader(
+                MemoryBackedRetentionReader(
+                    TelegramQuarantineBackedRetentionReader(
+                        InMemoryRetentionReader(
+                            SYNTHETIC_OWNER_ID,
+                            policies=_synthetic_retention_policies(),
+                            inventory=_synthetic_retention_inventory(),
+                            backup_expiry=backup_expiry,
+                        ),
+                        telegram_attachment_backend,
                     ),
-                    telegram_attachment_backend,
+                    memory_store,
                 ),
-                memory_store,
+                conversation_store,
             ),
-            conversation_store,
+            SYNTHETIC_OWNER_ID,
+            event_audit_store,
         ),
         clock=clock,
     )
@@ -567,6 +575,7 @@ def build_synthetic_runtime(
         telegram_delivery_adapter=telegram_delivery_adapter,
         telegram_reply_dispatcher=telegram_reply_dispatcher,
         delivery_store=delivery_store,
+        event_audit_store=event_audit_store,
         conversation_service=conversation,
         memory_service=memory,
         memory_store=memory_store,
