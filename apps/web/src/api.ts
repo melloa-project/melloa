@@ -297,6 +297,13 @@ export type ModelRouteStatus = {
   readonly model_id: string;
   readonly processing_location: "device" | "private_network" | "approved_provider";
   readonly external_disclosure: boolean;
+  readonly supported_modalities: readonly string[];
+  readonly quality_profiles: readonly string[];
+  readonly allowed_sensitivities: readonly string[];
+  readonly provider_retention_policies: readonly string[];
+  readonly max_input_tokens: number;
+  readonly max_output_tokens: number;
+  readonly reliability: number;
   readonly timeout_ms: number;
   readonly estimated_max_cost_gbp: number;
   readonly health: ModelGatewayHealth;

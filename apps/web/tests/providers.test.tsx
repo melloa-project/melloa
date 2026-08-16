@@ -27,6 +27,13 @@ const report: OwnerModelRouteReport = {
       model_id: "qwen3:8b",
       processing_location: "device",
       external_disclosure: false,
+      supported_modalities: ["text"],
+      quality_profiles: ["quality.conversation"],
+      allowed_sensitivities: ["public", "internal", "personal"],
+      provider_retention_policies: ["retention.no-training"],
+      max_input_tokens: 8192,
+      max_output_tokens: 2048,
+      reliability: 0.99,
       timeout_ms: 45_000,
       estimated_max_cost_gbp: 0,
       health: { state: "healthy", checked_at: "2026-08-16T12:00:00Z", latency_ms: 18, reason_code: "probe.succeeded" },
@@ -39,6 +46,13 @@ const report: OwnerModelRouteReport = {
       model_id: "gpt-5.3-codex",
       processing_location: "approved_provider",
       external_disclosure: true,
+      supported_modalities: ["text"],
+      quality_profiles: ["quality.conversation"],
+      allowed_sensitivities: ["public", "internal", "personal"],
+      provider_retention_policies: ["retention.no-training"],
+      max_input_tokens: 16384,
+      max_output_tokens: 2048,
+      reliability: 0.85,
       timeout_ms: 120_000,
       estimated_max_cost_gbp: 0,
       health: { state: "healthy", checked_at: "2026-08-16T12:00:00Z", latency_ms: 24, reason_code: "model.cli_agent.executable_ready" },
@@ -51,6 +65,13 @@ const report: OwnerModelRouteReport = {
       model_id: "deterministic-fixture-v1",
       processing_location: "device",
       external_disclosure: false,
+      supported_modalities: ["text"],
+      quality_profiles: ["quality.conversation", "quality.conversation-synthetic"],
+      allowed_sensitivities: ["public", "internal", "personal", "sensitive", "highly_sensitive", "device_only"],
+      provider_retention_policies: ["retention.no-training"],
+      max_input_tokens: 4096,
+      max_output_tokens: 1024,
+      reliability: 1,
       timeout_ms: 1_000,
       estimated_max_cost_gbp: 0,
       health: { state: "healthy", checked_at: "2026-08-16T12:00:00Z", latency_ms: 0, reason_code: "synthetic.ready" },
@@ -81,5 +102,9 @@ describe("ProvidersPage", () => {
     expect(screen.getByText("Guardian normal required")).toBeInTheDocument();
     expect(screen.getByText("No Melloa authority")).toBeInTheDocument();
     expect(screen.getByText("Subscription · unreported")).toBeInTheDocument();
+    expect(screen.getAllByText("Retention No Training")).not.toHaveLength(0);
+    expect(screen.getAllByText("Public · Internal · Personal")).not.toHaveLength(0);
+    expect(screen.getByText("8,192 in · 2,048 out")).toBeInTheDocument();
+    expect(screen.getByText("99%")).toBeInTheDocument();
   });
 });

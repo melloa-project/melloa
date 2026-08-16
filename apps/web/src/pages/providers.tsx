@@ -140,6 +140,12 @@ function ProviderCard({ route }: { readonly route: ModelRouteStatus }) {
         <div><dt>Provider</dt><dd>{route.provider_id}</dd></div>
         <div><dt>Route ID</dt><dd>{route.route_id}</dd></div>
         <div><dt>Processing</dt><dd>{titleCase(route.processing_location)}</dd></div>
+        <div><dt>Privacy scope</dt><dd>{formatRouteList(route.allowed_sensitivities)}</dd></div>
+        <div><dt>Retention policy</dt><dd>{formatRouteList(route.provider_retention_policies)}</dd></div>
+        <div><dt>Modalities</dt><dd>{formatRouteList(route.supported_modalities)}</dd></div>
+        <div><dt>Quality</dt><dd>{formatRouteList(route.quality_profiles)}</dd></div>
+        <div><dt>Token ceiling</dt><dd>{route.max_input_tokens.toLocaleString()} in · {route.max_output_tokens.toLocaleString()} out</dd></div>
+        <div><dt>Reliability</dt><dd>{Math.round(route.reliability * 100)}%</dd></div>
         <div><dt>Timeout</dt><dd><Clock3 size={14} /> {formatDurationMs(route.timeout_ms)}</dd></div>
         <div><dt>Cost ceiling</dt><dd><Coins size={14} /> {cliAgent ? "Subscription · unreported" : formatGbp(route.estimated_max_cost_gbp)}</dd></div>
         <div><dt>Probe</dt><dd>{route.health.latency_ms === null || route.health.latency_ms === undefined ? "Not measured" : formatDurationMs(route.health.latency_ms)}</dd></div>
@@ -149,4 +155,8 @@ function ProviderCard({ route }: { readonly route: ModelRouteStatus }) {
       </div>
     </Card>
   );
+}
+
+function formatRouteList(values: readonly string[]): string {
+  return values.map(titleCase).join(" · ");
 }

@@ -449,6 +449,13 @@ def test_route_statuses_expose_kind_location_disclosure_and_redacted_health(fixe
     assert status.route_kind is ModelRouteKind.OPENAI_COMPATIBLE
     assert status.processing_location is ProcessingLocation.DEVICE
     assert status.external_disclosure is False
+    assert status.allowed_sensitivities == tuple(Sensitivity)
+    assert status.provider_retention_policies == ("retention.no-training",)
+    assert status.supported_modalities == ("text",)
+    assert status.quality_profiles == ("quality.conversation",)
+    assert status.max_input_tokens == 8_192
+    assert status.max_output_tokens == 2_048
+    assert status.reliability == 0.99
     assert status.timeout_ms == 12_000
     assert status.health.state is ModelRouteHealthState.HEALTHY
     assert status.health.reason_code == "model.synthetic_ready"

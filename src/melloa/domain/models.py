@@ -10,6 +10,8 @@ from pydantic import Field, model_validator
 from melloa.domain.base import AwareDatetime, ContractModel, JsonObject, QualifiedName, RecordId
 from melloa.domain.classification import Sensitivity
 
+_SENSITIVITY_ORDER = {sensitivity: index for index, sensitivity in enumerate(Sensitivity)}
+
 
 class ProcessingLocation(StrEnum):
     DEVICE = "device"
@@ -91,9 +93,39 @@ class ModelRouteStatus(ContractModel):
     model_id: str = Field(min_length=1, max_length=256)
     processing_location: ProcessingLocation
     external_disclosure: bool
+    supported_modalities: tuple[QualifiedName, ...] = Field(min_length=1)
+    quality_profiles: tuple[QualifiedName, ...] = Field(min_length=1)
+    allowed_sensitivities: tuple[Sensitivity, ...] = Field(min_length=1)
+    provider_retention_policies: tuple[QualifiedName, ...] = Field(min_length=1)
+    max_input_tokens: Annotated[int, Field(gt=0)]
+    max_output_tokens: Annotated[int, Field(gt=0)]
+    reliability: Annotated[float, Field(ge=0.0, le=1.0)]
     timeout_ms: Annotated[int, Field(gt=0, le=3_600_000)]
     estimated_max_cost_gbp: Annotated[float, Field(ge=0.0)]
     health: ModelGatewayHealth
+
+    @model_validator(mode="after")
+    def validate_constraints(self) -> ModelRouteStatus:
+        for values, field_name in (
+            (self.supported_modalities, "supported modalities"),
+            (self.quality_profiles, "quality profiles"),
+            (self.provider_retention_policies, "provider retention policies"),
+        ):
+            if len(set(values)) != len(values):
+                raise ValueError(f"model route {field_name} must be unique")
+            if values != tuple(sorted(values, key=str)):
+                raise ValueError(
+                    f"model route {field_name} must use deterministic order"
+                )
+        if len(set(self.allowed_sensitivities)) != len(self.allowed_sensitivities):
+            raise ValueError("model route allowed sensitivities must be unique")
+        if self.allowed_sensitivities != tuple(
+            sorted(self.allowed_sensitivities, key=_SENSITIVITY_ORDER.__getitem__)
+        ):
+            raise ValueError(
+                "model route allowed sensitivities must use deterministic order"
+            )
+        return self
 
 
 class OwnerModelRouteReport(ContractModel):

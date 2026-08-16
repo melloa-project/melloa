@@ -63,6 +63,14 @@
     "ModelRouteStatus": {
       "additionalProperties": false,
       "properties": {
+        "allowed_sensitivities": {
+          "items": {
+            "$ref": "#/$defs/Sensitivity"
+          },
+          "minItems": 1,
+          "title": "Allowed Sensitivities",
+          "type": "array"
+        },
         "display_name": {
           "maxLength": 128,
           "minLength": 1,
@@ -81,6 +89,16 @@
         "health": {
           "$ref": "#/$defs/ModelGatewayHealth"
         },
+        "max_input_tokens": {
+          "exclusiveMinimum": 0,
+          "title": "Max Input Tokens",
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "exclusiveMinimum": 0,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
         "model_id": {
           "maxLength": 256,
           "minLength": 1,
@@ -97,6 +115,34 @@
           "title": "Provider Id",
           "type": "string"
         },
+        "provider_retention_policies": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 2,
+            "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Provider Retention Policies",
+          "type": "array"
+        },
+        "quality_profiles": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 2,
+            "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Quality Profiles",
+          "type": "array"
+        },
+        "reliability": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Reliability",
+          "type": "number"
+        },
         "route_id": {
           "maxLength": 128,
           "minLength": 2,
@@ -106,6 +152,17 @@
         },
         "route_kind": {
           "$ref": "#/$defs/ModelRouteKind"
+        },
+        "supported_modalities": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 2,
+            "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Supported Modalities",
+          "type": "array"
         },
         "timeout_ms": {
           "exclusiveMinimum": 0,
@@ -122,6 +179,13 @@
         "model_id",
         "processing_location",
         "external_disclosure",
+        "supported_modalities",
+        "quality_profiles",
+        "allowed_sensitivities",
+        "provider_retention_policies",
+        "max_input_tokens",
+        "max_output_tokens",
+        "reliability",
         "timeout_ms",
         "estimated_max_cost_gbp",
         "health"
@@ -136,6 +200,18 @@
         "approved_provider"
       ],
       "title": "ProcessingLocation",
+      "type": "string"
+    },
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "personal",
+        "sensitive",
+        "highly_sensitive",
+        "device_only"
+      ],
+      "title": "Sensitivity",
       "type": "string"
     }
   },

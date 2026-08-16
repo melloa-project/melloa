@@ -83,6 +83,17 @@ def test_authenticated_owner_can_inspect_configured_model_routes(fixed_time) -> 
     document = response.json()
     assert document["owner_id"] == owner_id
     assert document["routes"][0]["route_id"] == "model.local.test"
+    assert document["routes"][0]["allowed_sensitivities"] == [
+        sensitivity.value for sensitivity in Sensitivity
+    ]
+    assert document["routes"][0]["provider_retention_policies"] == [
+        "retention.no-training"
+    ]
+    assert document["routes"][0]["supported_modalities"] == ["text"]
+    assert document["routes"][0]["quality_profiles"] == ["quality.conversation"]
+    assert document["routes"][0]["max_input_tokens"] == 8_192
+    assert document["routes"][0]["max_output_tokens"] == 2_048
+    assert document["routes"][0]["reliability"] == 1.0
     assert document["routes"][0]["health"]["state"] == "healthy"
 
 

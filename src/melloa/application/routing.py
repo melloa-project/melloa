@@ -8,6 +8,7 @@ from datetime import datetime
 
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, canonical_json_bytes, utc_now
+from melloa.domain.classification import Sensitivity
 from melloa.domain.models import (
     ModelAttemptOutcome,
     ModelGatewayHealth,
@@ -117,6 +118,19 @@ class DeterministicModelRouter:
                     model_id=binding.route.model_id,
                     processing_location=binding.route.processing_location,
                     external_disclosure=binding.route.external_disclosure,
+                    supported_modalities=tuple(sorted(binding.route.supported_modalities)),
+                    quality_profiles=tuple(sorted(binding.route.quality_profiles)),
+                    allowed_sensitivities=tuple(
+                        sensitivity
+                        for sensitivity in Sensitivity
+                        if sensitivity in binding.route.allowed_sensitivities
+                    ),
+                    provider_retention_policies=tuple(
+                        sorted(binding.route.provider_retention_policies)
+                    ),
+                    max_input_tokens=binding.route.max_input_tokens,
+                    max_output_tokens=binding.route.max_output_tokens,
+                    reliability=binding.route.reliability,
                     timeout_ms=binding.timeout_ms,
                     estimated_max_cost_gbp=binding.route.estimated_max_cost_gbp,
                     health=health,
