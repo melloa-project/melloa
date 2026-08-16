@@ -187,3 +187,11 @@ export function shortId(value: string): string {
   }
   return `${value.slice(0, 12)}…${value.slice(-6)}`;
 }
+
+export function redactTelegramIdentifier(value: number): string {
+  if (!Number.isSafeInteger(value)) {
+    return "Invalid identifier";
+  }
+  const suffix = String(Math.abs(value)).slice(-4).padStart(4, "•");
+  return `••••${suffix}`;
+}

@@ -17,6 +17,8 @@ import {
   type OwnerHealthReport,
   type OwnerMediaCatalog,
   type SystemStatus,
+  type TelegramOwnerPairing,
+  type TelegramPairingCandidate,
 } from "./api.js";
 import {
   areas,
@@ -30,6 +32,7 @@ import {
   mutationCapabilities,
   parseActivityWindow,
   parseJsonObject,
+  redactTelegramIdentifier,
   shortId,
   writeText,
   type AreaId,
@@ -50,6 +53,9 @@ type ConsoleState = {
   modelActivity: ModelActivityReport | null;
   healthDetail: OwnerHealthReport | null;
   mediaCatalog: OwnerMediaCatalog | null;
+  telegramPairingConfigured: boolean | null;
+  telegramPairingCandidates: readonly TelegramPairingCandidate[];
+  telegramPairing: TelegramOwnerPairing | null;
 };
 
 const shell = `
@@ -286,8 +292,8 @@ const shell = `
 
     <section class="area-panel" id="panel-operations" data-area-panel="operations" aria-labelledby="operations-title" hidden>
       <div class="section-heading">
-        <div><p class="eyebrow">Read-only service state</p><h2 id="operations-title">Operations</h2></div>
-        <p>The ordinary console reads Guardian status but cannot mutate Guardian authority, policy, or recovery state.</p>
+        <div><p class="eyebrow">Service state & optional integrations</p><h2 id="operations-title">Operations</h2></div>
+        <p>The ordinary console reads Guardian status but cannot mutate Guardian authority, policy, or recovery state. Owner-managed channel bindings remain optional and subordinate to canonical conversation.</p>
       </div>
       <div class="operations-grid">
         <section class="panel-card"><h3>Current system projection</h3><pre id="operations-status">Status unavailable.</pre></section>
@@ -297,6 +303,29 @@ const shell = `
         </section>
         <section class="panel-card boundary-copy"><h3>Enforced boundaries</h3><ul><li>Private ingress only</li><li>Authenticated owner records</li><li>Guardian independence</li><li>Deterministic policy decisions</li><li>Synthetic adapters until explicitly configured</li></ul></section>
       </div>
+      <section class="panel-card telegram-pairing-panel" aria-labelledby="telegram-pairing-title">
+        <div class="panel-heading telegram-pairing-heading">
+          <div>
+            <p class="eyebrow">Optional secondary owner channel</p>
+            <h3 id="telegram-pairing-title">Telegram pairing</h3>
+          </div>
+          <div class="telegram-pairing-heading-actions">
+            <span class="state-chip" id="telegram-pairing-state">Sign in</span>
+            <button class="quiet" id="telegram-pairing-refresh" type="button" data-auth-only>Refresh</button>
+          </div>
+        </div>
+        <p class="muted">Telegram never owns identity or canonical history. A private <code>/start</code> creates a time-bounded request; the owner confirms its separately delivered challenge here.</p>
+        <div class="telegram-pairing-layout">
+          <section class="telegram-pairing-column" aria-labelledby="telegram-active-title">
+            <div class="panel-heading"><h4 id="telegram-active-title">Active binding</h4><span class="state-chip">Exact pair</span></div>
+            <div id="telegram-pairing-active"></div>
+          </section>
+          <section class="telegram-pairing-column" aria-labelledby="telegram-candidates-title">
+            <div class="panel-heading"><h4 id="telegram-candidates-title">Pending private-chat requests</h4><span class="count" id="telegram-candidate-count">0</span></div>
+            <div class="telegram-candidate-list" id="telegram-pairing-candidates"></div>
+          </section>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -411,6 +440,11 @@ const refs = {
   operationsStatus: required<HTMLElement>("#operations-status"),
   operationsHealthState: required<HTMLElement>("#operations-health-state"),
   operationsHealth: required<HTMLDivElement>("#operations-health"),
+  telegramPairingState: required<HTMLElement>("#telegram-pairing-state"),
+  telegramPairingRefresh: required<HTMLButtonElement>("#telegram-pairing-refresh"),
+  telegramPairingActive: required<HTMLDivElement>("#telegram-pairing-active"),
+  telegramCandidateCount: required<HTMLElement>("#telegram-candidate-count"),
+  telegramPairingCandidates: required<HTMLDivElement>("#telegram-pairing-candidates"),
 };
 
 const api = new MelloaApi();
@@ -429,6 +463,9 @@ const state: ConsoleState = {
   modelActivity: null,
   healthDetail: null,
   mediaCatalog: null,
+  telegramPairingConfigured: null,
+  telegramPairingCandidates: [],
+  telegramPairing: null,
 };
 let activeArea: AreaId = "conversation";
 let pendingMessage: { readonly threadId: string; readonly text: string; readonly key: string } | null = null;
@@ -553,6 +590,7 @@ function renderAuth(): void {
     element.disabled = !canMutateSensitiveState;
   });
   renderConversationControls();
+  renderTelegramPairingControls();
 }
 
 function renderStatus(): void {
@@ -1024,6 +1062,212 @@ function renderHealthComponent(component: ComponentHealth): HTMLElement {
   return article;
 }
 
+function renderTelegramPairingControls(): void {
+  const authenticated = state.principal !== null;
+  const canChangePairing =
+    sensitiveMutationReady() && state.telegramPairingConfigured === true;
+  refs.telegramPairingRefresh.disabled = !authenticated;
+  document
+    .querySelectorAll<HTMLButtonElement>('[data-telegram-pairing-action="confirm"]')
+    .forEach((button) => {
+      button.disabled = !canChangePairing || state.telegramPairing !== null;
+    });
+  document
+    .querySelectorAll<HTMLButtonElement>('[data-telegram-pairing-action="revoke"]')
+    .forEach((button) => {
+      button.disabled = !canChangePairing || state.telegramPairing === null;
+    });
+  document
+    .querySelectorAll<HTMLInputElement>("[data-telegram-confirmation-code]")
+    .forEach((input) => {
+      const disabled = !canChangePairing || state.telegramPairing !== null;
+      if (disabled) {
+        input.value = "";
+      }
+      input.disabled = disabled;
+    });
+}
+
+function renderTelegramPairing(): void {
+  refs.telegramPairingActive.replaceChildren();
+  refs.telegramPairingCandidates.replaceChildren();
+  if (state.principal === null) {
+    writeText(refs.telegramPairingState, "Sign in");
+    writeText(refs.telegramCandidateCount, "—");
+    refs.telegramPairingActive.append(
+      emptyState("Private status", "Sign in to inspect the optional Telegram binding."),
+    );
+    refs.telegramPairingCandidates.append(
+      emptyState("Private requests", "Candidate metadata is visible only to the owner."),
+    );
+    renderTelegramPairingControls();
+    return;
+  }
+  if (state.telegramPairingConfigured === null) {
+    writeText(refs.telegramPairingState, "Loading");
+    writeText(refs.telegramCandidateCount, "—");
+    refs.telegramPairingActive.append(
+      emptyState("Loading binding", "Reading owner-scoped pairing state."),
+    );
+    refs.telegramPairingCandidates.append(
+      emptyState("Loading requests", "Reading redacted candidate metadata."),
+    );
+    renderTelegramPairingControls();
+    return;
+  }
+  if (!state.telegramPairingConfigured) {
+    writeText(refs.telegramPairingState, "Not configured");
+    writeText(refs.telegramCandidateCount, "0");
+    refs.telegramPairingActive.append(
+      emptyState(
+        "Optional adapter absent",
+        "This runtime has no Telegram pairing service. Canonical Owner Console conversation remains available.",
+      ),
+    );
+    refs.telegramPairingCandidates.append(
+      emptyState("No candidate source", "No Telegram network or synthetic source is configured."),
+    );
+    renderTelegramPairingControls();
+    return;
+  }
+
+  const pairing = state.telegramPairing;
+  writeText(refs.telegramPairingState, pairing === null ? "Unpaired" : "Active");
+  writeText(refs.telegramCandidateCount, formatCount(state.telegramPairingCandidates.length));
+  if (pairing === null) {
+    refs.telegramPairingActive.append(
+      emptyState(
+        "No active binding",
+        "Telegram cannot supply canonical owner messages until one exact pair is locally confirmed.",
+      ),
+    );
+  } else {
+    refs.telegramPairingActive.append(renderActiveTelegramPairing(pairing));
+  }
+  if (state.telegramPairingCandidates.length === 0) {
+    refs.telegramPairingCandidates.append(
+      emptyState(
+        "No pending requests",
+        "Send /start in the configured private chat to create a time-bounded candidate.",
+      ),
+    );
+  }
+  for (const candidate of state.telegramPairingCandidates) {
+    refs.telegramPairingCandidates.append(renderTelegramPairingCandidate(candidate));
+  }
+  renderTelegramPairingControls();
+}
+
+function renderActiveTelegramPairing(pairing: TelegramOwnerPairing): HTMLElement {
+  const article = makeElement("article", "telegram-pairing-card active");
+  article.append(
+    definitionGrid([
+      ["Pairing", shortId(pairing.pairing_id)],
+      ["Telegram account", redactTelegramIdentifier(pairing.telegram_user_id)],
+      ["Private chat", redactTelegramIdentifier(pairing.telegram_chat_id)],
+      ["Confirmed", formatInstant(pairing.confirmed_at)],
+    ]),
+    makeElement(
+      "p",
+      "muted",
+      "Revocation stops future Telegram intake without deleting or transferring canonical history.",
+    ),
+  );
+  const revoke = makeElement("button", "quiet danger-button", "Revoke pairing");
+  revoke.type = "button";
+  revoke.dataset.sensitiveMutation = "";
+  revoke.dataset.telegramPairingAction = "revoke";
+  revoke.addEventListener("click", () => {
+    void attempt("Revoke Telegram pairing", async () => {
+      requireSensitiveMutationProof();
+      if (state.telegramPairing?.pairing_id !== pairing.pairing_id) {
+        throw new Error("Refresh the active Telegram pairing before revoking it.");
+      }
+      if (
+        !window.confirm(
+          `Revoke Telegram pairing ${shortId(pairing.pairing_id)} and stop future channel intake?`,
+        )
+      ) {
+        return;
+      }
+      revoke.disabled = true;
+      await api.revokeTelegramPairing(pairing.pairing_id);
+      await loadTelegramPairing();
+      showNotice("Telegram pairing revoked. Canonical conversation history is unchanged.");
+    }).finally(renderAuth);
+  });
+  article.append(revoke);
+  return article;
+}
+
+function renderTelegramPairingCandidate(candidate: TelegramPairingCandidate): HTMLElement {
+  const article = makeElement("article", "telegram-pairing-card candidate");
+  article.append(
+    definitionGrid([
+      ["Candidate", shortId(candidate.candidate_id)],
+      ["Telegram account", redactTelegramIdentifier(candidate.telegram_user_id)],
+      ["Private chat", redactTelegramIdentifier(candidate.telegram_chat_id)],
+      ["Expires", formatInstant(candidate.expires_at)],
+    ]),
+  );
+  const form = makeElement("form", "stack-form telegram-confirm-form");
+  const label = makeElement("label", undefined, "Challenge code");
+  const input = makeElement("input");
+  input.type = "password";
+  input.minLength = 20;
+  input.maxLength = 128;
+  input.pattern = "[A-Za-z0-9_-]{20,128}";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.setAttribute("autocapitalize", "none");
+  input.setAttribute("data-telegram-confirmation-code", "");
+  input.required = true;
+  label.append(input);
+  const confirm = makeElement("button", "primary", "Confirm exact pair");
+  confirm.type = "submit";
+  confirm.dataset.sensitiveMutation = "";
+  confirm.dataset.telegramPairingAction = "confirm";
+  form.append(
+    label,
+    makeElement(
+      "p",
+      "form-hint",
+      "The code is cleared before the request and is never copied into console state.",
+    ),
+    confirm,
+  );
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const confirmationCode = input.value;
+    input.value = "";
+    void attempt("Confirm Telegram pairing", async () => {
+      requireSensitiveMutationProof();
+      if (!state.telegramPairingCandidates.some((item) => item.candidate_id === candidate.candidate_id)) {
+        throw new Error("Refresh pending Telegram requests before confirming this candidate.");
+      }
+      if (state.telegramPairing !== null) {
+        throw new Error("Revoke the active Telegram pairing before confirming another candidate.");
+      }
+      if (!/^[A-Za-z0-9_-]{20,128}$/.test(confirmationCode)) {
+        throw new Error("Enter the exact URL-safe Telegram challenge code.");
+      }
+      if (
+        !window.confirm(
+          `Confirm ${shortId(candidate.candidate_id)} for Telegram account ${redactTelegramIdentifier(candidate.telegram_user_id)}?`,
+        )
+      ) {
+        return;
+      }
+      confirm.disabled = true;
+      await api.confirmTelegramPairing(candidate.candidate_id, confirmationCode);
+      await loadTelegramPairing();
+      showNotice("Telegram pairing confirmed as an optional secondary owner channel.");
+    }).finally(renderAuth);
+  });
+  article.append(form);
+  return article;
+}
+
 function renderMedia(): void {
   const catalog = state.mediaCatalog;
   writeText(
@@ -1137,6 +1381,9 @@ function clearPrivateState(): void {
   state.modelActivity = null;
   state.healthDetail = null;
   state.mediaCatalog = null;
+  state.telegramPairingConfigured = null;
+  state.telegramPairingCandidates = [];
+  state.telegramPairing = null;
   pendingMessage = null;
   pendingDelivery = null;
   refs.messageText.value = "";
@@ -1151,6 +1398,7 @@ function clearPrivateState(): void {
   renderActivity();
   renderHealth();
   renderMedia();
+  renderTelegramPairing();
 }
 
 function handleError(error: unknown, context: string): void {
@@ -1209,6 +1457,7 @@ async function loadPrivateOverview(): Promise<void> {
     loadActivity().catch((error: unknown) => handleError(error, "Load model activity")),
     loadHealth().catch((error: unknown) => handleError(error, "Load component health")),
     loadMedia().catch((error: unknown) => handleError(error, "Load media metadata")),
+    loadTelegramPairing().catch((error: unknown) => handleError(error, "Load Telegram pairing")),
   ]);
 }
 
@@ -1327,6 +1576,30 @@ async function loadMedia(): Promise<void> {
   requireAuthenticated();
   state.mediaCatalog = await api.mediaCatalog();
   renderMedia();
+}
+
+async function loadTelegramPairing(): Promise<void> {
+  requireAuthenticated();
+  state.telegramPairingConfigured = null;
+  renderTelegramPairing();
+  try {
+    const [candidates, pairing] = await Promise.all([
+      api.listTelegramPairingCandidates(),
+      api.inspectTelegramPairing(),
+    ]);
+    state.telegramPairingConfigured = true;
+    state.telegramPairingCandidates = candidates;
+    state.telegramPairing = pairing;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 503) {
+      state.telegramPairingConfigured = false;
+      state.telegramPairingCandidates = [];
+      state.telegramPairing = null;
+    } else {
+      throw error;
+    }
+  }
+  renderTelegramPairing();
 }
 
 async function openActivityTurn(entry: ModelActivityEntry): Promise<void> {
@@ -1552,6 +1825,13 @@ refs.activityForm.addEventListener("submit", (event) => {
   }).finally(renderAuth);
 });
 
+refs.telegramPairingRefresh.addEventListener("click", () => {
+  void attempt("Refresh Telegram pairing", async () => {
+    refs.telegramPairingRefresh.disabled = true;
+    await loadTelegramPairing();
+  }).finally(renderAuth);
+});
+
 const activityWindow = defaultActivityWindow();
 refs.activityFrom.value = activityWindow.from;
 refs.activityTo.value = activityWindow.to;
@@ -1566,5 +1846,6 @@ renderMemory();
 renderActivity();
 renderHealth();
 renderMedia();
+renderTelegramPairing();
 window.setInterval(renderAuth, 15_000);
 void Promise.all([loadStatus(), restoreSession()]);

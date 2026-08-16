@@ -1043,6 +1043,88 @@ pre {
   background: #091914;
 }
 
+.telegram-pairing-panel {
+  margin-top: 0.85rem;
+  padding: 1rem;
+}
+
+.telegram-pairing-heading > div:first-child h3,
+.telegram-pairing-heading > div:first-child p,
+.telegram-pairing-panel > .muted,
+.telegram-pairing-card > .muted {
+  margin-bottom: 0;
+}
+
+.telegram-pairing-heading-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.telegram-pairing-heading-actions .quiet {
+  min-height: 2.2rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.telegram-pairing-panel > .muted {
+  max-width: 72rem;
+  font-size: 0.75rem;
+}
+
+.telegram-pairing-panel code {
+  color: #b8e3ca;
+}
+
+.telegram-pairing-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1.28fr);
+  gap: 0.85rem;
+  margin-top: 0.9rem;
+}
+
+.telegram-pairing-column {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid #1f4033;
+  border-radius: 0.75rem;
+  background: #091a14;
+}
+
+.telegram-candidate-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.telegram-pairing-card {
+  padding: 0.85rem;
+  border: 1px solid #2b5945;
+  border-radius: 0.72rem;
+  background: #0b2118;
+}
+
+.telegram-pairing-card.active {
+  border-color: #39775a;
+}
+
+.telegram-pairing-card .record-grid {
+  margin-top: 0;
+}
+
+.telegram-pairing-card .quiet {
+  margin-top: 0.75rem;
+}
+
+.telegram-confirm-form {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #214334;
+}
+
+.telegram-confirm-form .form-hint {
+  margin: 0;
+  line-height: 1.45;
+}
+
 .boundary-copy ul {
   display: grid;
   gap: 0.75rem;
@@ -1140,6 +1222,7 @@ footer {
   .delivery-layout,
   .memory-layout,
   .media-layout,
+  .telegram-pairing-layout,
   .operations-grid {
     grid-template-columns: 1fr;
   }
@@ -1189,6 +1272,7 @@ footer {
   .turn-rail,
     .message-panel,
     .delivery-panel,
+    .telegram-pairing-panel,
   .memory-record,
   .memory-actions {
     padding: 0.85rem;

@@ -29,6 +29,10 @@ test("shell wires every currently implemented owner workflow", async () => {
     "api.listDeliveries",
     "api.enqueueDelivery",
     "api.resumeDelivery",
+    "api.listTelegramPairingCandidates",
+    "api.inspectTelegramPairing",
+    "api.confirmTelegramPairing",
+    "api.revokeTelegramPairing",
     "api.inspectTurn",
     "api.inspectMemory",
     "api.correctMemory",
@@ -65,4 +69,19 @@ test("browser client never persists session or CSRF secrets", async () => {
   assert.match(client, /credentials: "same-origin"/);
   assert.match(client, /X-Melloa-CSRF/);
   assert.match(shell, /refs\.credential\.value = ""/);
+});
+
+test("Telegram pairing stays secondary, redacted, transient, and explicitly confirmed", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const consoleState = source.match(/type ConsoleState = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  assert.match(source, /Optional secondary owner channel/);
+  assert.match(source, /Telegram never owns identity or canonical history/);
+  assert.match(source, /redactTelegramIdentifier/);
+  assert.match(source, /input\.type = "password"/);
+  assert.match(source, /input\.autocomplete = "off"/);
+  assert.match(source, /const confirmationCode = input\.value;\n\s+input\.value = ""/);
+  assert.doesNotMatch(consoleState, /confirmationCode|challenge/i);
+  assert.match(source, /window\.confirm\([\s\S]*?Confirm/);
+  assert.match(source, /await api\.confirmTelegramPairing[\s\S]*?await loadTelegramPairing\(\)/);
+  assert.match(source, /await api\.revokeTelegramPairing[\s\S]*?await loadTelegramPairing\(\)/);
 });

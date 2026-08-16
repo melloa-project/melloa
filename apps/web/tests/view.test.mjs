@@ -9,6 +9,7 @@ import {
   mutationCapabilities,
   parseActivityWindow,
   parseJsonObject,
+  redactTelegramIdentifier,
   writeText,
 } from "../.test-dist/view.js";
 
@@ -64,6 +65,13 @@ test("ordinary CSRF mutations outlive the stricter memory mutation window", () =
     mutationCapabilities(principal, false, Date.parse("2026-08-16T12:01:00Z")),
     { standard: false, sensitive: false },
   );
+});
+
+test("Telegram identifiers expose only a fixed redacted suffix", () => {
+  assert.equal(redactTelegramIdentifier(123456789), "••••6789");
+  assert.equal(redactTelegramIdentifier(-987654321), "••••4321");
+  assert.equal(redactTelegramIdentifier(Number.NaN), "Invalid identifier");
+  assert.doesNotMatch(redactTelegramIdentifier(123456789), /12345/);
 });
 
 test("activity windows are deterministic, UTC, and half-open", () => {
