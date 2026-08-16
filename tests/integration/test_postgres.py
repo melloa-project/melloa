@@ -79,6 +79,7 @@ from melloa.ports.memory import (
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
+    MemoryContentDeletedError,
 )
 from tests.conftest import record_id
 
@@ -102,6 +103,8 @@ def reset_append_tables(connection) -> None:
     connection.execute(
         """
         TRUNCATE
+            melloa.assertion_derived_rebuild_work,
+            melloa.assertion_content_deletions,
             melloa.telegram_poll_states,
             melloa.telegram_ingestion_receipts,
             melloa.telegram_inbound_updates,
@@ -1041,6 +1044,142 @@ def test_postgres_memory_dispute_and_retraction_history_is_durable(
         """
     ).fetchone()
     assert counts == (1, 1, 1, 3)
+
+
+def test_postgres_memory_content_deletion_is_durable_and_role_bounded(
+    connection,
+    fixed_time,
+) -> None:
+    owner_id = record_id("owner", 1)
+    original = Assertion(
+        assertion_id=record_id("assertion", 1),
+        subject_id=owner_id,
+        predicate="activity.current",
+        value={"activity": "sleeping"},
+        epistemic_status=EpistemicStatus.BELIEF,
+        status=AssertionStatus.ACTIVE,
+        confidence=0.61,
+        source_authority=TrustLabel.MODEL_GENERATED,
+        sensitivity=Sensitivity.SENSITIVE,
+        observed_at=fixed_time,
+    )
+    evidence = ProvenanceEdge(
+        edge_id=record_id("edge", 1),
+        from_id=original.assertion_id,
+        to_id=record_id("event", 1),
+        relation=ProvenanceRelation.DERIVED_FROM,
+        created_at=fixed_time,
+        producer_id=record_id("intelligence", 1),
+    )
+    _insert_assertion(connection, original)
+    connection.execute(
+        """
+        INSERT INTO melloa.provenance_edges (
+            edge_id, from_id, to_id, relation, producer_id, created_at, metadata
+        ) VALUES (%s, %s, %s, %s, %s, %s, '{}'::jsonb)
+        """,
+        (
+            evidence.edge_id,
+            evidence.from_id,
+            evidence.to_id,
+            evidence.relation.value,
+            evidence.producer_id,
+            evidence.created_at,
+        ),
+    )
+    before_hash = connection.execute(
+        """
+        SELECT content_hash
+          FROM melloa.assertion_contents
+         WHERE assertion_id = %s
+        """,
+        (original.assertion_id,),
+    ).fetchone()[0]
+    deleted_at = fixed_time + timedelta(minutes=2)
+    ids = iter((record_id("deletion", 1), record_id("work", 1)))
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="synthetic-guardian",
+            mode=GuardianMode.NO_ACTIONS,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.synthetic",
+        ),
+        receipt_hash="sha256:" + "1" * 64,
+    )
+    service = MemoryService(
+        owner_id=owner_id,
+        store=PostgresMemoryRepository(connection),
+        guardian_reader=guardian,
+        clock=lambda: deleted_at,
+        id_factory=lambda _prefix: next(ids),
+    )
+    principal = AuthenticatedOwner(
+        owner_id=owner_id,
+        session_id=record_id("session", 1),
+        authentication_method="auth.synthetic-opaque-token",
+        authenticated_at=fixed_time,
+        reauthenticated_until=fixed_time + timedelta(minutes=5),
+        expires_at=fixed_time + timedelta(minutes=30),
+    )
+
+    connection.execute("SET ROLE melloa_core")
+    try:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                "DELETE FROM melloa.assertion_contents WHERE assertion_id = %s",
+                (original.assertion_id,),
+            )
+
+        result = service.delete_content(principal, original.assertion_id)
+        durable = PostgresMemoryRepository(connection)
+        assert result.created is True
+        assert result.assertion.assertion_id == original.assertion_id
+        assert result.tombstone.assertion_id == original.assertion_id
+        assert result.tombstone.owner_id == owner_id
+        assert result.tombstone.content_hash == before_hash
+        assert result.tombstone.deleted_at == deleted_at
+        assert result.tombstone.reason_code == "memory.assertion-content-owner-deleted"
+        assert result.rebuild_work.work_id == result.tombstone.rebuild_work_id
+        assert result.rebuild_work.tombstone_id == result.tombstone.tombstone_id
+        assert durable.get_assertion_content_deletion(original.assertion_id) == (
+            result.tombstone
+        )
+        with pytest.raises(MemoryContentDeletedError):
+            durable.get_assertion(original.assertion_id)
+        assert durable.list_assertions(owner_id) == ()
+
+        inspection = service.inspect(principal, original.assertion_id)
+        assert inspection.deletion_tombstone == result.tombstone
+        assert inspection.provenance_edges == (evidence,)
+        assert inspection.state_changes[0].reason == "assertion.initialized"
+
+        repeated = service.delete_content(principal, original.assertion_id)
+        assert repeated.created is False
+        assert repeated.tombstone == result.tombstone
+        assert repeated.rebuild_work == result.rebuild_work
+        with pytest.raises(MemoryContentDeletedError):
+            service.correct(
+                principal,
+                original.assertion_id,
+                value={"activity": "reading"},
+                expected_version=1,
+            )
+    finally:
+        connection.execute("RESET ROLE")
+
+    counts = connection.execute(
+        """
+        SELECT
+            (SELECT count(*) FROM melloa.assertions),
+            (SELECT count(*) FROM melloa.assertion_contents),
+            (SELECT count(*) FROM melloa.assertion_content_deletions),
+            (SELECT count(*) FROM melloa.assertion_derived_rebuild_work),
+            (SELECT count(*) FROM melloa.assertion_current_state),
+            (SELECT count(*) FROM melloa.assertion_state_changes)
+        """
+    ).fetchone()
+    assert counts == (1, 0, 1, 1, 1, 1)
 
 
 def test_postgres_conversation_completion_is_atomic_cited_and_idempotent(

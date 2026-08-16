@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import psycopg
-from psycopg.errors import SerializationFailure, UniqueViolation
+from psycopg.errors import CheckViolation, NoDataFound, SerializationFailure, UniqueViolation
 from psycopg.types.json import Jsonb
 
 from melloa.domain.base import JsonObject, RecordId, canonical_json_bytes
@@ -13,6 +13,7 @@ from melloa.domain.memory import (
     Assertion,
     AssertionContentDeletionTombstone,
     AssertionCorrectionResult,
+    AssertionDerivedRebuildWork,
     AssertionMetadata,
     AssertionStateChange,
     AssertionStateProjection,
@@ -27,6 +28,7 @@ from melloa.ports.memory import (
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
+    MemoryContentDeletedError,
     MemoryNotFoundError,
 )
 
@@ -51,6 +53,10 @@ class PostgresMemoryRepository:
         if row is None:
             raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
         if row[1] is None:
+            if self.get_assertion_content_deletion(assertion_id) is not None:
+                raise MemoryContentDeletedError(
+                    f"assertion content deleted: {assertion_id}"
+                )
             raise MemoryNotFoundError(f"assertion content not found: {assertion_id}")
         return self._parse_assertion(row[0], row[1])
 
@@ -68,7 +74,17 @@ class PostgresMemoryRepository:
         assertion_id: RecordId,
     ) -> AssertionContentDeletionTombstone | None:
         self.get_assertion_metadata(assertion_id)
-        return None
+        row = self._connection.execute(
+            """
+            SELECT document
+              FROM melloa.assertion_content_deletions
+             WHERE assertion_id = %s
+            """,
+            (assertion_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._parse_deletion(row[0])
 
     def list_assertions(self, subject_id: RecordId) -> tuple[Assertion, ...]:
         rows = self._connection.execute(
@@ -236,8 +252,44 @@ class PostgresMemoryRepository:
         self,
         write: AssertionContentDeletionWrite,
     ) -> AssertionContentDeletionStoreResult:
-        del write
-        raise MemoryConflictError("durable assertion content deletion is not installed")
+        try:
+            with self._connection.transaction():
+                row = self._connection.execute(
+                    """
+                    SELECT tombstone_document, rebuild_work_document, created
+                      FROM melloa.delete_assertion_content(
+                        %(assertion_id)s,
+                        %(owner_id)s,
+                        %(tombstone_id)s,
+                        %(rebuild_work_id)s,
+                        %(deleted_by_record_id)s,
+                        %(deleted_at)s,
+                        %(reason_code)s
+                      )
+                    """,
+                    {
+                        "assertion_id": write.assertion_id,
+                        "owner_id": write.owner_id,
+                        "tombstone_id": write.tombstone_id,
+                        "rebuild_work_id": write.rebuild_work_id,
+                        "deleted_by_record_id": write.deleted_by_record_id,
+                        "deleted_at": write.deleted_at,
+                        "reason_code": write.reason_code,
+                    },
+                ).fetchone()
+                if row is None:
+                    raise MemoryConflictError("assertion content deletion returned no result")
+                return AssertionContentDeletionStoreResult(
+                    tombstone=self._parse_deletion(row[0]),
+                    rebuild_work=self._parse_rebuild_work(row[1]),
+                    created=bool(row[2]),
+                )
+        except NoDataFound as error:
+            raise MemoryNotFoundError(f"assertion not found: {write.assertion_id}") from error
+        except (CheckViolation, SerializationFailure, UniqueViolation) as error:
+            raise MemoryConflictError(
+                "assertion content deletion conflicts with durable memory state"
+            ) from error
 
     def _insert_assertion(self, assertion: Assertion) -> None:
         self._connection.execute(
@@ -404,5 +456,21 @@ class PostgresMemoryRepository:
         if not isinstance(document, dict):
             raise ValueError("persisted assertion state change document is not an object")
         return AssertionStateChange.model_validate_json(
+            canonical_json_bytes(cast(JsonObject, document))
+        )
+
+    @staticmethod
+    def _parse_deletion(document: object) -> AssertionContentDeletionTombstone:
+        if not isinstance(document, dict):
+            raise ValueError("persisted assertion deletion document is not an object")
+        return AssertionContentDeletionTombstone.model_validate_json(
+            canonical_json_bytes(cast(JsonObject, document))
+        )
+
+    @staticmethod
+    def _parse_rebuild_work(document: object) -> AssertionDerivedRebuildWork:
+        if not isinstance(document, dict):
+            raise ValueError("persisted assertion rebuild document is not an object")
+        return AssertionDerivedRebuildWork.model_validate_json(
             canonical_json_bytes(cast(JsonObject, document))
         )

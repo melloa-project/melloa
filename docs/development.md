@@ -34,7 +34,7 @@ The target verifies generated schemas and migration digests, Python lint/type/un
 make integration
 ```
 
-The harness starts a digest-pinned PostgreSQL 18 plus pgvector container on a random loopback port, provisions non-login role groups, applies immutable migrations through the CLI, and verifies append, audit, idempotency, leased conversation and delivery work, atomic completion, mutation denial, role boundaries, and stop/rebuild MVP journeys. Those journeys retain canonical conversation/model provenance, memory corrections, delivery receipts, Telegram pairing/revocation authority, normalized intake receipts, poll offsets, and reply work while requiring a new process-local owner session. The container is destroyed afterward.
+The harness starts a digest-pinned PostgreSQL 18 plus pgvector container on a random loopback port, provisions non-login role groups, applies immutable migrations through the CLI, and verifies append, audit, idempotency, leased conversation and delivery work, atomic completion, mutation denial, role boundaries, and stop/rebuild MVP journeys. Those journeys retain canonical conversation/model provenance, memory corrections and content-deletion evidence, delivery receipts, Telegram pairing/revocation authority, normalized intake receipts, poll offsets, and reply work while requiring a new process-local owner session. The container is destroyed afterward.
 
 `MELLOA_POSTGRES_IMAGE` and `MELLOA_RESTIC_IMAGE` exist only for an operator to select a preloaded image reference when a daemon cannot reach the public registry. CI and the documented default remain digest-pinned. Any override must resolve to the reviewed digest and must be recorded with the test evidence.
 
