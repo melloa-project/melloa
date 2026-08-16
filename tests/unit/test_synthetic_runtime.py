@@ -213,8 +213,10 @@ def test_synthetic_runtime_delivers_canonical_output_without_channel_network(
         _BOOTSTRAP_TOKEN,
         clock=lambda: fixed_time,
         id_factory=id_factory,
+        telegram_retention_worker_interval=0.01,
     )
     with TestClient(runtime.app, base_url="https://testserver") as client:
+        _wait_for_telegram_retention_sweep(runtime)
         login = client.post(
             "/api/v1/auth/session",
             json={"credential": _BOOTSTRAP_TOKEN},
@@ -272,6 +274,13 @@ def test_synthetic_runtime_delivers_canonical_output_without_channel_network(
             if component["component_id"] == "worker.synthetic-delivery"
         )
         assert delivery_worker["state"] == "healthy"
+        retention_worker = next(
+            component
+            for component in health["components"]
+            if component["component_id"] == "worker.synthetic-retention"
+        )
+        assert retention_worker["state"] == "healthy"
+        assert retention_worker["required"] is False
 
 
 def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
@@ -298,6 +307,7 @@ def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
         clock=lambda: fixed_time,
         id_factory=id_factory,
         telegram_worker_interval=0.01,
+        telegram_retention_worker_interval=0.01,
     )
     start = TelegramInboundUpdate(
         update_id=50,
@@ -456,6 +466,14 @@ def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
         )
         assert telegram_worker["state"] == "healthy"
         assert telegram_worker["required"] is False
+        retention_worker = next(
+            component
+            for component in health["components"]
+            if component["component_id"] == "worker.synthetic-retention"
+        )
+        assert retention_worker["state"] == "disabled"
+        assert retention_worker["required"] is False
+        assert runtime.telegram_attachment_backend.sweeps == []
 
 
 def _wait_for_telegram_revision(runtime, revision: int) -> None:
@@ -467,3 +485,11 @@ def _wait_for_telegram_revision(runtime, revision: int) -> None:
             return
         time.sleep(0.01)
     raise AssertionError("synthetic Telegram worker did not advance its cursor")
+
+
+def _wait_for_telegram_retention_sweep(runtime) -> None:
+    for _ in range(100):
+        if runtime.telegram_attachment_backend.sweeps:
+            return
+        time.sleep(0.01)
+    raise AssertionError("synthetic Telegram retention worker did not run")

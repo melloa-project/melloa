@@ -46,6 +46,13 @@ from melloa.ports.telegram import (
 )
 
 
+def _validate_retention_sweep(as_of: datetime, limit: int) -> None:
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("Telegram quarantine sweep time must be timezone-aware")
+    if not 1 <= limit <= 1_000:
+        raise ValueError("Telegram quarantine sweep limit must be between 1 and 1000")
+
+
 class DeterministicTelegramPairingCodeIssuer:
     """Derive replay-stable synthetic codes without credentials or stored plaintext."""
 
@@ -109,6 +116,7 @@ class RejectingTelegramAttachmentBackend:
             tuple[QualifiedName, int], tuple[TelegramAttachmentReceipt, ...]
         ] = {}
         self.requests: list[TelegramAttachmentIntakeRequest] = []
+        self.sweeps: list[tuple[datetime, int]] = []
 
     @property
     def owner_id(self) -> RecordId:
@@ -143,6 +151,17 @@ class RejectingTelegramAttachmentBackend:
             validate_telegram_attachment_receipts(request, receipts)
             self._receipts_by_update[key] = receipts
             return receipts
+
+    def sweep_expired(
+        self,
+        *,
+        as_of: datetime,
+        limit: int = 100,
+    ) -> tuple[RetentionDeletionReceipt, ...]:
+        _validate_retention_sweep(as_of, limit)
+        with self._lock:
+            self.sweeps.append((as_of, limit))
+        return ()
 
 
 @dataclass(frozen=True)
@@ -246,10 +265,7 @@ class InMemoryTelegramAttachmentQuarantine:
         as_of: datetime,
         limit: int = 100,
     ) -> tuple[RetentionDeletionReceipt, ...]:
-        if as_of.tzinfo is None or as_of.utcoffset() is None:
-            raise ValueError("Telegram quarantine sweep time must be timezone-aware")
-        if not 1 <= limit <= 1_000:
-            raise ValueError("Telegram quarantine sweep limit must be between 1 and 1000")
+        _validate_retention_sweep(as_of, limit)
         with self._lock:
             due = tuple(
                 sorted(

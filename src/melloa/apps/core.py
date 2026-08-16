@@ -40,11 +40,13 @@ from melloa.application.memory import (
 from melloa.application.operations import OwnerOperationsService
 from melloa.application.status import SystemStatus, read_system_status
 from melloa.application.telegram import (
+    TelegramAttachmentRetentionWorker,
     TelegramIngestionUnavailableError,
     TelegramPairingOwnershipError,
     TelegramPairingService,
     TelegramPairingUnavailableError,
     TelegramPollWorker,
+    TelegramRetentionUnavailableError,
 )
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import JsonObject, QualifiedName, RecordId
@@ -234,6 +236,21 @@ async def _run_telegram_worker(
         await asyncio.sleep(interval)
 
 
+async def _run_telegram_retention_worker(
+    worker: TelegramAttachmentRetentionWorker,
+    *,
+    interval: float,
+) -> None:
+    while True:
+        try:
+            await asyncio.to_thread(worker.sweep_once)
+        except TelegramRetentionUnavailableError:
+            pass
+        except Exception:
+            _LOGGER.exception("Telegram attachment retention worker cycle failed")
+        await asyncio.sleep(interval)
+
+
 def _configured_sessions(request: Request) -> OwnerSessionManager:
     owner_sessions: OwnerSessionManager | None = request.app.state.owner_sessions
     if owner_sessions is None:
@@ -344,6 +361,7 @@ def create_app(
     delivery_service: DeliveryService | None = None,
     telegram_worker: TelegramPollWorker | None = None,
     telegram_pairing_service: TelegramPairingService | None = None,
+    telegram_retention_worker: TelegramAttachmentRetentionWorker | None = None,
     *,
     secure_session_cookie: bool = True,
     run_conversation_worker: bool = False,
@@ -352,6 +370,8 @@ def create_app(
     delivery_worker_interval: float = 1.0,
     run_telegram_worker: bool = False,
     telegram_worker_interval: float = 1.0,
+    run_telegram_retention_worker: bool = False,
+    telegram_retention_worker_interval: float = 60.0,
 ) -> FastAPI:
     if conversation_worker_interval <= 0:
         raise ValueError("conversation worker interval must be positive")
@@ -359,12 +379,16 @@ def create_app(
         raise ValueError("delivery worker interval must be positive")
     if telegram_worker_interval <= 0:
         raise ValueError("Telegram worker interval must be positive")
+    if telegram_retention_worker_interval <= 0:
+        raise ValueError("Telegram retention worker interval must be positive")
     if run_conversation_worker and conversation_service is None:
         raise ValueError("conversation worker requires a configured conversation service")
     if run_delivery_worker and delivery_service is None:
         raise ValueError("delivery worker requires a configured delivery service")
     if run_telegram_worker and telegram_worker is None:
         raise ValueError("Telegram worker requires a configured poll worker")
+    if run_telegram_retention_worker and telegram_retention_worker is None:
+        raise ValueError("Telegram retention worker requires a configured retention worker")
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -396,6 +420,15 @@ def create_app(
                     )
                 )
             )
+        if run_telegram_retention_worker and telegram_retention_worker is not None:
+            worker_tasks.append(
+                asyncio.create_task(
+                    _run_telegram_retention_worker(
+                        telegram_retention_worker,
+                        interval=telegram_retention_worker_interval,
+                    )
+                )
+            )
         try:
             yield
         finally:
@@ -421,6 +454,7 @@ def create_app(
     app.state.delivery_service = delivery_service
     app.state.telegram_worker = telegram_worker
     app.state.telegram_pairing_service = telegram_pairing_service
+    app.state.telegram_retention_worker = telegram_retention_worker
 
     @app.middleware("http")
     async def security_headers(

@@ -27,6 +27,7 @@ from melloa.domain.conversation import (
     MessagePart,
 )
 from melloa.domain.guardian import GuardianMode
+from melloa.domain.retention import RetentionDeletionReceipt
 from melloa.domain.telegram import (
     TelegramAttachmentDisposition,
     TelegramAttachmentIntakeRequest,
@@ -51,6 +52,7 @@ from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.telegram import (
     TelegramAttachmentBackend,
     TelegramAttachmentConflictError,
+    TelegramAttachmentRetentionBackend,
     TelegramPairingChallenge,
     TelegramPairingChallengePublisher,
     TelegramPairingCodeIssuer,
@@ -66,6 +68,10 @@ from melloa.ports.telegram import (
 
 class TelegramIngestionUnavailableError(RuntimeError):
     """Guardian state forbids Telegram polling or canonical writes."""
+
+
+class TelegramRetentionUnavailableError(RuntimeError):
+    """Guardian state forbids destructive quarantine expiry."""
 
 
 class TelegramIngestionOwnershipError(PermissionError):
@@ -769,6 +775,135 @@ class TelegramIngestionService:
         }:
             raise TelegramIngestionUnavailableError(
                 f"Guardian mode does not permit Telegram ingestion: {mode.value}"
+            )
+        return mode
+
+
+@dataclass(frozen=True)
+class TelegramAttachmentRetentionCycle:
+    swept_at: datetime
+    deletion_receipts: tuple[RetentionDeletionReceipt, ...]
+
+
+class TelegramAttachmentRetentionWorker:
+    """Delete one bounded batch of due quarantine blobs under Guardian control."""
+
+    def __init__(
+        self,
+        *,
+        backend: TelegramAttachmentRetentionBackend,
+        guardian_reader: GuardianStatusReader,
+        batch_limit: int = 100,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
+        if not 1 <= batch_limit <= 1_000:
+            raise ValueError("Telegram retention batch limit must be between 1 and 1000")
+        self._backend = backend
+        self._guardian_reader = guardian_reader
+        self._batch_limit = batch_limit
+        self._clock = clock
+        self._health_lock = RLock()
+        self._cycles = 0
+        self._deletions = 0
+        self._last_sweep_at: datetime | None = None
+        self._last_success_at: datetime | None = None
+        self._last_error_code: QualifiedName | None = None
+
+    def sweep_once(self) -> TelegramAttachmentRetentionCycle:
+        self._require_sweep_mode()
+        swept_at = self._clock()
+        try:
+            receipts = self._backend.sweep_expired(
+                as_of=swept_at,
+                limit=self._batch_limit,
+            )
+            self._validate_receipts(receipts)
+        except Exception:
+            self._record_failure(swept_at)
+            raise
+        self._record_success(swept_at, len(receipts))
+        return TelegramAttachmentRetentionCycle(
+            swept_at=swept_at,
+            deletion_receipts=receipts,
+        )
+
+    def health(self) -> JsonObject:
+        guardian_mode = self._guardian_reader.read_status().payload.mode
+        with self._health_lock:
+            cycles = self._cycles
+            deletions = self._deletions
+            last_sweep_at = self._last_sweep_at
+            last_success_at = self._last_success_at
+            last_error_code = self._last_error_code
+        if guardian_mode in {
+            GuardianMode.NO_ACTIONS,
+            GuardianMode.READ_ONLY,
+            GuardianMode.STOPPED,
+            GuardianMode.RECOVERY,
+        }:
+            worker_state = "disabled"
+            reason_code = f"guardian.{guardian_mode.value.replace('-', '_')}"
+        elif last_error_code is not None:
+            worker_state = "degraded"
+            reason_code = last_error_code
+        else:
+            worker_state = "healthy"
+            reason_code = "retention.worker.ready"
+        return {
+            "state": worker_state,
+            "reason_code": reason_code,
+            "batch_limit": self._batch_limit,
+            "cycles": cycles,
+            "deletions": deletions,
+            "last_sweep_at": None if last_sweep_at is None else last_sweep_at.isoformat(),
+            "last_success_at": (
+                None if last_success_at is None else last_success_at.isoformat()
+            ),
+            "last_error_code": last_error_code,
+        }
+
+    def _validate_receipts(
+        self,
+        receipts: tuple[RetentionDeletionReceipt, ...],
+    ) -> None:
+        if len(receipts) > self._batch_limit:
+            raise TelegramAttachmentConflictError(
+                "Telegram retention backend exceeded the requested batch limit"
+            )
+        receipt_ids = tuple(receipt.receipt_id for receipt in receipts)
+        if len(set(receipt_ids)) != len(receipt_ids):
+            raise TelegramAttachmentConflictError(
+                "Telegram retention backend returned duplicate deletion receipts"
+            )
+        if any(receipt.owner_id != self._backend.owner_id for receipt in receipts):
+            raise TelegramAttachmentConflictError(
+                "Telegram retention backend returned another owner's deletion receipt"
+            )
+
+    def _record_success(self, swept_at: datetime, deletions: int) -> None:
+        with self._health_lock:
+            self._cycles += 1
+            self._deletions += deletions
+            self._last_sweep_at = swept_at
+            self._last_success_at = swept_at
+            self._last_error_code = None
+
+    def _record_failure(self, swept_at: datetime) -> None:
+        with self._health_lock:
+            self._cycles += 1
+            self._last_sweep_at = swept_at
+            self._last_error_code = "retention.worker.cycle_failed"
+
+    def _require_sweep_mode(self) -> GuardianMode:
+        mode = self._guardian_reader.read_status().payload.mode
+        if mode in {
+            GuardianMode.NO_ACTIONS,
+            GuardianMode.READ_ONLY,
+            GuardianMode.STOPPED,
+            GuardianMode.RECOVERY,
+        }:
+            raise TelegramRetentionUnavailableError(
+                f"Guardian mode does not permit quarantine expiry: {mode.value}"
             )
         return mode
 

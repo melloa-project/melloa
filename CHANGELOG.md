@@ -32,6 +32,7 @@
 - Added an immutable Telegram attachment-intake contract plus no-network rejecting and bounded in-memory quarantine backends with pre-fetch metadata policy, hard byte quotas, content-addressed receipts, and exact replay.
 - Integrated reject-or-quarantine attachment intake after exact Telegram pairing validation, with ordered outcome checks before canonical mutation, Melloa-owned quarantine references, attachment-only reply work, no-refetch crash recovery, and model-input isolation from attachment bytes and metadata.
 - Added owner-bound synthetic quarantine expiry with a one-hour-to-seven-day policy bound, newest-reference extension for deduplicated blobs, deterministic bounded sweeps, quota reclamation, and immutable content-free deletion tombstones.
+- Wired quarantine expiry into a separately bounded no-network lifespan worker that permits local deletion only in Guardian `normal`/`offline`, validates backend receipt bounds and owner scope, and reports redacted optional health.
 
 ## M0 implementation — 16 August 2026
 

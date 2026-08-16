@@ -31,6 +31,7 @@ from melloa.application.operations import OwnerOperationsService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.application.routing import DeterministicModelRouter, ModelRouteBinding
 from melloa.application.telegram import (
+    TelegramAttachmentRetentionWorker,
     TelegramIngestionService,
     TelegramPairingService,
     TelegramPollWorker,
@@ -68,6 +69,7 @@ class SyntheticRuntime:
     telegram_pairing_service: TelegramPairingService
     telegram_challenge_publisher: FakeTelegramPairingChallengePublisher
     telegram_attachment_backend: RejectingTelegramAttachmentBackend
+    telegram_retention_worker: TelegramAttachmentRetentionWorker
     telegram_worker: TelegramPollWorker
 
 
@@ -78,6 +80,7 @@ def build_synthetic_runtime(
     clock: Callable[[], datetime] = utc_now,
     id_factory: Callable[[str], str] = new_record_id,
     telegram_worker_interval: float = 1.0,
+    telegram_retention_worker_interval: float = 60.0,
 ) -> SyntheticRuntime:
     """Compose an in-memory runtime that performs no provider or channel network calls."""
 
@@ -201,6 +204,11 @@ def build_synthetic_runtime(
         guardian_reader=guardian_reader,
         timeout_seconds=1,
         batch_limit=25,
+        clock=clock,
+    )
+    telegram_retention_worker = TelegramAttachmentRetentionWorker(
+        backend=telegram_attachment_backend,
+        guardian_reader=guardian_reader,
         clock=clock,
     )
     memory = MemoryService(
@@ -329,7 +337,13 @@ def build_synthetic_runtime(
                     version="0.1.0-synthetic",
                 ),
             ),
-            component_readers=(lambda: _synthetic_telegram_component(telegram_worker, clock),),
+            component_readers=(
+                lambda: _synthetic_telegram_component(telegram_worker, clock),
+                lambda: _synthetic_retention_component(
+                    telegram_retention_worker,
+                    clock,
+                ),
+            ),
             media_sources=(
                 MediaSourceStatus(
                     capability_id="camera.synthetic-disabled",
@@ -354,10 +368,13 @@ def build_synthetic_runtime(
             delivery,
             telegram_worker,
             telegram_pairing_service,
+            telegram_retention_worker,
             run_conversation_worker=True,
             run_delivery_worker=True,
             run_telegram_worker=True,
             telegram_worker_interval=telegram_worker_interval,
+            run_telegram_retention_worker=True,
+            telegram_retention_worker_interval=telegram_retention_worker_interval,
         ),
         owner_id=SYNTHETIC_OWNER_ID,
         intelligence_id=SYNTHETIC_INTELLIGENCE_ID,
@@ -368,6 +385,7 @@ def build_synthetic_runtime(
         telegram_pairing_service=telegram_pairing_service,
         telegram_challenge_publisher=telegram_challenge_publisher,
         telegram_attachment_backend=telegram_attachment_backend,
+        telegram_retention_worker=telegram_retention_worker,
         telegram_worker=telegram_worker,
     )
 
@@ -389,6 +407,31 @@ def _synthetic_telegram_component(
         summary = "Optional synthetic Telegram polling reports a redacted cycle failure."
     return ComponentHealth(
         component_id="worker.synthetic-telegram",
+        category=HealthCategory.WORKER,
+        state=health_state,
+        required=False,
+        observed_at=clock(),
+        summary=summary,
+    )
+
+
+def _synthetic_retention_component(
+    worker: TelegramAttachmentRetentionWorker,
+    clock: Callable[[], datetime],
+) -> ComponentHealth:
+    health = worker.health()
+    state = health["state"]
+    if state == "healthy":
+        health_state = HealthState.HEALTHY
+        summary = "Bounded local quarantine expiry is healthy and performs no network calls."
+    elif state == "disabled":
+        health_state = HealthState.DISABLED
+        summary = "Quarantine expiry is suspended by Guardian mode."
+    else:
+        health_state = HealthState.DEGRADED
+        summary = "Quarantine expiry reports a redacted cycle failure."
+    return ComponentHealth(
+        component_id="worker.synthetic-retention",
         category=HealthCategory.WORKER,
         state=health_state,
         required=False,

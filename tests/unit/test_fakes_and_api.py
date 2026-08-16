@@ -94,6 +94,10 @@ def test_private_api_rejects_invalid_background_worker_configuration(fixed_time)
         create_app(guardian_reader(fixed_time), telegram_worker_interval=0)
     with pytest.raises(ValueError, match="configured poll worker"):
         create_app(guardian_reader(fixed_time), run_telegram_worker=True)
+    with pytest.raises(ValueError, match="retention worker interval"):
+        create_app(guardian_reader(fixed_time), telegram_retention_worker_interval=0)
+    with pytest.raises(ValueError, match="configured retention worker"):
+        create_app(guardian_reader(fixed_time), run_telegram_retention_worker=True)
 
 
 def test_readiness_is_unavailable_when_guardian_stops_runtime(fixed_time) -> None:
