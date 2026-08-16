@@ -1,0 +1,65 @@
+{
+  "$id": "https://schemas.melloa.dev/v1/canonical-export-validation-report.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "errors": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "export_id": {
+      "anyOf": [
+        {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Export Id"
+    },
+    "files_checked": {
+      "minimum": 0,
+      "title": "Files Checked",
+      "type": "integer"
+    },
+    "record_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": "Record Counts",
+      "type": "object"
+    },
+    "valid": {
+      "title": "Valid",
+      "type": "boolean"
+    },
+    "validated_at": {
+      "format": "date-time",
+      "title": "Validated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "validated_at",
+    "valid",
+    "files_checked"
+  ],
+  "title": "CanonicalExportValidationReport",
+  "type": "object"
+}

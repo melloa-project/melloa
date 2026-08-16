@@ -25,6 +25,7 @@ from melloa.adapters.postgres.migrations import (
     migration_status,
 )
 from melloa.adapters.telegram import TelegramBotApiConfig
+from melloa.application.exports import ExportBundleError, OwnerExportService, validate_bundle
 from melloa.apps.core import create_app
 from melloa.apps.mvp import build_mvp_runtime
 from melloa.apps.postgres_mvp import (
@@ -306,6 +307,82 @@ def migrate(args: argparse.Namespace) -> int:
     return 0 if args.migration_command == "apply" or not status_result.pending else 1
 
 
+def export_mvp(args: argparse.Namespace) -> int:
+    bootstrap_token = _read_owner_credential_file(args.owner_credential_file)
+    with ExitStack() as resources:
+        try:
+            guardian_reader = _guardian_reader(args)
+            guardian_reader.read_status()
+            durable_stores = None
+            database_dsn_file = getattr(args, "database_dsn_file", None)
+            if database_dsn_file is not None:
+                dsn = validate_private_database_dsn(_read_secret_file(database_dsn_file))
+                connections = tuple(
+                    resources.enter_context(
+                        psycopg.connect(
+                            dsn,
+                            autocommit=True,
+                            connect_timeout=5,
+                            application_name=f"melloa-export-{store_name}",
+                            options=(
+                                "-c statement_timeout=5000 -c lock_timeout=5000 "
+                                "-c idle_in_transaction_session_timeout=10000"
+                            ),
+                        )
+                    )
+                    for store_name in ("conversation", "memory", "delivery", "telegram")
+                )
+                durable_stores = build_postgres_mvp_stores(
+                    *connections,
+                    telegram_adapter_id=SYNTHETIC_TELEGRAM_ADAPTER_ID,
+                )
+            runtime = build_mvp_runtime(
+                guardian_reader,
+                bootstrap_token,
+                durable_stores=durable_stores,
+            )
+            manifest = OwnerExportService(
+                owner_id=runtime.owner_id,
+                intelligence_id=runtime.intelligence_id,
+                conversation=runtime.conversation_service,
+                memory=runtime.memory_service,
+                memory_repository=runtime.memory_store,
+                source_runtime=f"melloa-mvp/{runtime.persistence.mode}",
+            ).write_bundle(args.output_dir, schema_root=ROOT / "schemas")
+            validation = validate_bundle(args.output_dir)
+        except PostgresMvpBootstrapError:
+            _exit_error(
+                "MVP database bootstrap rejected incompatible canonical state; "
+                "connection details were not logged"
+            )
+        except psycopg.Error:
+            _exit_error(
+                "MVP database unavailable or incompatible; connection details were not logged"
+            )
+        except (ExportBundleError, OSError, ValueError) as error:
+            _exit_error(f"MVP export rejected: {error}")
+    print(
+        json.dumps(
+            {
+                "export_id": manifest.export_id,
+                "files": len(manifest.files),
+                "record_counts": validation.record_counts,
+                "target": str(args.output_dir),
+                "valid": validation.valid,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0 if validation.valid else 1
+
+
+def import_validate(args: argparse.Namespace) -> int:
+    report = validate_bundle(args.bundle_dir)
+    print(report.model_dump_json(indent=2))
+    return 0 if report.valid else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="melloa")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -421,6 +498,42 @@ def build_parser() -> argparse.ArgumentParser:
         required="MELLOA_DATABASE_DSN_FILE" not in os.environ,
     )
     migrate_parser.set_defaults(handler=migrate)
+
+    export_parser = subparsers.add_parser("export-mvp")
+    export_parser.add_argument(
+        "--status",
+        dest="guardian_status",
+        type=Path,
+        required=True,
+    )
+    export_parser.add_argument(
+        "--public-key",
+        dest="guardian_public_key",
+        type=Path,
+        required=True,
+    )
+    export_parser.add_argument(
+        "--owner-credential-file",
+        type=Path,
+        default=Path(os.environ.get("MELLOA_OWNER_CREDENTIAL_FILE", "")),
+        required="MELLOA_OWNER_CREDENTIAL_FILE" not in os.environ,
+    )
+    export_database_dsn_path = os.environ.get("MELLOA_MVP_DATABASE_DSN_FILE")
+    export_parser.add_argument(
+        "--database-dsn-file",
+        type=Path,
+        default=None if export_database_dsn_path is None else Path(export_database_dsn_path),
+        help=(
+            "Optional mode-0600 core-role DSN file for exporting the partial "
+            "PostgreSQL MVP stores."
+        ),
+    )
+    export_parser.add_argument("--output-dir", type=Path, required=True)
+    export_parser.set_defaults(handler=export_mvp)
+
+    import_parser = subparsers.add_parser("import-validate")
+    import_parser.add_argument("--bundle-dir", type=Path, required=True)
+    import_parser.set_defaults(handler=import_validate)
     return parser
 
 

@@ -1,0 +1,190 @@
+{
+  "$defs": {
+    "ExportFileEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ExportFileKind"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._/-]+$",
+          "title": "Path",
+          "type": "string"
+        },
+        "record_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Record Count"
+        },
+        "record_type": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 2,
+              "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Record Type"
+        },
+        "schema_path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._/-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema Path"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "content_hash",
+        "size_bytes"
+      ],
+      "title": "ExportFileEntry",
+      "type": "object"
+    },
+    "ExportFileKind": {
+      "enum": [
+        "data",
+        "schema"
+      ],
+      "title": "ExportFileKind",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/canonical-export-manifest.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "encrypted": {
+      "title": "Encrypted",
+      "type": "boolean"
+    },
+    "export_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Export Id",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ExportFileEntry"
+      },
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "format_id": {
+      "default": "melloa.canonical-owner-export",
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Format Id",
+      "type": "string"
+    },
+    "format_version": {
+      "default": "1.0.0",
+      "maxLength": 64,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$",
+      "title": "Format Version",
+      "type": "string"
+    },
+    "includes_blobs": {
+      "title": "Includes Blobs",
+      "type": "boolean"
+    },
+    "includes_sql_snapshot": {
+      "title": "Includes Sql Snapshot",
+      "type": "boolean"
+    },
+    "intelligence_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Intelligence Id",
+      "type": "string"
+    },
+    "limitations": {
+      "default": [],
+      "items": {
+        "maxLength": 128,
+        "minLength": 2,
+        "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "source_runtime": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Source Runtime",
+      "type": "string"
+    }
+  },
+  "required": [
+    "export_id",
+    "owner_id",
+    "intelligence_id",
+    "created_at",
+    "source_runtime",
+    "encrypted",
+    "includes_sql_snapshot",
+    "includes_blobs",
+    "files"
+  ],
+  "title": "CanonicalExportManifest",
+  "type": "object"
+}

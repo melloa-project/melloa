@@ -128,6 +128,9 @@ class SyntheticRuntime:
     telegram_delivery_adapter: ClientAdapter | None
     telegram_reply_dispatcher: TelegramReplyDispatcher | None
     delivery_store: DeliveryStore
+    conversation_service: ConversationService
+    memory_service: MemoryService
+    memory_store: MemoryStore
     retention_service: OwnerRetentionService
     model_route_ids: tuple[QualifiedName, ...]
     persistence: RuntimePersistenceStatus
@@ -547,6 +550,9 @@ def build_synthetic_runtime(
         telegram_delivery_adapter=telegram_delivery_adapter,
         telegram_reply_dispatcher=telegram_reply_dispatcher,
         delivery_store=delivery_store,
+        conversation_service=conversation,
+        memory_service=memory,
+        memory_store=memory_store,
         retention_service=retention,
         model_route_ids=tuple(
             binding.route.route_id

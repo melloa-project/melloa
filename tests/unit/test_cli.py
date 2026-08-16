@@ -688,6 +688,104 @@ def test_parser_exposes_telegram_bot_api_configuration(monkeypatch) -> None:
     assert arguments.telegram_api_base_url == "http://127.0.0.1:8081"
 
 
+def test_export_mvp_writes_validated_bundle_without_printing_owner_credential(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    credential_file = tmp_path / "owner-credential"
+    bootstrap_token = "synthetic-owner-bootstrap-token-value-0001"
+    credential_file.write_text(bootstrap_token, encoding="utf-8")
+    credential_file.chmod(0o600)
+    output_dir = tmp_path / "bundle"
+    captured = {}
+    runtime = argparse.Namespace(
+        owner_id="owner_00000000000000000000000000000001",
+        intelligence_id="intelligence_00000000000000000000000000000001",
+        conversation_service=object(),
+        memory_service=object(),
+        memory_store=object(),
+        persistence=RuntimePersistenceStatus(
+            mode="process-only-preview",
+            durable_state=(),
+            ephemeral_state=("authentication sessions",),
+        ),
+    )
+
+    class GuardianReader:
+        def read_status(self):
+            captured["guardian_verified"] = True
+            return object()
+
+    class ExportService:
+        def __init__(self, **kwargs):
+            captured["service_kwargs"] = kwargs
+
+        def write_bundle(self, output, *, schema_root):
+            captured["output"] = output
+            captured["schema_root"] = schema_root
+            return argparse.Namespace(
+                export_id="export_00000000000000000000000000000001",
+                files=(object(), object()),
+            )
+
+    monkeypatch.setattr(cli, "_guardian_reader", lambda _args: GuardianReader())
+    monkeypatch.setattr(cli, "build_mvp_runtime", lambda reader, token, **_kwargs: runtime)
+    monkeypatch.setattr(cli, "OwnerExportService", ExportService)
+    monkeypatch.setattr(
+        cli,
+        "validate_bundle",
+        lambda output: argparse.Namespace(
+            valid=True,
+            record_counts={"assertions/inspections.jsonl": 1},
+        ),
+    )
+    args = argparse.Namespace(
+        guardian_status=tmp_path / "status.json",
+        guardian_public_key=tmp_path / "public.pem",
+        owner_credential_file=credential_file,
+        database_dsn_file=None,
+        output_dir=output_dir,
+    )
+
+    assert cli.export_mvp(args) == 0
+    assert captured["guardian_verified"] is True
+    assert captured["service_kwargs"]["memory_repository"] is runtime.memory_store
+    assert captured["output"] == output_dir
+    output = capsys.readouterr().out
+    assert "export_00000000000000000000000000000001" in output
+    assert "assertions/inspections.jsonl" in output
+    assert bootstrap_token not in output
+
+
+def test_parser_exposes_mvp_export_and_import_validation() -> None:
+    export_args = cli.build_parser().parse_args(
+        [
+            "export-mvp",
+            "--status",
+            "/run/guardian/status.json",
+            "--public-key",
+            "/etc/guardian/public.pem",
+            "--owner-credential-file",
+            "/run/melloa/owner-credential",
+            "--output-dir",
+            "/run/melloa/export-20260816",
+        ]
+    )
+    assert export_args.handler is cli.export_mvp
+    assert export_args.output_dir == Path("/run/melloa/export-20260816")
+
+    import_args = cli.build_parser().parse_args(
+        [
+            "import-validate",
+            "--bundle-dir",
+            "/run/melloa/export-20260816",
+        ]
+    )
+    assert import_args.handler is cli.import_validate
+    assert import_args.bundle_dir == Path("/run/melloa/export-20260816")
+
+
 def test_parser_accepts_path_only_telegram_environment(monkeypatch) -> None:
     monkeypatch.setenv(
         "MELLOA_TELEGRAM_BOT_TOKEN_FILE",

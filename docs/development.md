@@ -61,3 +61,21 @@ Run generation only when intentionally changing a model or adding a migration. C
 Use [Run the current MVP](run-current-mvp.md) as the sole setup and smoke guide. It includes disposable Guardian initialization, mode-`0600` owner authentication, optional Ollama/Qwen, isolated experimental Codex CLI, and Telegram Bot API configuration, exact core and console commands, expected URLs and visual states, limitations, cleanup, and troubleshooting.
 
 The ordinary `melloa serve` command remains the fail-closed M0 status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional partial PostgreSQL restart durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
+
+## Validate an owner export
+
+`melloa export-mvp` writes the current MVP's canonical conversation and memory-inspection records to a JSONL bundle with copied JSON Schemas, `manifest.json`, and `checksums.sha256`. It requires the same signed Guardian status paths and mode-`0600` owner credential file as the MVP runtime, and accepts the optional core-role PostgreSQL DSN file when exporting durable preview stores.
+
+```bash
+uv run melloa export-mvp \
+  --status "$MELLOA_MVP_STATE/guardian-status.json" \
+  --public-key "$MELLOA_MVP_STATE/guardian-public.pem" \
+  --owner-credential-file "$MELLOA_MVP_STATE/owner-credential" \
+  "${database_args[@]}" \
+  --output-dir "$MELLOA_MVP_STATE/export-test"
+
+uv run melloa import-validate \
+  --bundle-dir "$MELLOA_MVP_STATE/export-test"
+```
+
+The import command is a dry-run validator only. It checks checksums, schema readability, and basic references; it does not mutate a database or prove encrypted backup/restore.

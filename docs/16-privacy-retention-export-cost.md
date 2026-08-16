@@ -126,6 +126,8 @@ Requirements:
 
 Export is a recovery and ownership feature, not a formatted report alone.
 
+The current M1 preview implements the first validated slice of this path for canonical owner records: `melloa export-mvp` writes a manifest, copied JSON Schemas, JSONL conversation and memory-inspection records, and `checksums.sha256`; `melloa import-validate` verifies checksums, schema readability, and basic referential integrity without mutating a database. The manifest truthfully marks the bundle as unencrypted and excludes blobs and logical SQL snapshots. Encrypted packaging, blob export, full database snapshots, signatures, and a real import/migration executor remain V1 work rather than implied by this preview.
+
 ## Cost model assumptions
 
 All figures are planning ranges in **2026 pounds sterling**, excluding developer labour, taxes/import differences, and internet already purchased. Model/provider pricing changes quickly and must be rechecked. OpenAI’s current public API pricing illustrates the large spread between small and frontier model tiers and the savings available for batch processing; it should not be treated as a commitment to one provider. [S35](research/primary-sources.md#S35)

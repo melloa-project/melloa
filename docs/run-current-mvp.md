@@ -495,6 +495,50 @@ This check applies only when `database_args` contains `--database-dsn-file`:
 
 If canonical records disappear, stop using the preview and check that the restart command still contains the same core DSN file. PostgreSQL durability without a tested backup does not satisfy recovery.
 
+## 8. Export and validate owner data
+
+The current MVP includes an offline canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity.
+
+Keep using the disposable state directory and run:
+
+```bash
+export MELLOA_MVP_EXPORT_DIR="$MELLOA_MVP_STATE/export-$(date -u +%Y%m%dT%H%M%SZ)"
+uv run melloa export-mvp \
+  --status "$MELLOA_MVP_STATE/guardian-status.json" \
+  --public-key "$MELLOA_MVP_STATE/guardian-public.pem" \
+  --owner-credential-file "$MELLOA_MVP_STATE/owner-credential" \
+  "${database_args[@]}" \
+  --output-dir "$MELLOA_MVP_EXPORT_DIR"
+
+uv run melloa import-validate \
+  --bundle-dir "$MELLOA_MVP_EXPORT_DIR"
+```
+
+The first command verifies the signed Guardian projection, reads the mode-`0600` owner credential file without printing it, exports the process-local preview state or the configured PostgreSQL MVP stores, and refuses to write into a non-empty target directory. The second command is validation-only; it does not mutate a database or import records yet.
+
+Expected bundle files include:
+
+```text
+manifest.json
+checksums.sha256
+schemas/owner-export/manifest-v1.json
+schemas/owner-export/validation-report-v1.json
+schemas/conversation/thread-v1.json
+schemas/conversation/message-v1.json
+schemas/conversation/turn-v1.json
+schemas/conversation/turn-inspection-v1.json
+schemas/conversation/processing-status-v1.json
+schemas/memory/inspection-v1.json
+conversations/threads.jsonl
+conversations/messages.jsonl
+conversations/turns.jsonl
+conversations/turn-inspections.jsonl
+conversations/processing.jsonl
+assertions/inspections.jsonl
+```
+
+This is not encrypted packaging, a logical SQL snapshot, blob export, or production backup. `manifest.json` states `encrypted: false`, `includes_sql_snapshot: false`, and `includes_blobs: false`; those limitations are deliberate until the full backup/export milestone lands. Do not place personal data in this preview export unless the target directory is protected by the owner.
+
 ### Expected route outcomes
 
 | Condition | Reply route | What the inspector shows |
@@ -505,7 +549,7 @@ If canonical records disappear, stop using the preview and check that the restar
 | Every configured eligible route is absent, times out, or returns invalid output | `model.fake.deterministic` | unsuccessful configured attempts followed by the deterministic device route; reply text begins **Synthetic local reply** |
 | Both route-config arrays are empty | `model.fake.deterministic` | only the clearly labelled synthetic fixture is available |
 
-## 8. Pair and use Telegram
+## 9. Pair and use Telegram
 
 This section applies only when the real Bot API argument and Guardian `normal` mode are active.
 
