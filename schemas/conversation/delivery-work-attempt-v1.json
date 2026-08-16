@@ -1,0 +1,296 @@
+{
+  "$defs": {
+    "DeliveryAttempt": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_metadata": {
+          "additionalProperties": true,
+          "title": "Adapter Metadata",
+          "type": "object"
+        },
+        "attempt": {
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "attempted_at": {
+          "format": "date-time",
+          "title": "Attempted At",
+          "type": "string"
+        },
+        "client_adapter": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Client Adapter",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "delivery_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Delivery Id",
+          "type": "string"
+        },
+        "destination_ref": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Destination Ref",
+          "type": "string"
+        },
+        "message_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Message Id",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/DeliveryState"
+        }
+      },
+      "required": [
+        "delivery_id",
+        "message_id",
+        "client_adapter",
+        "destination_ref",
+        "attempt",
+        "state",
+        "attempted_at"
+      ],
+      "title": "DeliveryAttempt",
+      "type": "object"
+    },
+    "DeliveryExecutionReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "action_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Action Hash",
+          "type": "string"
+        },
+        "action_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Action Id",
+          "type": "string"
+        },
+        "capability_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Capability Id",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "decision_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "delivery_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Delivery Id",
+          "type": "string"
+        },
+        "executed_at": {
+          "format": "date-time",
+          "title": "Executed At",
+          "type": "string"
+        },
+        "operation": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Operation",
+          "type": "string"
+        },
+        "result_summary": {
+          "additionalProperties": true,
+          "title": "Result Summary",
+          "type": "object"
+        }
+      },
+      "required": [
+        "action_id",
+        "decision_id",
+        "action_hash",
+        "capability_id",
+        "operation",
+        "delivery_id",
+        "executed_at"
+      ],
+      "title": "DeliveryExecutionReceipt",
+      "type": "object"
+    },
+    "DeliveryState": {
+      "enum": [
+        "pending",
+        "sent",
+        "delivered",
+        "failed",
+        "expired"
+      ],
+      "title": "DeliveryState",
+      "type": "string"
+    },
+    "DeliveryWorkOutcome": {
+      "enum": [
+        "succeeded",
+        "retry_scheduled",
+        "dead"
+      ],
+      "title": "DeliveryWorkOutcome",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/delivery-work-attempt.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Action Hash",
+      "type": "string"
+    },
+    "adapter_receipt": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DeliveryAttempt"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "attempt_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "authorization_request_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Authorization Request Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "execution_receipt": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DeliveryExecutionReceipt"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "message_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Message Id",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/DeliveryWorkOutcome"
+    },
+    "policy_decision_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Policy Decision Id",
+      "type": "string"
+    },
+    "retry_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retry At"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "work_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Work Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "work_id",
+    "message_id",
+    "attempt",
+    "authorization_request_id",
+    "policy_decision_id",
+    "action_hash",
+    "outcome",
+    "started_at",
+    "completed_at"
+  ],
+  "title": "DeliveryWorkAttempt",
+  "type": "object"
+}

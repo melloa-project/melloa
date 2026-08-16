@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "personal",
+        "sensitive",
+        "highly_sensitive",
+        "device_only"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "ThreadStatus": {
+      "enum": [
+        "active",
+        "archived",
+        "closed"
+      ],
+      "title": "ThreadStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/conversation-thread.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "intelligence_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Intelligence Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "retention_policy": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Retention Policy",
+      "type": "string"
+    },
+    "sensitivity": {
+      "$ref": "#/$defs/Sensitivity"
+    },
+    "status": {
+      "$ref": "#/$defs/ThreadStatus",
+      "default": "active"
+    },
+    "thread_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Thread Id",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "thread_id",
+    "owner_id",
+    "intelligence_id",
+    "title",
+    "sensitivity",
+    "retention_policy",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "ConversationThread",
+  "type": "object"
+}

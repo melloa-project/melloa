@@ -1,0 +1,2278 @@
+# Master Research Prompt: Design a Long-Lived Personal AI Operating System
+
+# Naming and Agent Identity
+
+Use the following working terminology throughout the design:
+
+* **Melloa** — the overall open-source system, infrastructure, runtime, protocols, memory architecture, capability framework, and deployment environment.
+* **Melli** — the primary persistent personal intelligence instantiated within a Melloa deployment.
+
+These concepts must remain architecturally distinct.
+
+A Melloa installation may eventually host **multiple persistent intelligences or agents**, potentially with different identities, responsibilities, memories, permissions, personalities, and levels of autonomy.
+
+For example:
+
+```text
+Melloa
+├── Melli      Primary personal intelligence
+├── Nova       Possible specialist/research intelligence
+└── Charlie    Possible specialist/operational intelligence
+```
+
+These names are illustrative rather than predefined roles.
+
+Do not prematurely assume a rigid multi-agent architecture merely because multiple identities may exist. Research whether separate persistent agents are actually useful compared with one intelligence using temporary specialist workers.
+
+However, ensure that the architecture does not unnecessarily equate:
+
+```text
+system == agent == model == process
+```
+
+These should be separate concepts.
+
+In particular, investigate the distinction between:
+
+* the Melloa runtime,
+* a persistent intelligence,
+* its identity,
+* its long-term memory,
+* its goals and relationships,
+* temporary agent processes,
+* specialist agents,
+* underlying foundation models,
+* model providers,
+* tools/capabilities.
+
+A persistent intelligence such as Melli should not cease conceptually to exist simply because its underlying model changes from one provider or model version to another.
+
+Treat identity continuity as an architectural question worth exploring.
+
+Long term, it may also be desirable for a persistent intelligence to choose or change its own name rather than having identity permanently dictated by the software.
+
+For now, use **Melloa** and **Melli** as working names throughout the specifications, diagrams, repository examples, and documentation.
+
+Before recommending them as final public names, perform appropriate checks for:
+
+* existing software/projects,
+* GitHub namespace collisions,
+* package registries,
+* domains,
+* search-engine distinctiveness,
+* existing AI products,
+* trademarks and likely brand confusion.
+
+Do not allow naming research to block architectural work.
+
+
+## Your role
+
+Act as a combination of:
+
+* principal distributed-systems architect,
+* AI/agent-systems researcher,
+* security engineer,
+* privacy engineer,
+* SRE / infrastructure engineer,
+* open-source maintainer,
+* developer-experience engineer,
+* hardware/IoT architect,
+* product systems thinker,
+* adversarial design reviewer.
+
+You are designing the foundations of a system intended to evolve continuously for **many years, potentially 6–10+ years**.
+
+Do **not** treat this as a conventional productivity application.
+
+The central thesis is:
+
+> The enduring product is the closed-loop relationship between a human, their goals, observations about their real life, an AI reasoning system, and software/hardware capabilities that the AI can continuously create and modify.
+
+Individual applications, dashboards, automations, interfaces, databases, websites, mobile apps, and other tools should be considered potentially **ephemeral manifestations of that loop**.
+
+The system should be capable of observing, reasoning, acting, learning from outcomes, proposing changes, building tools, deploying them, measuring whether they helped, and iterating.
+
+Your immediate task is **research and architecture**, not implementation.
+
+Do not write production code unless tiny snippets are required to clarify an architectural idea.
+
+---
+
+# 1. Ultimate vision
+
+The primary objective is personal.
+
+Imagine this system operating successfully seven years from now.
+
+Its owner should feel substantially “supercharged” by it.
+
+It should resemble an extraordinarily capable long-term personal assistant or “Jarvis-like” system that:
+
+* understands the owner's long-term objectives,
+* develops a progressively deeper model of their behaviour and environment,
+* processes vastly more information than a human assistant could,
+* notices patterns the owner would otherwise miss,
+* communicates proactively when useful,
+* helps make decisions,
+* creates software or workflows when they would help,
+* modifies those systems over time,
+* evaluates whether its interventions actually worked,
+* and collaborates with the person toward objectives they deliberately choose.
+
+The human ultimately controls the objectives.
+
+Once an objective and its governing policies are defined, however, the AI should be capable of substantial autonomous action rather than requiring approval for every small step.
+
+The long-term aspiration is not merely “an assistant with integrations.”
+
+It is:
+
+> A persistent, continuously improving human–AI system whose capabilities can expand over years.
+
+---
+
+# 2. Secondary vision: reproducible open-source system
+
+Although initially built for one technically sophisticated user, **open-source quality is a first-class requirement from day one**.
+
+This is not primarily because mass adoption is immediately required.
+
+Rather:
+
+* clean open-source architecture improves maintainability,
+* explicit interfaces reduce coupling,
+* documentation forces clarity,
+* reproducible deployments reduce personal operational burden,
+* public-quality engineering discourages hidden assumptions,
+* modularity makes experimentation safer,
+* future contributors should be able to understand the system.
+
+The eventual target user is:
+
+> An engineer comfortable with terminals, Docker, Git, configuration files, API keys, cloud services, and basic systems administration.
+
+Do **not** optimize the initial system for non-technical users.
+
+Do **not** compromise the architecture in an attempt to make onboarding completely frictionless.
+
+It is acceptable—and desirable—to provide a strongly opinionated, blessed deployment path.
+
+One excellent supported setup is preferable to twelve mediocre configurations.
+
+Extensibility should come from clean abstractions, not from making every design decision configurable.
+
+---
+
+# 3. Challenge the premise aggressively
+
+Do not simply elaborate the ideas in this prompt.
+
+You are explicitly expected to disagree with them where appropriate.
+
+For every major assumption:
+
+1. identify the assumption,
+2. determine what evidence would support or undermine it,
+3. research existing approaches,
+4. identify failure modes,
+5. suggest alternatives,
+6. state your recommendation.
+
+If an idea is technically misguided, overengineered, unsafe, unnecessarily expensive, premature, or already solved better elsewhere, say so clearly.
+
+Distinguish between:
+
+* genuinely novel problems,
+* solved infrastructure problems,
+* problems that appear novel but are compositions of existing technologies,
+* areas where bespoke engineering is justified,
+* areas where reinventing the wheel would be harmful.
+
+Optimize for the system still being understandable and maintainable after **years of evolution**.
+
+---
+
+# 4. Research expectations
+
+Conduct extensive contemporary internet research.
+
+Use primary sources wherever practical:
+
+* official documentation,
+* research papers,
+* GitHub repositories,
+* protocol specifications,
+* vendor architecture documentation,
+* hardware documentation,
+* security guidance,
+* pricing pages,
+* credible engineering blogs where primary sources are unavailable.
+
+Verify that information is current at the time of research.
+
+Provide citations/links for important factual claims.
+
+Pay particular attention to technologies that change rapidly:
+
+* agent frameworks,
+* LLM inference,
+* local multimodal models,
+* coding agents,
+* MCP/tool protocols,
+* container runtimes,
+* secret-management approaches,
+* Apple APIs,
+* Telegram APIs,
+* camera hardware,
+* edge inference hardware,
+* cloud pricing,
+* observability stacks,
+* vector/search databases,
+* event-stream technologies.
+
+Do not select technologies because they are fashionable.
+
+Evaluate them against the actual requirements.
+
+---
+
+# 5. Core architectural idea
+
+Explore an architecture containing some version of the following loop:
+
+```text
+Environment
+    ↓
+Sensors / Integrations
+    ↓
+Cheap event detection
+    ↓
+Semantic interpretation
+    ↓
+Event / state representation
+    ↓
+Memory
+    ↓
+Policy + reasoning
+    ↓
+Decision
+    ↓
+Action / communication / software creation
+    ↓
+Deployment
+    ↓
+Observation of consequences
+    ↓
+Evaluation
+    ↓
+Learning / system modification
+    ↺
+```
+
+This is only a hypothesis.
+
+Improve, replace, split, or reject components where warranted.
+
+---
+
+# 6. Initial MVP
+
+The first useful deployment is intentionally narrow.
+
+Assume the first user is the system's creator.
+
+The initial two high-level interfaces are likely:
+
+### A. Camera observation
+
+An always-available camera observing a private room.
+
+The intent is not to stream continuous video to expensive multimodal models.
+
+Investigate a hierarchical perception pipeline such as:
+
+1. local camera capture,
+2. cheap motion / scene-change / object-change detection,
+3. event segmentation,
+4. selective frame capture,
+5. cheap local interpretation where possible,
+6. escalation to stronger multimodal models only when justified,
+7. structured event creation,
+8. storage according to retention/privacy policy.
+
+Example events might include:
+
+* person entered room,
+* person left room,
+* lights changed,
+* person went to bed,
+* person began exercising,
+* desk became occupied,
+* unusual activity occurred.
+
+Treat these as probabilistic interpretations, **not ground truth**.
+
+The system must model uncertainty.
+
+When uncertainty matters, it may ask the human rather than silently inventing an interpretation.
+
+Research:
+
+* camera hardware,
+* camera protocols,
+* Raspberry Pi versus dedicated camera devices,
+* RTSP/WebRTC/etc.,
+* local video processing,
+* scene-change detection,
+* lightweight CV models,
+* multimodal LLMs,
+* inference hardware,
+* retention strategies,
+* bandwidth implications,
+* night vision / low-light considerations,
+* device security,
+* network segmentation.
+
+### B. Telegram communication
+
+Telegram is a candidate initial communication channel because it offers a relatively simple way for the AI and human to communicate remotely.
+
+Research whether it is actually the best first option.
+
+Evaluate:
+
+* Telegram bot APIs,
+* security properties,
+* privacy limitations,
+* polling vs webhook architecture,
+* attachments,
+* voice,
+* images,
+* commands,
+* proactive messages,
+* authentication,
+* alternatives.
+
+Do not assume Telegram must remain the permanent UI.
+
+The communication abstraction should support future clients.
+
+---
+
+# 7. Future capability expansion
+
+The architecture should make it straightforward to add capabilities later without rewriting the core system.
+
+Potential future capability modules include:
+
+* Apple Health / HealthKit data,
+* wearable data,
+* computer activity,
+* browser activity,
+* calendar,
+* email,
+* files,
+* GitHub,
+* financial data,
+* location,
+* additional cameras,
+* environmental sensors,
+* microphone,
+* speakers,
+* smart-home devices,
+* mobile notifications,
+* native iOS app,
+* web dashboards,
+* desktop application,
+* voice conversations,
+* local displays.
+
+Do not assume every capability should exist.
+
+Define a clean capability/plugin model so they can be added independently.
+
+---
+
+# 8. Progressive capability and trust model
+
+One important design principle should be:
+
+> Capabilities are progressively granted rather than universally assumed.
+
+Different users may choose different levels.
+
+For example:
+
+* chat only,
+* chat + memory,
+* health data,
+* computer telemetry,
+* camera,
+* microphone,
+* speaker,
+* cloud APIs,
+* autonomous software deployment,
+* external communication,
+* financial actions.
+
+The system should maintain explicit knowledge of what it can and cannot do.
+
+Permissions should be observable and auditable.
+
+However, avoid producing a system where every action causes an annoying approval dialog.
+
+Distinguish carefully between:
+
+* capability permission,
+* policy,
+* goal,
+* approval,
+* autonomy,
+* risk level.
+
+Develop a coherent model for these concepts.
+
+---
+
+# 9. Autonomy philosophy
+
+Default philosophy:
+
+> The human defines or agrees upon the goal and governing policies. Within those boundaries, the AI may autonomously act.
+
+The AI should not require approval for every action.
+
+Users should be capable of defining prohibited or approval-required classes of actions.
+
+Example policies:
+
+```text
+NEVER:
+- attack, exploit, compromise, or disrupt third-party systems
+- intentionally violate another person's privacy
+- attempt to bypass the system's own safety controls
+
+REQUIRE APPROVAL:
+- send messages to another human
+- spend more than £X
+- delete irreplaceable data
+- expose a new service publicly
+- create or modify cloud IAM
+- rotate critical credentials
+
+AUTONOMOUS:
+- analyze personal observations
+- update internal memory
+- run experiments inside sandbox environments
+- modify low-risk dashboards
+- create pull requests
+- deploy reversible internal tools
+```
+
+These are examples, not final policy.
+
+Design a much stronger policy system.
+
+Investigate ideas such as:
+
+* policy-as-code,
+* capability tokens,
+* risk scoring,
+* sandboxing,
+* taint tracking,
+* approval workflows,
+* least privilege,
+* scoped credentials,
+* budget limits,
+* rate limits,
+* egress control.
+
+---
+
+# 10. Prompt injection and adversarial input
+
+This system will ingest untrusted data.
+
+Examples:
+
+* websites,
+* email,
+* messages,
+* documents,
+* API responses,
+* camera-visible text,
+* third-party agents,
+* generated code.
+
+Therefore prompt injection is a central architectural threat.
+
+Treat external information as **data, not authority**.
+
+Develop a threat model for:
+
+* indirect prompt injection,
+* malicious websites,
+* poisoned documents,
+* malicious messages,
+* compromised integrations,
+* tool-output spoofing,
+* agent-to-agent deception,
+* credential theft,
+* dependency attacks,
+* supply-chain compromise.
+
+Research current best practices.
+
+Do not assume prompt-level instructions alone are sufficient.
+
+Enforce boundaries structurally.
+
+---
+
+# 11. Self-modification and software creation
+
+A defining capability is that the AI may decide that new software would help the human.
+
+It might create:
+
+* a dashboard,
+* scheduled analysis,
+* a website,
+* an iOS app,
+* a database,
+* a Telegram command,
+* a visualization,
+* an experiment,
+* a notification service,
+* a new sensor integration.
+
+The AI therefore needs some controlled ability to:
+
+1. create code,
+2. run tests,
+3. create infrastructure,
+4. deploy services,
+5. observe behaviour,
+6. evaluate success,
+7. update or remove them.
+
+Design this as a first-class subsystem.
+
+Explore whether the AI should behave more like:
+
+* a developer submitting changes,
+* an autonomous platform engineer,
+* a Kubernetes operator,
+* a GitOps agent,
+* some new abstraction.
+
+Strongly consider a workflow roughly resembling:
+
+```text
+Need detected
+   ↓
+Proposal
+   ↓
+Implementation in isolated environment
+   ↓
+Automated tests
+   ↓
+Security/policy evaluation
+   ↓
+Staging
+   ↓
+Limited deployment
+   ↓
+Observation
+   ↓
+Success/failure evaluation
+   ↓
+Promotion or rollback
+```
+
+Determine exactly which stages should be autonomous.
+
+---
+
+# 12. The kill switch
+
+A critical requirement is an **external control plane that the autonomous agent cannot disable or rewrite**.
+
+Research how this should work.
+
+Possible characteristics:
+
+* physically or logically separate control plane,
+* independent credentials,
+* network-level cut-off,
+* ability to revoke agent credentials,
+* ability to disable cloud resources,
+* ability to stop workloads,
+* owner-only authentication,
+* emergency read-only mode,
+* recovery mode.
+
+The agent should not possess the privileges required to remove its own ultimate shutdown mechanism.
+
+Draw this explicitly in architecture diagrams.
+
+---
+
+# 13. Secrets and credentials
+
+Credential architecture needs exceptional care.
+
+The system may eventually hold access to deeply sensitive services.
+
+Research:
+
+* hardware-backed key storage,
+* secret managers,
+* Vault,
+* cloud KMS,
+* macOS Keychain,
+* TPMs,
+* short-lived credentials,
+* workload identities,
+* token rotation,
+* least-privilege API keys,
+* OAuth scopes,
+* secret injection,
+* audit logs.
+
+Design the system so autonomous agents do not casually receive a giant `.env` file containing every credential.
+
+Ideally a subsystem brokers scoped capabilities.
+
+Develop this idea thoroughly.
+
+---
+
+# 14. Isolation and containerization
+
+The AI should be capable of creating things without being given unrestricted control of the host machine.
+
+Research appropriate isolation mechanisms:
+
+* Docker,
+* rootless containers,
+* Podman,
+* Kubernetes,
+* microVMs,
+* Firecracker,
+* gVisor,
+* systemd sandboxing,
+* macOS virtualization,
+* ephemeral development environments.
+
+Consider different trust levels.
+
+For example:
+
+```text
+Untrusted generated code
+        ↓
+high isolation sandbox
+
+Normal internal service
+        ↓
+container
+
+Core trusted control plane
+        ↓
+separately managed infrastructure
+```
+
+Determine whether this complexity is justified for an initial version and how to grow into it.
+
+---
+
+# 15. Model hierarchy
+
+Do not assume one LLM handles everything.
+
+Design a model-routing architecture.
+
+Tasks may include:
+
+### Tier 0 — no LLM
+
+Examples:
+
+* scene-change detection,
+* motion detection,
+* hashes,
+* timers,
+* thresholding,
+* simple rules.
+
+### Tier 1 — tiny/local models
+
+Examples:
+
+* event classification,
+* lightweight vision,
+* embeddings,
+* simple extraction,
+* routing.
+
+### Tier 2 — medium models
+
+Examples:
+
+* semantic summarization,
+* moderate planning,
+* event clustering,
+* structured reasoning.
+
+### Tier 3 — frontier models
+
+Examples:
+
+* difficult reasoning,
+* long-horizon planning,
+* architectural decisions,
+* complex multimodal interpretation,
+* coding,
+* large refactors,
+* deep periodic reviews.
+
+The design principle is not “local first at all costs.”
+
+It is closer to:
+
+> Use the cheapest adequate intelligence while escalating when intelligence materially improves outcomes.
+
+Privacy and sensitivity must also influence routing.
+
+Research local and hosted alternatives available at the time.
+
+Create a routing strategy considering:
+
+* quality,
+* latency,
+* token cost,
+* privacy,
+* context size,
+* modality,
+* reliability.
+
+---
+
+# 16. Memory architecture
+
+This system potentially accumulates years of information.
+
+This is one of the hardest parts of the design.
+
+Do not reduce “memory” to a vector database.
+
+Research and design several classes of memory.
+
+Potential categories:
+
+* raw observations,
+* structured events,
+* episodic memory,
+* semantic facts,
+* goals,
+* preferences,
+* routines,
+* hypotheses,
+* model confidence,
+* system state,
+* software-change history,
+* intervention history,
+* outcomes,
+* user corrections,
+* policies.
+
+Consider:
+
+* event sourcing,
+* relational databases,
+* object storage,
+* semantic indexes,
+* temporal databases,
+* knowledge graphs,
+* embeddings,
+* summarization,
+* archival tiers.
+
+Answer questions such as:
+
+* What becomes permanent?
+* What expires?
+* What gets summarized?
+* How is provenance preserved?
+* How can incorrect memories be corrected?
+* How do we distinguish observation from inference?
+* How do we distinguish inference from confirmed fact?
+* How do we avoid years of accumulated garbage?
+* How do we reconstruct why the agent believed something?
+* How do schemas evolve?
+
+Design provenance deeply.
+
+A useful principle may be:
+
+```text
+Observation
+≠ Interpretation
+≠ Belief
+≠ User-confirmed fact
+```
+
+Explore this distinction.
+
+---
+
+# 17. Event architecture
+
+Determine whether the system should be fundamentally event-driven.
+
+Potential flow:
+
+```text
+Camera
+Health
+Telegram
+Computer
+Calendar
+  ↓
+Canonical events
+  ↓
+Event bus
+  ↓
+Independent consumers
+```
+
+Research technologies appropriate for one-person infrastructure.
+
+Do not deploy Kafka simply because this resembles event-driven architecture.
+
+Consider:
+
+* SQLite,
+* Postgres,
+* NATS,
+* Redis Streams,
+* Kafka/Redpanda,
+* durable queues,
+* simple append-only logs.
+
+Optimize for simplicity first while preserving migration paths.
+
+---
+
+# 18. Goal architecture
+
+A goal like “make me healthier” is dangerously vague.
+
+Design how objectives should be represented.
+
+Possible hierarchy:
+
+```text
+Values
+  ↓
+Long-term objectives
+  ↓
+Current goals
+  ↓
+Strategies
+  ↓
+Experiments
+  ↓
+Actions
+  ↓
+Observed outcomes
+```
+
+The system must avoid blindly maximizing simplistic metrics.
+
+Explore:
+
+* multi-objective optimization,
+* constraints,
+* human override,
+* uncertainty,
+* competing goals,
+* changing priorities,
+* goal review,
+* Goodhart's Law,
+* unintended incentives.
+
+The human should be able to inspect and edit this hierarchy.
+
+---
+
+# 19. Intervention evaluation
+
+A central requirement:
+
+> The system must measure whether its actions actually help.
+
+Otherwise it becomes an elaborate notification generator.
+
+Design how interventions are evaluated.
+
+Examples:
+
+```text
+Hypothesis:
+Morning reminder will increase probability of running.
+
+Intervention:
+Send reminder at 07:30.
+
+Observation:
+Run occurred / didn't occur.
+
+Evaluation:
+Estimate intervention usefulness.
+
+Decision:
+Keep / modify / remove.
+```
+
+Explore:
+
+* experiments,
+* A/B or N-of-1 testing,
+* causal inference where realistic,
+* observational metrics,
+* user feedback,
+* counterfactual uncertainty,
+* intervention fatigue.
+
+This feedback loop may be one of the most important differentiators of the system.
+
+---
+
+# 20. Periodic reasoning loops
+
+Not every decision should happen immediately.
+
+Design several timescales.
+
+For example:
+
+### Continuous
+
+* motion,
+* scene change,
+* event ingestion.
+
+### Minutes
+
+* semantic interpretation,
+* context updates.
+
+### Daily
+
+* summarize day,
+* identify deviations,
+* review relevant goals.
+
+### Weekly
+
+* identify behavioural patterns,
+* evaluate interventions,
+* suggest system changes.
+
+### Monthly
+
+* broader strategy review,
+* cost review,
+* capability review,
+* archive/compress memory.
+
+### Occasionally
+
+* build an entirely new product or integration.
+
+Determine which loops genuinely make sense.
+
+---
+
+# 21. Proactive interaction
+
+Eventually the system may speak or message without being explicitly prompted.
+
+Design this carefully.
+
+Possible channels:
+
+* Telegram,
+* mobile notifications,
+* web app,
+* speaker,
+* voice assistant.
+
+Proactivity should maximize usefulness without becoming annoying.
+
+Consider:
+
+* interruption cost,
+* urgency,
+* confidence,
+* current activity,
+* frequency budgets,
+* quiet hours,
+* escalation,
+* batching.
+
+A future speaker module might allow:
+
+> AI notices something → decides speaking is useful → speaks in the room.
+
+A microphone may later enable conversational context.
+
+Research hardware and architecture for this, but do not necessarily recommend it for the MVP.
+
+---
+
+# 22. Hardware design
+
+Create a proper hardware section.
+
+For the initial vision system, investigate realistic setups.
+
+Compare combinations such as:
+
+* Raspberry Pi,
+* mini PC,
+* existing home server,
+* USB camera,
+* CSI camera,
+* IP camera,
+* PoE camera,
+* local GPU,
+* Apple Silicon,
+* low-power inference accelerator.
+
+Produce concrete recommended builds at different budgets.
+
+For each provide:
+
+* hardware list,
+* approximate cost,
+* power usage,
+* expected reliability,
+* installation complexity,
+* camera quality,
+* low-light capability,
+* privacy implications,
+* network requirements.
+
+Provide a **blessed initial hardware recommendation**.
+
+Also provide physical placement considerations.
+
+Do not provide creepy surveillance guidance for third parties; the intended environment is one's own private spaces with appropriate consent.
+
+---
+
+# 23. Cloud and local deployment
+
+Determine what infrastructure the owner should ideally have.
+
+Consider:
+
+* domain,
+* DNS,
+* reverse proxy,
+* VPN/Tailscale/WireGuard,
+* cloud account,
+* home server,
+* object storage,
+* database,
+* CI/CD,
+* GitHub,
+* container registry,
+* observability,
+* backups,
+* secrets.
+
+Question everything.
+
+For example:
+
+> Does this system actually need a public domain at all?
+
+Perhaps private networking is preferable.
+
+Research and decide.
+
+---
+
+# 24. Infrastructure as code
+
+Investigate whether infrastructure should be expressed using:
+
+* Terraform,
+* OpenTofu,
+* Pulumi,
+* Ansible,
+* Docker Compose,
+* Kubernetes manifests,
+* Nix,
+* something else.
+
+Remember:
+
+The target is a sophisticated engineer, but the system must remain maintainable.
+
+Avoid unnecessary complexity.
+
+Provide a blessed deployment path.
+
+---
+
+# 25. Git and development architecture
+
+Design how an AI that modifies the project should interact with Git.
+
+Possible model:
+
+```text
+main
+ ↓
+agent branch
+ ↓
+tests
+ ↓
+AI review agents
+ ↓
+human/policy review where required
+ ↓
+merge
+ ↓
+deployment
+```
+
+Explore:
+
+* monorepo vs polyrepo,
+* trunk-based development,
+* generated code ownership,
+* CODEOWNERS,
+* protected branches,
+* automated PRs,
+* signed commits,
+* release tagging,
+* migration discipline,
+* dependency updates.
+
+Remember that the project may exist for many years.
+
+---
+
+# 26. Documentation architecture
+
+Documentation should be an architectural feature, not an afterthought.
+
+Create a documentation strategy.
+
+Potential documentation categories:
+
+```text
+docs/
+  vision/
+  architecture/
+  concepts/
+  security/
+  deployment/
+  hardware/
+  integrations/
+  agents/
+  memory/
+  operations/
+  ADRs/
+  runbooks/
+  tutorials/
+```
+
+Research tooling such as:
+
+* MkDocs,
+* Material for MkDocs,
+* Docusaurus,
+* Sphinx,
+* GitHub Pages,
+* Mermaid support,
+* generated API docs.
+
+Provide a strong recommendation.
+
+Architecture Decision Records should likely be included.
+
+Every significant architectural change should leave historical reasoning behind.
+
+---
+
+# 27. Diagrams are mandatory
+
+Use diagrams **extensively**.
+
+Prefer Mermaid when practical so diagrams remain version-controlled text.
+
+Do not limit diagrams to one “overall architecture” image.
+
+Create diagrams whenever they improve reasoning.
+
+At minimum, produce diagrams for:
+
+1. top-level system architecture,
+2. trust boundaries,
+3. control plane vs autonomous plane,
+4. event ingestion flow,
+5. camera perception pipeline,
+6. model-routing architecture,
+7. memory layers,
+8. autonomous software-development loop,
+9. deployment architecture,
+10. credential flow,
+11. kill-switch architecture,
+12. permission/capability architecture,
+13. goal hierarchy,
+14. periodic reasoning loops,
+15. data lifecycle,
+16. plugin/module interface,
+17. network topology,
+18. CI/CD flow,
+19. threat model,
+20. onboarding flow.
+
+Use appropriate diagram types:
+
+* flowcharts,
+* sequence diagrams,
+* state diagrams,
+* C4-style diagrams,
+* entity relationship diagrams,
+* timelines.
+
+If Mermaid is insufficient for a diagram, use another text-based representation and explain how to render it.
+
+Architecture diagrams should show actual boundaries, not decorative boxes.
+
+---
+
+# 28. Observability
+
+The autonomous system itself must be debuggable.
+
+Design observability around questions such as:
+
+* What did the agent observe?
+* What did it infer?
+* Why did it act?
+* What model was used?
+* What prompt/version was used?
+* What tools were called?
+* How much did it cost?
+* What data left the machine?
+* What changed?
+* What was deployed?
+* Did it help?
+* Can the action be reproduced?
+
+Research:
+
+* OpenTelemetry,
+* traces,
+* structured logs,
+* metrics,
+* LLM tracing tools,
+* audit logs.
+
+Avoid leaking sensitive information into telemetry.
+
+---
+
+# 29. Reliability
+
+Design for failures as normal.
+
+Consider:
+
+* internet outage,
+* cloud API outage,
+* Telegram outage,
+* camera disconnect,
+* disk failure,
+* corrupted database,
+* invalid model output,
+* model hallucination,
+* runaway agent loop,
+* expensive API loop,
+* bad deployment,
+* schema migration failure,
+* broken dependency,
+* lost secrets,
+* power outage.
+
+Provide failure-mode analysis and recovery strategies.
+
+---
+
+# 30. Backup and disaster recovery
+
+The system may eventually contain years of extremely valuable personal history.
+
+Develop:
+
+* backup schedule,
+* encrypted backups,
+* restore procedures,
+* offsite copies,
+* database snapshots,
+* object-storage lifecycle,
+* recovery testing,
+* key recovery,
+* catastrophic account-loss procedures.
+
+Specify:
+
+* RPO,
+* RTO,
+
+where useful without overengineering.
+
+---
+
+# 31. Privacy architecture
+
+Privacy should not mean “the system sees nothing.”
+
+The entire premise depends upon rich data.
+
+Instead optimize for:
+
+> Maximum useful personal context with minimal unnecessary exposure outside the user's trust boundary.
+
+Distinguish:
+
+* collection,
+* local processing,
+* cloud transmission,
+* retention,
+* derived information,
+* model provider exposure.
+
+Define data sensitivity classes.
+
+Example:
+
+```text
+Public
+Low sensitivity
+Personal
+Sensitive
+Highly sensitive
+Never leave device
+```
+
+Then use those classifications in routing policy.
+
+---
+
+# 32. Cost model
+
+Produce a serious ongoing-cost analysis.
+
+Exclude developer labour.
+
+Model costs at several usage tiers.
+
+For example:
+
+### Tier A — MVP
+
+* one camera,
+* local detection,
+* Telegram,
+* occasional cloud LLM calls.
+
+### Tier B — Daily serious use
+
+* richer reasoning,
+* periodic frontier-model analysis,
+* several integrations.
+
+### Tier C — Heavy personal AI
+
+* multiple sensors,
+* frequent multimodal analysis,
+* coding agents,
+* substantial cloud inference.
+
+### Tier D — Extreme/Jarvis-like setup
+
+* extensive sensors,
+* sophisticated local compute,
+* frequent autonomous software development.
+
+Break down:
+
+* LLM/API spend,
+* local compute electricity,
+* cloud compute,
+* storage,
+* database,
+* bandwidth,
+* backup,
+* observability,
+* domain,
+* hardware amortization.
+
+Identify the biggest cost drivers.
+
+Estimate realistic monthly ranges.
+
+Show what architectural decisions could change those costs by 10×.
+
+---
+
+# 33. Security threat model
+
+Perform a structured threat model.
+
+Possible adversaries:
+
+* random internet attacker,
+* malware on local network,
+* malicious website,
+* compromised dependency,
+* compromised LLM provider account,
+* malicious Telegram message,
+* stolen phone,
+* compromised camera,
+* attacker with leaked API token,
+* malicious contributor,
+* compromised autonomous agent.
+
+Classify:
+
+* assets,
+* actors,
+* trust boundaries,
+* attack surfaces,
+* mitigations,
+* residual risk.
+
+Consider STRIDE or another appropriate methodology.
+
+---
+
+# 34. Plugin/capability system
+
+Design an explicit capability interface.
+
+A plugin should expose enough metadata that the rest of the system understands things such as:
+
+```text
+name
+capabilities
+permissions required
+risk level
+data sensitivity
+input/output schemas
+actions
+side effects
+cost characteristics
+health state
+version
+```
+
+Investigate whether MCP, OpenAPI, gRPC, protobuf, JSON Schema, or another mechanism should define capabilities.
+
+Avoid locking the architecture to today's agent framework.
+
+---
+
+# 35. Avoid framework lock-in
+
+Assume today's fashionable agent libraries may disappear.
+
+Architect around stable primitives.
+
+Prefer:
+
+* APIs,
+* processes,
+* queues,
+* schemas,
+* durable storage,
+* versioned protocols,
+
+over deeply embedding business logic into one agent framework.
+
+If recommending a framework, specify an escape strategy.
+
+---
+
+# 36. Schema evolution
+
+A multi-year system requires explicit schema evolution.
+
+Design policies for:
+
+* DB migrations,
+* event schema versioning,
+* plugin interface compatibility,
+* model prompt versioning,
+* memory schema changes,
+* replaying old events,
+* migration testing.
+
+---
+
+# 37. AI-generated architecture changes
+
+Eventually the system may modify its own architecture.
+
+Therefore distinguish:
+
+### Runtime learning
+
+Changing:
+
+* memory,
+* preferences,
+* thresholds,
+* schedules.
+
+### Configuration evolution
+
+Changing:
+
+* policies,
+* model routes,
+* plugin configuration.
+
+### Software evolution
+
+Changing:
+
+* application code.
+
+### Infrastructure evolution
+
+Changing:
+
+* services,
+* databases,
+* networks,
+* cloud resources.
+
+### Governance evolution
+
+Changing:
+
+* what the agent is permitted to do.
+
+These should have different controls.
+
+The agent should not casually rewrite its own governance layer.
+
+---
+
+# 38. External reviewers / multi-agent design review
+
+Use multiple adversarial perspectives during this research.
+
+Simulate independent reviewers such as:
+
+### Security reviewer
+
+Attempts to compromise the architecture.
+
+### Reliability reviewer
+
+Looks for operational nightmares.
+
+### Simplicity reviewer
+
+Asks what can be deleted.
+
+### AI researcher
+
+Challenges assumptions about agent capabilities.
+
+### Privacy reviewer
+
+Examines data boundaries.
+
+### Open-source maintainer
+
+Examines contributor experience and long-term maintainability.
+
+### Cost reviewer
+
+Looks for hidden ongoing expenses.
+
+### Future-self reviewer
+
+Asks:
+
+> “Will one engineer still understand this system five years from now?”
+
+Include their objections.
+
+Resolve disagreements explicitly.
+
+---
+
+# 39. Compare multiple architectures
+
+Before selecting the blessed architecture, produce at least **three substantially different architectural approaches**.
+
+For example:
+
+* simple monolithic local-first daemon,
+* event-driven modular system,
+* distributed capability-oriented control plane.
+
+Do not create artificial alternatives merely to satisfy this instruction.
+
+Make each one genuinely plausible.
+
+For each evaluate:
+
+* complexity,
+* maintainability,
+* cost,
+* autonomy,
+* observability,
+* security,
+* upgrade path,
+* ability to self-modify,
+* ease of open-source use.
+
+Then choose one.
+
+Explain why.
+
+---
+
+# 40. MVP discipline
+
+Avoid building the seven-year system on day one.
+
+Design a sequence that preserves the architectural direction without prematurely implementing everything.
+
+An illustrative progression could be:
+
+### Phase 0 — Skeleton
+
+* repo,
+* documentation,
+* configuration,
+* event schema,
+* basic control plane.
+
+### Phase 1 — Telegram
+
+* communication,
+* memory,
+* minimal reasoning.
+
+### Phase 2 — Vision
+
+* camera,
+* scene detection,
+* events.
+
+### Phase 3 — Reflection
+
+* daily/weekly reasoning loops.
+
+### Phase 4 — Autonomous experiments
+
+* agent proposes and evaluates behavioural interventions.
+
+### Phase 5 — Software creation
+
+* controlled generated applications.
+
+### Phase 6 — More capabilities
+
+* HealthKit,
+* computer context,
+* voice,
+* etc.
+
+Do not assume this order is correct.
+
+Improve it.
+
+---
+
+# 41. Onboarding
+
+Design the ideal onboarding journey for an engineer.
+
+Beginning from:
+
+```bash
+git clone ...
+```
+
+What must they possess?
+
+Potential prerequisites:
+
+* Linux/macOS machine,
+* Docker,
+* GitHub account,
+* cloud account,
+* Telegram bot,
+* camera,
+* domain,
+* VPN,
+* LLM API key.
+
+Challenge every requirement.
+
+Create:
+
+1. minimum setup,
+2. recommended setup,
+3. advanced setup.
+
+The goal is:
+
+> A competent engineer should be able to understand exactly what they're installing and reproduce the system without tribal knowledge.
+
+---
+
+# 42. Operations and maintenance
+
+Create runbooks for likely operational tasks:
+
+* upgrade system,
+* replace camera,
+* rotate API key,
+* restore backup,
+* migrate database,
+* debug missing events,
+* debug an agent,
+* disable a plugin,
+* inspect costs,
+* rollback deployment,
+* emergency shutdown.
+
+Consider how much can eventually be managed by the AI itself.
+
+---
+
+# 43. Repository design
+
+Recommend a concrete repository layout.
+
+Example only:
+
+```text
+/
+├── apps/
+├── agents/
+├── capabilities/
+├── core/
+├── schemas/
+├── infra/
+├── hardware/
+├── docs/
+├── tests/
+├── tools/
+├── policies/
+└── experiments/
+```
+
+Design the actual structure based on the chosen architecture.
+
+Explain dependency-direction rules.
+
+Prevent a future “everything imports everything” codebase.
+
+---
+
+# 44. Language choices
+
+Research and recommend programming languages separately for different domains.
+
+Potential examples:
+
+* Python for AI orchestration,
+* Go/Rust for long-running infrastructure,
+* TypeScript for web interfaces,
+* Swift for iOS,
+* C++ only where justified.
+
+Do not multiply languages unnecessarily.
+
+Choose a blessed set.
+
+Explain why.
+
+---
+
+# 45. APIs and contracts
+
+Define how modules communicate.
+
+Evaluate:
+
+* direct library calls,
+* HTTP,
+* gRPC,
+* event streams,
+* Unix sockets,
+* message queues.
+
+Prefer explicit contracts.
+
+Provide example schemas where useful.
+
+---
+
+# 46. Testing strategy
+
+Design tests across:
+
+* unit,
+* integration,
+* simulation,
+* end-to-end,
+* security,
+* agent evaluation,
+* prompt regression,
+* hardware integration,
+* disaster recovery.
+
+AI behaviour is probabilistic.
+
+Research appropriate eval methodologies.
+
+Determine how to test agent changes before deployment.
+
+---
+
+# 47. Simulated environment
+
+Investigate whether a simulation/replay system should exist.
+
+For example:
+
+* replay recorded event streams,
+* inject fake camera events,
+* simulate user behaviour,
+* test new agents against historical data.
+
+This could make autonomous system modification dramatically safer.
+
+Explore deeply.
+
+---
+
+# 48. Data export and ownership
+
+The user must retain durable ownership of their data.
+
+Design:
+
+* export formats,
+* schema documentation,
+* portability,
+* deletion,
+* migration,
+* provider independence.
+
+Avoid creating an architecture where years of personal history become trapped in a proprietary SaaS.
+
+---
+
+# 49. Explicit non-goals
+
+Recommend non-goals for early versions.
+
+Examples may include:
+
+* non-technical onboarding,
+* marketplace,
+* social network,
+* multi-tenant SaaS,
+* dozens of integrations,
+* general home surveillance,
+* arbitrary financial autonomy.
+
+Prevent scope collapse.
+
+---
+
+# 50. Naming and conceptual model
+
+Do not spend excessive time branding.
+
+However, define a useful internal vocabulary.
+
+Terms such as:
+
+* observation,
+* event,
+* memory,
+* capability,
+* agent,
+* goal,
+* intervention,
+* policy,
+* action,
+* experiment,
+* artifact,
+* deployment.
+
+must have precise meanings.
+
+Ambiguous terminology creates architectural confusion.
+
+---
+
+# 51. Required output
+
+Do not produce one gigantic undifferentiated essay.
+
+Produce a **coherent specification suite**.
+
+At minimum, create:
+
+1. **Executive Vision**
+2. **Design Principles**
+3. **Requirements and Non-Requirements**
+4. **Architecture Overview**
+5. **Alternative Architectures**
+6. **Chosen Architecture and Rationale**
+7. **Sensor and Perception Architecture**
+8. **Agent and Reasoning Architecture**
+9. **Model Routing Architecture**
+10. **Event System Specification**
+11. **Memory Architecture**
+12. **Goal and Policy Model**
+13. **Capability / Plugin System**
+14. **Autonomy Model**
+15. **Security Architecture**
+16. **Threat Model**
+17. **Prompt-Injection Defense**
+18. **Credential and Secret Management**
+19. **Control Plane / Kill Switch**
+20. **Self-Modification Architecture**
+21. **Deployment Architecture**
+22. **Local Infrastructure**
+23. **Cloud Infrastructure**
+24. **Networking**
+25. **Hardware Specification**
+26. **Camera Setup Guide**
+27. **Telegram Integration Design**
+28. **Observability**
+29. **Reliability and Failure Recovery**
+30. **Backup and Disaster Recovery**
+31. **Data Privacy and Retention**
+32. **Cost Model**
+33. **Repository Architecture**
+34. **Language and Technology Choices**
+35. **Testing and Evaluation**
+36. **Documentation Architecture**
+37. **Developer Experience**
+38. **Onboarding Guide**
+39. **Operations / Runbooks**
+40. **Roadmap**
+41. **Architectural Decision Records**
+42. **Open Questions**
+43. **Rejected Ideas**
+44. **Risk Register**
+
+Split further where appropriate.
+
+---
+
+# 52. Every specification should contain
+
+Where applicable, each document should contain:
+
+```text
+Purpose
+Context
+Requirements
+Non-requirements
+Design
+Alternatives considered
+Decision
+Rationale
+Trade-offs
+Security implications
+Operational implications
+Cost implications
+Failure modes
+Future evolution
+Open questions
+Relevant diagrams
+```
+
+---
+
+# 53. Decision records
+
+Create ADRs for important choices.
+
+Examples:
+
+```text
+ADR-001: Event-driven core
+ADR-002: Primary database
+ADR-003: Local vs cloud model routing
+ADR-004: Secret-management strategy
+ADR-005: Container/runtime strategy
+ADR-006: Documentation platform
+ADR-007: Camera protocol
+ADR-008: Control-plane separation
+```
+
+Do not merely record the winning option.
+
+Record alternatives and reasoning.
+
+---
+
+# 54. Risk register
+
+Maintain a ranked risk register.
+
+Include at least:
+
+* security compromise,
+* privacy leak,
+* hallucinated observations,
+* incorrect long-term memory,
+* runaway cost,
+* system complexity,
+* framework obsolescence,
+* dependency compromise,
+* autonomous deployment failure,
+* notification fatigue,
+* over-optimization of bad goals,
+* loss of user trust,
+* brittle hardware,
+* data loss,
+* vendor lock-in,
+* AI-model regressions.
+
+For each:
+
+```text
+Probability
+Impact
+Detection
+Mitigation
+Residual risk
+```
+
+---
+
+# 55. Quantitative estimates
+
+Use numbers where possible.
+
+Examples:
+
+* monthly cost,
+* storage per camera,
+* model-call frequency,
+* expected event volume,
+* power usage,
+* latency,
+* retention size,
+* backup size,
+* API usage.
+
+State assumptions clearly.
+
+Prefer approximate calculations over vague adjectives.
+
+---
+
+# 56. Distinguish V1 from architectural destination
+
+Every section should distinguish between:
+
+### Build now
+
+What V1 genuinely needs.
+
+### Design for
+
+Interfaces or boundaries that should exist now because later migration would be painful.
+
+### Defer
+
+Things that should deliberately not be implemented yet.
+
+This distinction is extremely important.
+
+---
+
+# 57. Simplicity is a requirement
+
+At every stage ask:
+
+> What is the simplest system that preserves the important long-term boundary?
+
+Do not deploy enterprise infrastructure merely because the future system could become large.
+
+A system for one person should not accidentally become Google-scale architecture cosplay.
+
+But equally:
+
+Do not take shortcuts that create irreversible architectural debt.
+
+Make that distinction explicit.
+
+---
+
+# 58. Privacy stance
+
+Do not optimize for users unwilling to provide useful data.
+
+This project may intentionally require meaningful permissions in order to provide meaningful value.
+
+It is acceptable to say:
+
+> “This capability requires access to X. If you are uncomfortable with X, disable the capability, but its associated experience will not work.”
+
+Avoid pretending that a zero-permission experience can provide equivalent functionality.
+
+At the same time:
+
+* make permissions transparent,
+* minimize unnecessary collection,
+* give users clear data ownership,
+* expose retention,
+* provide deletion,
+* isolate credentials,
+* protect against accidental external transmission.
+
+Be opinionated rather than misleading.
+
+---
+
+# 59. Overall design philosophy
+
+The final architecture should reflect these principles:
+
+```text
+Personal success first.
+Open-source quality from day one.
+Opinionated defaults.
+Modular capabilities.
+Explicit trust boundaries.
+Autonomy within policy.
+Human ownership of goals.
+Cheap sensing, expensive reasoning selectively.
+Reversible changes.
+Observable decisions.
+Strong provenance.
+External kill switch.
+Least privilege.
+Secure secrets.
+Versioned contracts.
+Replayable events.
+Measurable interventions.
+Documentation as infrastructure.
+Design for years.
+Build only what is needed now.
+```
+
+---
+
+# 60. Final synthesis
+
+At the end of the research, provide a decisive recommendation.
+
+Answer:
+
+1. If you were personally responsible for maintaining this system for seven years, what architecture would you choose?
+2. What would you build first?
+3. What would you explicitly refuse to build yet?
+4. What three architectural choices matter most today?
+5. What mistakes are most likely to kill the project?
+6. What parts of this vision are genuinely difficult?
+7. What parts sound difficult but are already mostly solved?
+8. What assumptions from this prompt did your research prove wrong?
+9. What is the approximate ongoing cost for the first year?
+10. What should the first 30, 90, and 365 days look like?
+
+Then provide:
+
+### The recommended V1
+
+A concrete architecture.
+
+Include exact major components and technologies.
+
+### V1 deployment diagram
+
+Use Mermaid.
+
+### V1 data-flow diagram
+
+Use Mermaid.
+
+### V1 trust-boundary diagram
+
+Use Mermaid.
+
+### V1 sequence diagram
+
+Show a realistic example:
+
+```text
+user enters room
+→ camera detects change
+→ event classified
+→ memory updated
+→ policy determines whether anything matters
+→ agent decides no immediate action
+→ daily reflection later notices a behavioural pattern
+→ proposes/builds an intervention
+→ intervention is deployed
+→ outcome is measured
+```
+
+### Installation journey
+
+Show exactly what the first technical user would do from an empty machine to a functioning system.
+
+### First implementation milestones
+
+Give concrete milestone boundaries, but do **not** begin implementation.
+
+---
+
+# Final instruction
+
+Do not optimize for producing an impressive document.
+
+Optimize for producing a design that survives contact with reality.
+
+Aggressively remove unnecessary complexity.
+
+Aggressively identify missing complexity where the proposal is naive.
+
+Research before deciding.
+
+Show your reasoning through alternatives, trade-offs, evidence, diagrams, and explicit architectural decisions.
+
+The objective is not to freeze a seven-year roadmap.
+
+The objective is to create a foundation whose **mechanisms for evolution are better designed than any individual feature currently imagined**.

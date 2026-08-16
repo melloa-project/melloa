@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1.0.0",
+  "migrations": {
+    "0001_m0_foundation.sql": "sha256:b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f",
+    "0002_m1_conversation_retrieval.sql": "sha256:90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2",
+    "0003_m1_projection_trigger_privilege.sql": "sha256:c2f4ce8d46fcec197833c9d9829911839a06db93836798b34facadc5cd5956d6",
+    "0004_m1_assertion_state_history.sql": "sha256:ec9da887cc725ca68550ee2152e663b6daaa8cdfad81798e1f8b0d06a0f1d84e",
+    "0005_m1_outbound_delivery.sql": "sha256:3b92486d589677c3b46ea2cb5b5fb51b9084f95bc2430b1fc030501b1054dc38"
+  }
+}

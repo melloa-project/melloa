@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "AssertionStatus": {
+      "enum": [
+        "provisional",
+        "active",
+        "confirmed",
+        "disputed",
+        "superseded",
+        "retracted",
+        "expired"
+      ],
+      "title": "AssertionStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/assertion-state.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assertion_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Assertion Id",
+      "type": "string"
+    },
+    "changed_at": {
+      "format": "date-time",
+      "title": "Changed At",
+      "type": "string"
+    },
+    "changed_by_record_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Changed By Record Id",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "current_status": {
+      "$ref": "#/$defs/AssertionStatus"
+    },
+    "preferred_assertion_id": {
+      "anyOf": [
+        {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Preferred Assertion Id"
+    },
+    "version": {
+      "exclusiveMinimum": 0,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "assertion_id",
+    "current_status",
+    "changed_by_record_id",
+    "changed_at",
+    "version"
+  ],
+  "title": "AssertionStateProjection",
+  "type": "object"
+}

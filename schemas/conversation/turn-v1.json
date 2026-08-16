@@ -1,0 +1,151 @@
+{
+  "$id": "https://schemas.melloa.dev/v1/conversation-turn.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "decision_record": {
+      "additionalProperties": true,
+      "title": "Decision Record",
+      "type": "object"
+    },
+    "evidence_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "executed_action_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "title": "Executed Action Ids",
+      "type": "array"
+    },
+    "model_run_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "title": "Model Run Ids",
+      "type": "array"
+    },
+    "output_message_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "title": "Output Message Ids",
+      "type": "array"
+    },
+    "policy_decision_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "title": "Policy Decision Ids",
+      "type": "array"
+    },
+    "proposed_action_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "title": "Proposed Action Ids",
+      "type": "array"
+    },
+    "retrieval_manifest_id": {
+      "anyOf": [
+        {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Manifest Id"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "thread_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Thread Id",
+      "type": "string"
+    },
+    "triggering_message_ids": {
+      "items": {
+        "maxLength": 65,
+        "minLength": 35,
+        "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Triggering Message Ids",
+      "type": "array"
+    },
+    "turn_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Turn Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "turn_id",
+    "thread_id",
+    "triggering_message_ids",
+    "decision_record",
+    "started_at"
+  ],
+  "title": "ConversationTurn",
+  "type": "object"
+}

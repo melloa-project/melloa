@@ -1,0 +1,434 @@
+from __future__ import annotations
+
+import time
+from datetime import timedelta
+from itertools import count
+
+from fastapi.testclient import TestClient
+
+from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
+from melloa.apps.synthetic import (
+    SYNTHETIC_ASSERTION_ID,
+    SYNTHETIC_TELEGRAM_ADAPTER_ID,
+    build_synthetic_runtime,
+)
+from melloa.domain.base import sha256_digest
+from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
+from melloa.domain.telegram import (
+    TelegramChatType,
+    TelegramInboundMessage,
+    TelegramInboundUpdate,
+)
+
+_BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
+
+
+def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
+    fixed_time,
+) -> None:
+    payload = GuardianStatusPayload(
+        instance_id="home-guardian",
+        mode=GuardianMode.NO_ACTIONS,
+        sequence=1,
+        changed_at=fixed_time,
+        reason_code="guardian.synthetic-acceptance",
+    )
+    guardian = FakeGuardianStatusReader.from_payload(
+        payload,
+        receipt_hash="sha256:" + "1" * 64,
+    )
+    identifiers = count(10)
+
+    def id_factory(prefix: str) -> str:
+        return f"{prefix}_{next(identifiers):032x}"
+
+    runtime = build_synthetic_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        id_factory=id_factory,
+    )
+    client = TestClient(runtime.app, base_url="https://testserver")
+
+    status = client.get("/api/v1/system/status")
+    assert status.status_code == 200
+    assert status.json()["guardian"]["mode"] == "no-actions"
+    assert status.json()["external_actions_enabled"] is False
+
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": _BOOTSTRAP_TOKEN},
+    )
+    assert login.status_code == 200
+    csrf = login.json()["csrf_token"]
+    headers = {"X-Melloa-CSRF": csrf}
+
+    health = client.get("/api/v1/inspection/health")
+    assert health.status_code == 200
+    assert health.json()["overall_state"] == "degraded"
+    assert any(
+        component["category"] == "camera" and component["state"] == "disabled"
+        for component in health.json()["components"]
+    )
+    media_catalog = client.get("/api/v1/inspection/media")
+    assert media_catalog.status_code == 200
+    assert media_catalog.json()["capture_enabled"] is False
+    assert media_catalog.json()["content_endpoint_available"] is False
+    assert media_catalog.json()["items"] == []
+
+    memory = client.get(f"/api/v1/memory/{runtime.seed_assertion_id}")
+    assert memory.status_code == 200
+    assert memory.json()["assertion"]["value"]["fixture"] is True
+    assert memory.json()["current_state"]["version"] == 1
+
+    thread = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={
+            "title": "Synthetic acceptance",
+            "sensitivity": "personal",
+            "retention_policy": "retention.owner-conversation",
+        },
+    )
+    assert thread.status_code == 201
+    thread_id = thread.json()["thread_id"]
+    reply = client.post(
+        f"/api/v1/conversations/{thread_id}/messages",
+        headers=headers,
+        json={
+            "text": "Please use my reading preference.",
+            "idempotency_key": "synthetic-runtime:message:1",
+        },
+    )
+    assert reply.status_code == 200
+    assert reply.json()["output_message"]["citation_ids"]
+    assert "No external model" in reply.json()["output_message"]["parts"][0]["text"]
+
+    turn_id = reply.json()["turn"]["turn_id"]
+    inspection = client.get(
+        f"/api/v1/conversations/{thread_id}/turns/{turn_id}"
+    )
+    assert inspection.status_code == 200
+    result = inspection.json()["model_result"]
+    assert result["cost_gbp"] == 0.0
+    assert result["external_disclosure"] is False
+    assert result["attempts"][0]["processing_location"] == "device"
+    assert inspection.json()["retrieval_manifest"]["external_disclosure"] is False
+
+    activity = client.get(
+        "/api/v1/inspection/model-activity",
+        params={
+            "from": (fixed_time - timedelta(minutes=1)).isoformat(),
+            "to": (fixed_time + timedelta(minutes=1)).isoformat(),
+        },
+    )
+    assert activity.status_code == 200
+    assert activity.json()["total_runs"] == 1
+    assert activity.json()["external_disclosure_runs"] == 0
+    assert activity.json()["total_cost_gbp"] == 0.0
+
+    correction = client.post(
+        f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",
+        headers=headers,
+        json={
+            "value": {"activity": "walking", "fixture": True},
+            "expected_version": 1,
+        },
+    )
+    assert correction.status_code == 201
+    assert correction.json()["provenance_edge"]["relation"] == "corrects"
+    updated = client.get(f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}").json()
+    assert updated["assertion"]["status"] == "confirmed"
+    assert updated["current_state"]["current_status"] == "superseded"
+    assert updated["current_state"]["version"] == 2
+
+
+def test_synthetic_runtime_preserves_guardian_write_denial(fixed_time) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.READ_ONLY,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.synthetic-read-only",
+        ),
+        receipt_hash="sha256:" + "2" * 64,
+    )
+    runtime = build_synthetic_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+    )
+    client = TestClient(runtime.app, base_url="https://testserver")
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": _BOOTSTRAP_TOKEN},
+    )
+    headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+
+    assert client.get(f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}").status_code == 200
+    conversation = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={
+            "title": "Denied synthetic write",
+            "sensitivity": "personal",
+            "retention_policy": "retention.owner-conversation",
+        },
+    )
+    assert conversation.status_code == 503
+    assert conversation.json()["code"] == "conversation_write_unavailable"
+    correction = client.post(
+        f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",
+        headers=headers,
+        json={"value": {"activity": "walking"}, "expected_version": 1},
+    )
+    assert correction.status_code == 503
+    assert correction.json()["code"] == "memory_write_unavailable"
+
+
+def test_synthetic_runtime_delivers_canonical_output_without_channel_network(
+    fixed_time,
+) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.synthetic-normal",
+        ),
+        receipt_hash="sha256:" + "3" * 64,
+    )
+    identifiers = count(100)
+
+    def id_factory(prefix: str) -> str:
+        return f"{prefix}_{next(identifiers):032x}"
+
+    runtime = build_synthetic_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        id_factory=id_factory,
+    )
+    with TestClient(runtime.app, base_url="https://testserver") as client:
+        login = client.post(
+            "/api/v1/auth/session",
+            json={"credential": _BOOTSTRAP_TOKEN},
+        )
+        headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+        thread = client.post(
+            "/api/v1/conversations",
+            headers=headers,
+            json={
+                "title": "Synthetic delivery acceptance",
+                "sensitivity": "personal",
+                "retention_policy": "retention.owner-conversation",
+            },
+        )
+        thread_id = thread.json()["thread_id"]
+        reply = client.post(
+            f"/api/v1/conversations/{thread_id}/messages",
+            headers=headers,
+            json={
+                "text": "Create a canonical synthetic reply.",
+                "idempotency_key": "synthetic-runtime:delivery-message:1",
+            },
+        )
+        output_message_id = reply.json()["output_message"]["message_id"]
+        delivery_path = f"/api/v1/conversations/{thread_id}/deliveries"
+        delivery_payload = {
+            "message_id": output_message_id,
+            "client_adapter": "client.fake",
+            "destination_ref": "synthetic:owner",
+            "idempotency_key": "synthetic-runtime:delivery:1",
+        }
+
+        delivered = client.post(delivery_path, headers=headers, json=delivery_payload)
+        assert delivered.status_code == 200
+        assert delivered.json()["created"] is True
+        status = delivered.json()["delivery"]
+        assert status["state"] == "completed"
+        assert status["client_adapter"] == "client.fake"
+        assert status["destination_ref"] == "synthetic:owner"
+        attempt = status["attempts"][0]
+        assert attempt["adapter_receipt"]["message_id"] == output_message_id
+        assert attempt["adapter_receipt"]["adapter_metadata"]["deduplicated"] is False
+        assert attempt["execution_receipt"]["action_hash"] == status["action_hash"]
+
+        duplicate = client.post(delivery_path, headers=headers, json=delivery_payload)
+        assert duplicate.status_code == 200
+        assert duplicate.json()["created"] is False
+        assert duplicate.json()["delivery"] == status
+        assert client.get(delivery_path).json() == [status]
+
+        health = client.get("/api/v1/inspection/health").json()
+        delivery_worker = next(
+            component
+            for component in health["components"]
+            if component["component_id"] == "worker.synthetic-delivery"
+        )
+        assert delivery_worker["state"] == "healthy"
+
+
+def test_synthetic_runtime_polls_telegram_without_network_or_duplicate_history(
+    fixed_time,
+) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NO_ACTIONS,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.synthetic-telegram",
+        ),
+        receipt_hash="sha256:" + "4" * 64,
+    )
+    identifiers = count(300)
+
+    def id_factory(prefix: str) -> str:
+        return f"{prefix}_{next(identifiers):032x}"
+
+    runtime = build_synthetic_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        id_factory=id_factory,
+        telegram_worker_interval=0.01,
+    )
+    start = TelegramInboundUpdate(
+        update_id=50,
+        message=TelegramInboundMessage(
+            telegram_message_id=51,
+            sender_user_id=1001,
+            chat_id=1001,
+            chat_type=TelegramChatType.PRIVATE,
+            sent_at=fixed_time,
+            text="/start",
+        ),
+        received_at=fixed_time,
+        raw_size_bytes=256,
+        source_payload_hash=sha256_digest(b"synthetic-runtime-telegram-start-50"),
+    )
+    runtime.telegram_source.add_update(start)
+
+    with TestClient(runtime.app, base_url="https://testserver") as client:
+        login = client.post(
+            "/api/v1/auth/session",
+            json={"credential": _BOOTSTRAP_TOKEN},
+        )
+        assert login.status_code == 200
+        headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+
+        _wait_for_telegram_revision(runtime, 1)
+        candidates = client.get(
+            "/api/v1/integrations/telegram/pairing/candidates"
+        ).json()
+        assert len(candidates) == 1
+        candidate = candidates[0]
+        assert candidate["telegram_user_id"] == 1001
+        assert candidate["telegram_chat_id"] == 1001
+        assert "confirmation_code_hash" not in candidate
+        challenge = runtime.telegram_challenge_publisher.challenge_for(
+            candidate["candidate_id"]
+        )
+        confirmed = client.post(
+            "/api/v1/integrations/telegram/pairing/candidates/"
+            f"{candidate['candidate_id']}/confirm",
+            headers=headers,
+            json={"confirmation_code": challenge.confirmation_code},
+        )
+        assert confirmed.status_code == 200
+        pairing = confirmed.json()
+        assert pairing["owner_id"] == runtime.owner_id
+        assert pairing["confirmed_by_owner_id"] == runtime.owner_id
+        assert client.get("/api/v1/integrations/telegram/pairing").json() == pairing
+
+        inbound = TelegramInboundUpdate(
+            update_id=51,
+            message=TelegramInboundMessage(
+                telegram_message_id=52,
+                sender_user_id=1001,
+                chat_id=1001,
+                chat_type=TelegramChatType.PRIVATE,
+                sent_at=fixed_time,
+                text="Synthetic secondary-channel intake",
+            ),
+            received_at=fixed_time,
+            raw_size_bytes=256,
+            source_payload_hash=sha256_digest(
+                b"synthetic-runtime-telegram-update-51"
+            ),
+        )
+        runtime.telegram_source.add_update(inbound)
+        _wait_for_telegram_revision(runtime, 2)
+        messages = client.get(f"/api/v1/conversations/{runtime.telegram_thread_id}/messages")
+        assert messages.status_code == 200
+        telegram_messages = [
+            message
+            for message in messages.json()
+            if message["source_client"] == SYNTHETIC_TELEGRAM_ADAPTER_ID
+        ]
+        assert len(telegram_messages) == 1
+        assert telegram_messages[0]["parts"][0]["text"] == inbound.message.text
+        assert telegram_messages[0]["author_principal_id"] == runtime.owner_id
+        assert runtime.telegram_source.health()["network"] is False
+
+        revoked = client.post(
+            "/api/v1/integrations/telegram/pairing/"
+            f"{pairing['pairing_id']}/revoke",
+            headers=headers,
+        )
+        assert revoked.status_code == 200
+        assert revoked.json()["revoked_at"] is not None
+        assert client.get("/api/v1/integrations/telegram/pairing").json() is None
+
+        runtime.telegram_source.add_update(
+            TelegramInboundUpdate(
+                update_id=52,
+                message=TelegramInboundMessage(
+                    telegram_message_id=53,
+                    sender_user_id=1001,
+                    chat_id=1001,
+                    chat_type=TelegramChatType.PRIVATE,
+                    sent_at=fixed_time,
+                    text="Rejected after local revocation",
+                ),
+                received_at=fixed_time,
+                raw_size_bytes=256,
+                source_payload_hash=sha256_digest(
+                    b"synthetic-runtime-telegram-update-52"
+                ),
+            )
+        )
+        _wait_for_telegram_revision(runtime, 3)
+        messages_after_revocation = client.get(
+            f"/api/v1/conversations/{runtime.telegram_thread_id}/messages"
+        ).json()
+        assert len(
+            [
+                message
+                for message in messages_after_revocation
+                if message["source_client"] == SYNTHETIC_TELEGRAM_ADAPTER_ID
+            ]
+        ) == 1
+
+        health = client.get("/api/v1/inspection/health").json()
+        telegram_worker = next(
+            component
+            for component in health["components"]
+            if component["component_id"] == "worker.synthetic-telegram"
+        )
+        assert telegram_worker["state"] == "healthy"
+        assert telegram_worker["required"] is False
+
+
+def _wait_for_telegram_revision(runtime, revision: int) -> None:
+    for _ in range(100):
+        poll_state = runtime.telegram_poll_state_store.read_state(
+            SYNTHETIC_TELEGRAM_ADAPTER_ID
+        )
+        if poll_state.revision == revision:
+            return
+        time.sleep(0.01)
+    raise AssertionError("synthetic Telegram worker did not advance its cursor")

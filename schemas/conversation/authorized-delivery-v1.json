@@ -1,0 +1,571 @@
+{
+  "$defs": {
+    "AuthorizationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/CanonicalAction"
+        },
+        "action_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Action Hash",
+          "type": "string"
+        },
+        "contract_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "delegated_execution_id": {
+          "anyOf": [
+            {
+              "maxLength": 65,
+              "minLength": 35,
+              "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delegated Execution Id"
+        },
+        "guardian_sequence": {
+          "minimum": 1,
+          "title": "Guardian Sequence",
+          "type": "integer"
+        },
+        "principal_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Principal Id",
+          "type": "string"
+        },
+        "proposal_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Proposal Id",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "requested_at": {
+          "format": "date-time",
+          "title": "Requested At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "proposal_id",
+        "principal_id",
+        "action",
+        "action_hash",
+        "guardian_sequence",
+        "requested_at"
+      ],
+      "title": "AuthorizationRequest",
+      "type": "object"
+    },
+    "CanonicalAction": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "capability_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Capability Id",
+          "type": "string"
+        },
+        "estimated_cost_gbp": {
+          "default": "0",
+          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,12}|(?=[\\d.]{1,19}0*$)\\d{0,12}\\.\\d{0,6}0*$)",
+          "title": "Estimated Cost Gbp",
+          "type": "string"
+        },
+        "external_destinations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "External Destinations",
+          "type": "array"
+        },
+        "input_sensitivity": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Sensitivity"
+          },
+          "title": "Input Sensitivity",
+          "type": "array"
+        },
+        "operation": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Operation",
+          "type": "string"
+        },
+        "output_sensitivity": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Sensitivity"
+          },
+          "title": "Output Sensitivity",
+          "type": "array"
+        },
+        "purpose": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "resource": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Resource",
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/RiskLevel"
+        },
+        "side_effects": {
+          "items": {
+            "$ref": "#/$defs/SideEffect"
+          },
+          "title": "Side Effects",
+          "type": "array"
+        }
+      },
+      "required": [
+        "capability_id",
+        "operation",
+        "resource",
+        "purpose",
+        "arguments",
+        "risk",
+        "side_effects"
+      ],
+      "title": "CanonicalAction",
+      "type": "object"
+    },
+    "ConversationMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "author_principal_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Author Principal Id",
+          "type": "string"
+        },
+        "citation_ids": {
+          "default": [],
+          "items": {
+            "maxLength": 65,
+            "minLength": 35,
+            "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "title": "Citation Ids",
+          "type": "array"
+        },
+        "contract_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "corrects_message_id": {
+          "anyOf": [
+            {
+              "maxLength": 65,
+              "minLength": 35,
+              "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corrects Message Id"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "delivery_state": {
+          "$ref": "#/$defs/DeliveryState"
+        },
+        "message_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Message Id",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "parts": {
+          "items": {
+            "$ref": "#/$defs/MessagePart"
+          },
+          "minItems": 1,
+          "title": "Parts",
+          "type": "array"
+        },
+        "reply_to_message_id": {
+          "anyOf": [
+            {
+              "maxLength": 65,
+              "minLength": 35,
+              "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reply To Message Id"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity"
+        },
+        "source_client": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Source Client",
+          "type": "string"
+        },
+        "thread_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Thread Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "thread_id",
+        "author_principal_id",
+        "source_client",
+        "parts",
+        "delivery_state",
+        "sensitivity",
+        "created_at",
+        "observed_at"
+      ],
+      "title": "ConversationMessage",
+      "type": "object"
+    },
+    "DecisionEffect": {
+      "enum": [
+        "deny",
+        "allow",
+        "require_approval"
+      ],
+      "title": "DecisionEffect",
+      "type": "string"
+    },
+    "DeliveryState": {
+      "enum": [
+        "pending",
+        "sent",
+        "delivered",
+        "failed",
+        "expired"
+      ],
+      "title": "DeliveryState",
+      "type": "string"
+    },
+    "MessageKind": {
+      "enum": [
+        "text",
+        "attachment",
+        "system_notice"
+      ],
+      "title": "MessageKind",
+      "type": "string"
+    },
+    "MessagePart": {
+      "additionalProperties": false,
+      "properties": {
+        "attachment_id": {
+          "anyOf": [
+            {
+              "maxLength": 65,
+              "minLength": 35,
+              "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attachment Id"
+        },
+        "content_hash": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Hash"
+        },
+        "kind": {
+          "$ref": "#/$defs/MessageKind"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Type"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 100000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "MessagePart",
+      "type": "object"
+    },
+    "PolicyDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "action_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Action Hash",
+          "type": "string"
+        },
+        "constraints": {
+          "additionalProperties": true,
+          "title": "Constraints",
+          "type": "object"
+        },
+        "contract_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "decided_at": {
+          "format": "date-time",
+          "title": "Decided At",
+          "type": "string"
+        },
+        "decision_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/$defs/DecisionEffect"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "obligations": {
+          "default": [],
+          "items": {
+            "maxLength": 128,
+            "minLength": 2,
+            "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+            "type": "string"
+          },
+          "title": "Obligations",
+          "type": "array"
+        },
+        "policy_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 2,
+            "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "request_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision_id",
+        "request_id",
+        "action_hash",
+        "effect",
+        "policy_version",
+        "reason_codes",
+        "decided_at"
+      ],
+      "title": "PolicyDecision",
+      "type": "object"
+    },
+    "RiskLevel": {
+      "enum": [
+        "r0_read_only_local",
+        "r1_reversible_internal",
+        "r2_external_reputational",
+        "r3_destructive_privileged",
+        "r4_irreversible_high_consequence"
+      ],
+      "title": "RiskLevel",
+      "type": "string"
+    },
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "personal",
+        "sensitive",
+        "highly_sensitive",
+        "device_only"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "SideEffect": {
+      "enum": [
+        "internal_write",
+        "local_file_write",
+        "external_read",
+        "external_communication",
+        "external_write",
+        "data_deletion",
+        "credential_use",
+        "credential_reveal",
+        "host_code_execution",
+        "guardian_control",
+        "governance_change",
+        "audit_deletion"
+      ],
+      "title": "SideEffect",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/authorized-client-delivery.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One adapter call bound to a complete deterministic policy decision.",
+  "properties": {
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "authorization_request": {
+      "$ref": "#/$defs/AuthorizationRequest"
+    },
+    "authorized_at": {
+      "format": "date-time",
+      "title": "Authorized At",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "destination_ref": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Destination Ref",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "message": {
+      "$ref": "#/$defs/ConversationMessage"
+    },
+    "policy_decision": {
+      "$ref": "#/$defs/PolicyDecision"
+    }
+  },
+  "required": [
+    "message",
+    "destination_ref",
+    "attempt",
+    "idempotency_key",
+    "authorization_request",
+    "policy_decision",
+    "authorized_at"
+  ],
+  "title": "AuthorizedClientDelivery",
+  "type": "object"
+}

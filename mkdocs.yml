@@ -1,0 +1,73 @@
+site_name: Melloa Architecture Specification
+site_description: Research-backed architecture for a long-lived personal AI operating system
+site_url: ""
+repo_url: "https://github.com/melloa-project/melloa"
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+nav:
+  - Home: index.md
+  - v0.2 adopted decisions: 23-v0.2-decisions.md
+  - M0 implementation: 24-m0-implementation.md
+  - M1 implementation (in progress): 25-m1-implementation.md
+  - Development: development.md
+  - Contracts:
+      - Guardian protocol: contracts/guardian-protocol.md
+  - Operations:
+      - M0 recovery drill: operations/m0-recovery.md
+  - Traceability: 00-traceability.md
+  - Vision: 01-executive-vision.md
+  - Principles and requirements: 02-design-principles-requirements.md
+  - Conceptual model: 03-conceptual-model.md
+  - Alternatives: 04-alternative-architectures.md
+  - Chosen V1: 05-chosen-v1-architecture.md
+  - Events, memory, and data: 06-events-memory-data.md
+  - Agents, models, and goals: 07-agents-models-goals.md
+  - Capabilities, policy, autonomy: 08-capabilities-policy-autonomy.md
+  - Security and prompt injection: 09-security-threat-injection.md
+  - Secrets, control plane, kill switch: 10-secrets-control-kill-switch.md
+  - Camera and hardware: 11-camera-perception-hardware.md
+  - Owner Console, conversation, and clients: 12-telegram-clients.md
+  - Self-modification and CI: 13-self-modification-git-ci.md
+  - Deployment and networking: 14-deployment-networking-infrastructure.md
+  - Observability and recovery: 15-observability-reliability-dr.md
+  - Privacy, retention, export, cost: 16-privacy-retention-export-cost.md
+  - Testing and simulation: 17-testing-evaluation-simulation.md
+  - Repository, languages, docs, DX: 18-repository-languages-docs-dx.md
+  - Onboarding, runbooks, roadmap: 19-onboarding-runbooks-roadmap.md
+  - Risk register: 20-risk-register.md
+  - Reviewers and open questions: 21-reviewers-open-questions-rejected.md
+  - Final synthesis: 22-final-synthesis.md
+  - v0.2 adopted decisions: 23-v0.2-decisions.md
+  - Diagram catalogue: diagrams.md
+  - ADRs:
+      - Index: adr/index.md
+      - ADR-001 Event-oriented ledger: adr/ADR-001-event-oriented-provenance-ledger.md
+      - ADR-002 PostgreSQL and jobs: adr/ADR-002-postgresql-primary-store-and-jobs.md
+      - ADR-003 Model routing: adr/ADR-003-policy-aware-model-routing.md
+      - ADR-004 Credential broker: adr/ADR-004-scoped-credential-broker.md
+      - ADR-005 Isolation: adr/ADR-005-rootless-containers-and-tiered-sandbox.md
+      - ADR-006 Documentation: adr/ADR-006-mkdocs-mermaid-adrs.md
+      - ADR-007 Camera protocol: adr/ADR-007-poe-onvif-rtsp-camera.md
+      - ADR-008 Guardian: adr/ADR-008-independent-guardian.md
+      - ADR-009 Telegram: adr/ADR-009-telegram-long-polling.md
+      - ADR-010 Framework neutrality: adr/ADR-010-framework-neutral-stable-primitives.md
+      - ADR-011 One Melli: adr/ADR-011-one-melli-temporary-specialists.md
+      - ADR-012 Private networking: adr/ADR-012-private-network-no-public-ingress.md
+      - ADR-013 Naming and lineage: adr/ADR-013-melloa-naming-and-intellectual-lineage.md
+      - ADR-014 Owner Console and conversation: adr/ADR-014-private-owner-console-and-conversation.md
+  - Research method: research/method-and-limitations.md
+  - Primary sources: research/primary-sources.md

@@ -1,0 +1,72 @@
+{
+  "$id": "https://schemas.melloa.dev/v1/telegram-pairing-candidate.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidate_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Candidate Id",
+      "type": "string"
+    },
+    "confirmation_code_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Confirmation Code Hash",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "telegram_chat_id": {
+      "maximum": 4503599627370495,
+      "minimum": 1,
+      "title": "Telegram Chat Id",
+      "type": "integer"
+    },
+    "telegram_user_id": {
+      "maximum": 4503599627370495,
+      "minimum": 1,
+      "title": "Telegram User Id",
+      "type": "integer"
+    },
+    "update_id": {
+      "maximum": 4503599627370495,
+      "minimum": 0,
+      "title": "Update Id",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "candidate_id",
+    "owner_id",
+    "update_id",
+    "telegram_user_id",
+    "telegram_chat_id",
+    "confirmation_code_hash",
+    "observed_at",
+    "expires_at"
+  ],
+  "title": "TelegramPairingCandidate",
+  "type": "object"
+}

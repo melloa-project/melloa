@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "IdentityStatus": {
+      "enum": [
+        "active",
+        "suspended",
+        "retired"
+      ],
+      "title": "IdentityStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/owner-identity.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/IdentityStatus",
+      "default": "active"
+    }
+  },
+  "required": [
+    "owner_id",
+    "created_at"
+  ],
+  "title": "OwnerIdentity",
+  "type": "object"
+}

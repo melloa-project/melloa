@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "ProvenanceRelation": {
+      "enum": [
+        "derived_from",
+        "supports",
+        "contradicts",
+        "supersedes",
+        "corrects",
+        "cites"
+      ],
+      "title": "ProvenanceRelation",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/provenance-edge.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "edge_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Edge Id",
+      "type": "string"
+    },
+    "from_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "From Id",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    },
+    "producer_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Producer Id",
+      "type": "string"
+    },
+    "relation": {
+      "$ref": "#/$defs/ProvenanceRelation"
+    },
+    "to_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "To Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "edge_id",
+    "from_id",
+    "to_id",
+    "relation",
+    "created_at",
+    "producer_id"
+  ],
+  "title": "ProvenanceEdge",
+  "type": "object"
+}

@@ -1,0 +1,160 @@
+{
+  "$defs": {
+    "ProcessingLocation": {
+      "enum": [
+        "device",
+        "private_network",
+        "approved_provider"
+      ],
+      "title": "ProcessingLocation",
+      "type": "string"
+    },
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "personal",
+        "sensitive",
+        "highly_sensitive",
+        "device_only"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/model-route-request.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allowed_processing_locations": {
+      "items": {
+        "$ref": "#/$defs/ProcessingLocation"
+      },
+      "title": "Allowed Processing Locations",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "cost_ceiling_gbp": {
+      "minimum": 0.0,
+      "title": "Cost Ceiling Gbp",
+      "type": "number"
+    },
+    "fallback_route_ids": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 2,
+        "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+        "type": "string"
+      },
+      "title": "Fallback Route Ids",
+      "type": "array"
+    },
+    "input": {
+      "additionalProperties": true,
+      "title": "Input",
+      "type": "object"
+    },
+    "latency_deadline_ms": {
+      "exclusiveMinimum": 0,
+      "maximum": 3600000,
+      "title": "Latency Deadline Ms",
+      "type": "integer"
+    },
+    "max_input_tokens": {
+      "exclusiveMinimum": 0,
+      "title": "Max Input Tokens",
+      "type": "integer"
+    },
+    "max_output_tokens": {
+      "exclusiveMinimum": 0,
+      "title": "Max Output Tokens",
+      "type": "integer"
+    },
+    "minimum_quality_profile": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Minimum Quality Profile",
+      "type": "string"
+    },
+    "minimum_reliability": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Minimum Reliability",
+      "type": "number"
+    },
+    "output_schema_id": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Output Schema Id",
+      "type": "string"
+    },
+    "prompt_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Prompt Version",
+      "type": "string"
+    },
+    "provider_retention_policy": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Provider Retention Policy",
+      "type": "string"
+    },
+    "request_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "required_modalities": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 2,
+        "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+        "type": "string"
+      },
+      "title": "Required Modalities",
+      "type": "array"
+    },
+    "sensitivity": {
+      "$ref": "#/$defs/Sensitivity"
+    },
+    "task_type": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Task Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "task_type",
+    "required_modalities",
+    "minimum_quality_profile",
+    "sensitivity",
+    "allowed_processing_locations",
+    "latency_deadline_ms",
+    "max_input_tokens",
+    "max_output_tokens",
+    "cost_ceiling_gbp",
+    "provider_retention_policy",
+    "minimum_reliability",
+    "fallback_route_ids",
+    "output_schema_id",
+    "prompt_version",
+    "input"
+  ],
+  "title": "ModelRouteRequest",
+  "type": "object"
+}

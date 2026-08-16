@@ -1,0 +1,3 @@
+# Implementation agent prompt
+
+Read `AGENTS.md` and the complete architecture suite in this repository, then implement Melloa milestone by milestone beginning with the first incomplete milestone in `docs/22-final-synthesis.md`. Treat `docs/23-v0.2-decisions.md` and accepted ADRs as authoritative, keep every change tested, documented, reproducible, and reviewable, and use synthetic adapters until real credentials or hardware are explicitly provided. Do not weaken the Guardian, policy, provenance, private-network, Owner Console, or channel-neutral conversation boundaries. Continue until blocked by a genuinely missing external dependency or owner decision.

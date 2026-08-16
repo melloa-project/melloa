@@ -1,0 +1,362 @@
+"""PostgreSQL memory adapter for retrieval, inspection, and atomic corrections."""
+
+from __future__ import annotations
+
+from typing import Any, cast
+
+import psycopg
+from psycopg.errors import SerializationFailure, UniqueViolation
+from psycopg.types.json import Jsonb
+
+from melloa.domain.base import JsonObject, RecordId, canonical_json_bytes
+from melloa.domain.memory import (
+    Assertion,
+    AssertionCorrectionResult,
+    AssertionStateChange,
+    AssertionStateProjection,
+    AssertionStateTransitionResult,
+    AssertionStatus,
+    ProvenanceEdge,
+    ProvenanceRelation,
+)
+from melloa.ports.memory import (
+    AssertionCorrectionWrite,
+    AssertionStateTransitionWrite,
+    MemoryConflictError,
+    MemoryNotFoundError,
+)
+
+
+class PostgresMemoryRepository:
+    def __init__(self, connection: psycopg.Connection[tuple[Any, ...]]) -> None:
+        self._connection = connection
+
+    def get_assertion(self, assertion_id: RecordId) -> Assertion:
+        row = self._connection.execute(
+            "SELECT document FROM melloa.assertions WHERE assertion_id = %s",
+            (assertion_id,),
+        ).fetchone()
+        if row is None:
+            raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
+        return self._parse_assertion(row[0])
+
+    def list_assertions(self, subject_id: RecordId) -> tuple[Assertion, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT assertion.document, current.current_status
+              FROM melloa.assertions AS assertion
+              LEFT JOIN melloa.assertion_current_state AS current
+                ON current.assertion_id = assertion.assertion_id
+             WHERE assertion.subject_id = %s
+             ORDER BY assertion.observed_at, assertion.assertion_id
+            """,
+            (subject_id,),
+        ).fetchall()
+        assertions: list[Assertion] = []
+        for document, current_status in rows:
+            if not isinstance(document, dict):
+                raise ValueError("persisted assertion document is not an object")
+            projected = cast(JsonObject, document.copy())
+            if current_status is not None:
+                projected["status"] = str(current_status)
+            assertions.append(
+                Assertion.model_validate_json(canonical_json_bytes(projected))
+            )
+        return tuple(assertions)
+
+    def list_provenance_edges(
+        self,
+        record_ids: frozenset[RecordId],
+    ) -> tuple[ProvenanceEdge, ...]:
+        if not record_ids:
+            return ()
+        identifiers = list(record_ids)
+        rows = self._connection.execute(
+            """
+            SELECT edge_id, from_id, to_id, relation, created_at, producer_id, metadata
+              FROM melloa.provenance_edges
+             WHERE from_id = ANY(%s::text[])
+                OR to_id = ANY(%s::text[])
+             ORDER BY created_at, edge_id
+            """,
+            (identifiers, identifiers),
+        ).fetchall()
+        return tuple(
+            ProvenanceEdge(
+                edge_id=str(edge_id),
+                from_id=str(from_id),
+                to_id=str(to_id),
+                relation=ProvenanceRelation(str(relation)),
+                created_at=created_at,
+                producer_id=str(producer_id),
+                metadata=cast(JsonObject, metadata),
+            )
+            for edge_id, from_id, to_id, relation, created_at, producer_id, metadata in rows
+        )
+
+    def get_assertion_state(self, assertion_id: RecordId) -> AssertionStateProjection:
+        row = self._connection.execute(
+            "SELECT document FROM melloa.assertion_current_state WHERE assertion_id = %s",
+            (assertion_id,),
+        ).fetchone()
+        if row is None:
+            raise MemoryNotFoundError(f"assertion state not found: {assertion_id}")
+        return self._parse_state(row[0])
+
+    def list_assertion_state_changes(
+        self,
+        assertion_id: RecordId,
+    ) -> tuple[AssertionStateChange, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT document
+              FROM melloa.assertion_state_changes
+             WHERE assertion_id = %s
+             ORDER BY version
+            """,
+            (assertion_id,),
+        ).fetchall()
+        if not rows:
+            if self._connection.execute(
+                "SELECT 1 FROM melloa.assertions WHERE assertion_id = %s",
+                (assertion_id,),
+            ).fetchone() is None:
+                raise MemoryNotFoundError(f"assertion state history not found: {assertion_id}")
+        return tuple(self._parse_change(row[0]) for row in rows)
+
+    def apply_correction(
+        self,
+        write: AssertionCorrectionWrite,
+    ) -> AssertionCorrectionResult:
+        try:
+            with self._connection.transaction():
+                correction = write.correction
+                target_id = correction.correction_target_id
+                if target_id is None:
+                    raise MemoryConflictError("correction does not identify a target assertion")
+                target = self.get_assertion(target_id)
+                current_state = self.get_assertion_state(target_id)
+                if current_state != write.expected_target_state:
+                    raise MemoryConflictError("assertion state changed before correction")
+                self._validate_transition(write, target, current_state)
+                correction_state = self._initial_state(correction)
+                result = AssertionCorrectionResult(
+                    correction=correction,
+                    provenance_edge=write.provenance_edge,
+                    target_state=write.target_state,
+                    correction_state=correction_state,
+                    target_change=write.target_change,
+                )
+                self._insert_assertion(correction)
+                self._insert_provenance_edge(write.provenance_edge)
+                self._persist_state_transition(
+                    write.expected_target_state,
+                    write.target_state,
+                    write.target_change,
+                )
+                if (
+                    self.get_assertion_state(target_id) != write.target_state
+                    or self.get_assertion_state(correction.assertion_id) != correction_state
+                    or self.list_assertion_state_changes(target_id)[-1]
+                    != write.target_change
+                ):
+                    raise MemoryConflictError("persisted correction state does not match its write")
+                return result
+        except (SerializationFailure, UniqueViolation) as error:
+            raise MemoryConflictError("correction conflicts with durable memory state") from error
+
+    def apply_state_transition(
+        self,
+        write: AssertionStateTransitionWrite,
+    ) -> AssertionStateTransitionResult:
+        try:
+            with self._connection.transaction():
+                assertion = self.get_assertion(write.expected_state.assertion_id)
+                current_state = self.get_assertion_state(assertion.assertion_id)
+                if current_state != write.expected_state:
+                    raise MemoryConflictError("assertion state changed before transition")
+                self._validate_state_transition(
+                    write.expected_state,
+                    write.state,
+                    write.change,
+                )
+                result = AssertionStateTransitionResult(
+                    assertion=assertion,
+                    current_state=write.state,
+                    state_change=write.change,
+                )
+                self._persist_state_transition(
+                    write.expected_state,
+                    write.state,
+                    write.change,
+                )
+                if (
+                    self.get_assertion_state(assertion.assertion_id) != write.state
+                    or self.list_assertion_state_changes(assertion.assertion_id)[-1]
+                    != write.change
+                ):
+                    raise MemoryConflictError(
+                        "persisted assertion state does not match its transition"
+                    )
+                return result
+        except (SerializationFailure, UniqueViolation) as error:
+            raise MemoryConflictError("transition conflicts with durable memory state") from error
+
+    def _insert_assertion(self, assertion: Assertion) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO melloa.assertions (
+                assertion_id, subject_id, predicate, epistemic_status, assertion_status,
+                confidence, sensitivity, source_authority, observed_at,
+                valid_from, valid_to, correction_target_id, document
+            ) VALUES (
+                %(assertion_id)s, %(subject_id)s, %(predicate)s, %(epistemic_status)s,
+                %(assertion_status)s, %(confidence)s, %(sensitivity)s,
+                %(source_authority)s, %(observed_at)s, %(valid_from)s, %(valid_to)s,
+                %(correction_target_id)s, %(document)s
+            )
+            """,
+            {
+                "assertion_id": assertion.assertion_id,
+                "subject_id": assertion.subject_id,
+                "predicate": assertion.predicate,
+                "epistemic_status": assertion.epistemic_status.value,
+                "assertion_status": assertion.status.value,
+                "confidence": assertion.confidence,
+                "sensitivity": assertion.sensitivity.value,
+                "source_authority": assertion.source_authority.value,
+                "observed_at": assertion.observed_at,
+                "valid_from": assertion.valid_from,
+                "valid_to": assertion.valid_to,
+                "correction_target_id": assertion.correction_target_id,
+                "document": Jsonb(assertion.model_dump(mode="json")),
+            },
+        )
+
+    def _insert_provenance_edge(self, edge: ProvenanceEdge) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO melloa.provenance_edges (
+                edge_id, from_id, to_id, relation, producer_id, created_at, metadata
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                edge.edge_id,
+                edge.from_id,
+                edge.to_id,
+                edge.relation.value,
+                edge.producer_id,
+                edge.created_at,
+                Jsonb(edge.metadata),
+            ),
+        )
+
+    def _persist_state_transition(
+        self,
+        expected: AssertionStateProjection,
+        state: AssertionStateProjection,
+        change: AssertionStateChange,
+    ) -> None:
+        self._connection.execute(
+            """
+            SELECT melloa.transition_assertion_state(
+                %(change_id)s, %(assertion_id)s, %(expected_version)s,
+                %(previous_status)s, %(new_status)s, %(preferred_assertion_id)s,
+                %(changed_by_record_id)s, %(reason)s, %(changed_at)s,
+                %(projection_document)s, %(change_document)s
+            )
+            """,
+            {
+                "change_id": change.change_id,
+                "assertion_id": state.assertion_id,
+                "expected_version": expected.version,
+                "previous_status": expected.current_status.value,
+                "new_status": state.current_status.value,
+                "preferred_assertion_id": state.preferred_assertion_id,
+                "changed_by_record_id": state.changed_by_record_id,
+                "reason": change.reason,
+                "changed_at": state.changed_at,
+                "projection_document": Jsonb(state.model_dump(mode="json")),
+                "change_document": Jsonb(change.model_dump(mode="json")),
+            },
+        )
+
+    @staticmethod
+    def _initial_state(assertion: Assertion) -> AssertionStateProjection:
+        return AssertionStateProjection(
+            assertion_id=assertion.assertion_id,
+            current_status=assertion.status,
+            changed_by_record_id=assertion.assertion_id,
+            changed_at=assertion.observed_at,
+            version=1,
+        )
+
+    @staticmethod
+    def _validate_transition(
+        write: AssertionCorrectionWrite,
+        target: Assertion,
+        current_state: AssertionStateProjection,
+    ) -> None:
+        correction = write.correction
+        target_state = write.target_state
+        change = write.target_change
+        if (
+            correction.subject_id != target.subject_id
+            or correction.predicate != target.predicate
+            or correction.valid_from != target.valid_from
+            or correction.valid_to != target.valid_to
+            or correction.sensitivity is not target.sensitivity
+        ):
+            raise MemoryConflictError("correction does not preserve the target assertion scope")
+        PostgresMemoryRepository._validate_state_transition(
+            current_state,
+            target_state,
+            change,
+        )
+        if (
+            target_state.current_status is not AssertionStatus.SUPERSEDED
+            or target_state.preferred_assertion_id != correction.assertion_id
+            or target_state.changed_by_record_id != correction.assertion_id
+        ):
+            raise MemoryConflictError("correction state transition is inconsistent")
+
+    @staticmethod
+    def _validate_state_transition(
+        expected: AssertionStateProjection,
+        state: AssertionStateProjection,
+        change: AssertionStateChange,
+    ) -> None:
+        if (
+            state.assertion_id != expected.assertion_id
+            or state.version != expected.version + 1
+            or change.assertion_id != expected.assertion_id
+            or change.previous_status is not expected.current_status
+            or change.new_status is not state.current_status
+            or change.preferred_assertion_id != state.preferred_assertion_id
+            or change.changed_by_record_id != state.changed_by_record_id
+            or change.changed_at != state.changed_at
+            or change.version != state.version
+        ):
+            raise MemoryConflictError("assertion state transition is inconsistent")
+
+    @staticmethod
+    def _parse_assertion(document: object) -> Assertion:
+        if not isinstance(document, dict):
+            raise ValueError("persisted assertion document is not an object")
+        return Assertion.model_validate_json(canonical_json_bytes(cast(JsonObject, document)))
+
+    @staticmethod
+    def _parse_state(document: object) -> AssertionStateProjection:
+        if not isinstance(document, dict):
+            raise ValueError("persisted assertion state document is not an object")
+        return AssertionStateProjection.model_validate_json(
+            canonical_json_bytes(cast(JsonObject, document))
+        )
+
+    @staticmethod
+    def _parse_change(document: object) -> AssertionStateChange:
+        if not isinstance(document, dict):
+            raise ValueError("persisted assertion state change document is not an object")
+        return AssertionStateChange.model_validate_json(
+            canonical_json_bytes(cast(JsonObject, document))
+        )

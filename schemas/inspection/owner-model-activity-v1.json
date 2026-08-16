@@ -1,0 +1,382 @@
+{
+  "$defs": {
+    "DisclosedMemoryReference": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Assertion Id",
+          "type": "string"
+        },
+        "citation_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Citation Id",
+          "type": "string"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity"
+        }
+      },
+      "required": [
+        "citation_id",
+        "assertion_id",
+        "sensitivity"
+      ],
+      "title": "DisclosedMemoryReference",
+      "type": "object"
+    },
+    "ModelActivityEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        },
+        "cost_gbp": {
+          "minimum": 0.0,
+          "title": "Cost Gbp",
+          "type": "number"
+        },
+        "disclosure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelDisclosureInspection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "external_disclosure": {
+          "title": "External Disclosure",
+          "type": "boolean"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "model_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "provider_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "result_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Result Id",
+          "type": "string"
+        },
+        "route_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Route Id",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "thread_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Thread Id",
+          "type": "string"
+        },
+        "turn_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Turn Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turn_id",
+        "thread_id",
+        "result_id",
+        "request_id",
+        "route_id",
+        "provider_id",
+        "model_id",
+        "input_tokens",
+        "output_tokens",
+        "cost_gbp",
+        "started_at",
+        "completed_at",
+        "external_disclosure"
+      ],
+      "title": "ModelActivityEntry",
+      "type": "object"
+    },
+    "ModelAttemptOutcome": {
+      "enum": [
+        "succeeded",
+        "failed"
+      ],
+      "title": "ModelAttemptOutcome",
+      "type": "string"
+    },
+    "ModelDisclosureInspection": {
+      "additionalProperties": false,
+      "properties": {
+        "external_attempts": {
+          "items": {
+            "$ref": "#/$defs/ModelRouteAttempt"
+          },
+          "title": "External Attempts",
+          "type": "array"
+        },
+        "memory_references": {
+          "items": {
+            "$ref": "#/$defs/DisclosedMemoryReference"
+          },
+          "title": "Memory References",
+          "type": "array"
+        },
+        "purpose": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Purpose",
+          "type": "string"
+        },
+        "retrieval_manifest_id": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Retrieval Manifest Id",
+          "type": "string"
+        },
+        "triggering_message_ids": {
+          "items": {
+            "maxLength": 65,
+            "minLength": 35,
+            "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Triggering Message Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "retrieval_manifest_id",
+        "purpose",
+        "triggering_message_ids",
+        "memory_references",
+        "external_attempts"
+      ],
+      "title": "ModelDisclosureInspection",
+      "type": "object"
+    },
+    "ModelRouteAttempt": {
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "format": "date-time",
+          "title": "Completed At",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 2,
+              "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "external_disclosure": {
+          "title": "External Disclosure",
+          "type": "boolean"
+        },
+        "model_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ModelAttemptOutcome"
+        },
+        "processing_location": {
+          "$ref": "#/$defs/ProcessingLocation"
+        },
+        "provider_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "route_id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+          "title": "Route Id",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "route_id",
+        "provider_id",
+        "model_id",
+        "processing_location",
+        "outcome",
+        "started_at",
+        "completed_at",
+        "external_disclosure"
+      ],
+      "title": "ModelRouteAttempt",
+      "type": "object"
+    },
+    "ProcessingLocation": {
+      "enum": [
+        "device",
+        "private_network",
+        "approved_provider"
+      ],
+      "title": "ProcessingLocation",
+      "type": "string"
+    },
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "internal",
+        "personal",
+        "sensitive",
+        "highly_sensitive",
+        "device_only"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/owner-model-activity.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/ModelActivityEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "external_cost_gbp": {
+      "minimum": 0.0,
+      "title": "External Cost Gbp",
+      "type": "number"
+    },
+    "external_disclosure_runs": {
+      "minimum": 0,
+      "title": "External Disclosure Runs",
+      "type": "integer"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "total_cost_gbp": {
+      "minimum": 0.0,
+      "title": "Total Cost Gbp",
+      "type": "number"
+    },
+    "total_input_tokens": {
+      "minimum": 0,
+      "title": "Total Input Tokens",
+      "type": "integer"
+    },
+    "total_output_tokens": {
+      "minimum": 0,
+      "title": "Total Output Tokens",
+      "type": "integer"
+    },
+    "total_runs": {
+      "minimum": 0,
+      "title": "Total Runs",
+      "type": "integer"
+    },
+    "window_end": {
+      "format": "date-time",
+      "title": "Window End",
+      "type": "string"
+    },
+    "window_start": {
+      "format": "date-time",
+      "title": "Window Start",
+      "type": "string"
+    }
+  },
+  "required": [
+    "owner_id",
+    "window_start",
+    "window_end",
+    "generated_at",
+    "total_runs",
+    "external_disclosure_runs",
+    "total_input_tokens",
+    "total_output_tokens",
+    "total_cost_gbp",
+    "external_cost_gbp",
+    "entries"
+  ],
+  "title": "OwnerModelActivityReport",
+  "type": "object"
+}

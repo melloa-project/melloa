@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "AssertionStatus": {
+      "enum": [
+        "provisional",
+        "active",
+        "confirmed",
+        "disputed",
+        "superseded",
+        "retracted",
+        "expired"
+      ],
+      "title": "AssertionStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/assertion-state-change.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assertion_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Assertion Id",
+      "type": "string"
+    },
+    "change_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Change Id",
+      "type": "string"
+    },
+    "changed_at": {
+      "format": "date-time",
+      "title": "Changed At",
+      "type": "string"
+    },
+    "changed_by_record_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Changed By Record Id",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "new_status": {
+      "$ref": "#/$defs/AssertionStatus"
+    },
+    "preferred_assertion_id": {
+      "anyOf": [
+        {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Preferred Assertion Id"
+    },
+    "previous_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AssertionStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Reason",
+      "type": "string"
+    },
+    "version": {
+      "exclusiveMinimum": 0,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "change_id",
+    "assertion_id",
+    "previous_status",
+    "new_status",
+    "changed_by_record_id",
+    "reason",
+    "changed_at",
+    "version"
+  ],
+  "title": "AssertionStateChange",
+  "type": "object"
+}

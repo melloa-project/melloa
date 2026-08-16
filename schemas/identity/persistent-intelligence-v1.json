@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "IdentityStatus": {
+      "enum": [
+        "active",
+        "suspended",
+        "retired"
+      ],
+      "title": "IdentityStatus",
+      "type": "string"
+    },
+    "NameHistoryEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "chosen_by": {
+          "maxLength": 65,
+          "minLength": 35,
+          "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+          "title": "Chosen By",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        }
+      },
+      "required": [
+        "display_name",
+        "valid_from",
+        "chosen_by"
+      ],
+      "title": "NameHistoryEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/persistent-intelligence.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "intelligence_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Intelligence Id",
+      "type": "string"
+    },
+    "naming_history": {
+      "items": {
+        "$ref": "#/$defs/NameHistoryEntry"
+      },
+      "minItems": 1,
+      "title": "Naming History",
+      "type": "array"
+    },
+    "owner_id": {
+      "maxLength": 65,
+      "minLength": 35,
+      "pattern": "^[a-z][a-z0-9_]{1,31}_[0-9a-f]{32}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "role": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Role",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/IdentityStatus",
+      "default": "active"
+    }
+  },
+  "required": [
+    "intelligence_id",
+    "owner_id",
+    "created_at",
+    "role",
+    "naming_history"
+  ],
+  "title": "PersistentIntelligenceIdentity",
+  "type": "object"
+}
