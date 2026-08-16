@@ -16,6 +16,7 @@ from melloa.domain.base import sha256_digest
 from melloa.domain.telegram import (
     MAX_TELEGRAM_UPDATE_BYTES,
     TelegramAttachmentDisposition,
+    TelegramAttachmentIntakeRequest,
     TelegramAttachmentKind,
     TelegramAttachmentReceipt,
     TelegramAttachmentReference,
@@ -653,6 +654,13 @@ def test_generated_telegram_schemas_validate_serialized_contracts(fixed_time) ->
         recorded_at=inbound.received_at,
         reason_code="telegram.attachment.unsupported",
     )
+    attachment_request = TelegramAttachmentIntakeRequest(
+        adapter_id=ADAPTER_ID,
+        update_id=inbound.update_id,
+        update_fingerprint=telegram_update_fingerprint(inbound),
+        received_at=inbound.received_at,
+        attachments=(attachment(1),),
+    )
     ingestion_receipt = TelegramIngestionReceipt(
         receipt_id=record_id("tgreceipt", 1),
         adapter_id=ADAPTER_ID,
@@ -669,6 +677,7 @@ def test_generated_telegram_schemas_validate_serialized_contracts(fixed_time) ->
     )
     poll_state = TelegramPollState(adapter_id=ADAPTER_ID, updated_at=fixed_time)
     contracts = {
+        "attachment-intake-request-v1.json": attachment_request,
         "attachment-receipt-v1.json": attachment_receipt,
         "inbound-update-v1.json": inbound,
         "ingestion-receipt-v1.json": ingestion_receipt,

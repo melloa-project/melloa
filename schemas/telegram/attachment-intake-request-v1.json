@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "TelegramAttachmentKind": {
+      "enum": [
+        "photo",
+        "document",
+        "audio",
+        "voice",
+        "video",
+        "animation",
+        "sticker"
+      ],
+      "title": "TelegramAttachmentKind",
+      "type": "string"
+    },
+    "TelegramAttachmentReference": {
+      "additionalProperties": false,
+      "properties": {
+        "declared_size_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Size Bytes"
+        },
+        "file_id": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "File Id",
+          "type": "string"
+        },
+        "file_name": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "File Name"
+        },
+        "file_unique_id": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "File Unique Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TelegramAttachmentKind"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Type"
+        }
+      },
+      "required": [
+        "kind",
+        "file_id",
+        "file_unique_id"
+      ],
+      "title": "TelegramAttachmentReference",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.melloa.dev/v1/telegram-attachment-intake-request.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter_id": {
+      "maxLength": 128,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+      "title": "Adapter Id",
+      "type": "string"
+    },
+    "attachments": {
+      "items": {
+        "$ref": "#/$defs/TelegramAttachmentReference"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Attachments",
+      "type": "array"
+    },
+    "contract_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "received_at": {
+      "format": "date-time",
+      "title": "Received At",
+      "type": "string"
+    },
+    "update_fingerprint": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Update Fingerprint",
+      "type": "string"
+    },
+    "update_id": {
+      "maximum": 4503599627370495,
+      "minimum": 0,
+      "title": "Update Id",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "adapter_id",
+    "update_id",
+    "update_fingerprint",
+    "received_at",
+    "attachments"
+  ],
+  "title": "TelegramAttachmentIntakeRequest",
+  "type": "object"
+}

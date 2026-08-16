@@ -29,6 +29,7 @@
 - Added a bounded Telegram poll worker with whole-batch ordering checks, source-outage immutability, forbidden-mode no-poll behavior, redacted health, and no-network synthetic lifespan wiring into a dedicated canonical intake thread.
 - Added replay-stable synthetic Telegram pairing challenges, thread-safe candidate/active-pair state, CSRF and recent-auth protected redacted pairing APIs, live ingestion resolution, and authority-reducing revocation without pre-granting channel identity at runtime startup.
 - Added the Owner Console Telegram pairing workflow with typed same-origin reads/mutations, masked provider identifiers, transient cleared challenge entry, recent-authenticated explicit confirm/revoke controls, optional-unconfigured state, and post-mutation projection refresh.
+- Added an immutable Telegram attachment-intake contract plus no-network rejecting and bounded in-memory quarantine backends with pre-fetch metadata policy, hard byte quotas, content-addressed receipts, and exact replay.
 
 ## M0 implementation — 16 August 2026
 

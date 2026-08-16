@@ -241,6 +241,39 @@ class TelegramAttachmentReceipt(ContractModel):
         return self
 
 
+class TelegramAttachmentIntakeRequest(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    adapter_id: QualifiedName
+    update_id: TelegramUpdateId
+    update_fingerprint: Sha256Digest
+    received_at: AwareDatetime
+    attachments: tuple[TelegramAttachmentReference, ...] = Field(
+        min_length=1,
+        max_length=16,
+    )
+
+    @model_validator(mode="after")
+    def validate_request(self) -> TelegramAttachmentIntakeRequest:
+        unique_ids = tuple(item.file_unique_id for item in self.attachments)
+        if len(set(unique_ids)) != len(unique_ids):
+            raise ValueError("Telegram attachment intake references must be unique")
+        return self
+
+
+def validate_telegram_attachment_receipts(
+    request: TelegramAttachmentIntakeRequest,
+    receipts: tuple[TelegramAttachmentReceipt, ...],
+) -> None:
+    """Require one ordered, complete, post-receipt outcome for every reference."""
+
+    referenced = tuple(item.file_unique_id for item in request.attachments)
+    recorded = tuple(item.file_unique_id for item in receipts)
+    if referenced != recorded:
+        raise ValueError("Telegram attachment intake must preserve every reference in order")
+    if any(item.recorded_at < request.received_at for item in receipts):
+        raise ValueError("Telegram attachment intake receipt predates its update")
+
+
 class TelegramIngestionReceipt(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     receipt_id: RecordId

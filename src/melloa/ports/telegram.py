@@ -5,6 +5,8 @@ from typing import Protocol
 
 from melloa.domain.base import JsonObject, QualifiedName, RecordId
 from melloa.domain.telegram import (
+    TelegramAttachmentIntakeRequest,
+    TelegramAttachmentReceipt,
     TelegramInboundUpdate,
     TelegramIngestionReceipt,
     TelegramOwnerPairing,
@@ -36,6 +38,24 @@ class PermanentTelegramPollingError(TelegramPollingError):
 
 class TelegramPollConflictError(RuntimeError):
     """Immutable update state or its optimistic cursor revision conflicted."""
+
+
+class TelegramAttachmentError(RuntimeError):
+    """Attachment intake failed without exposing raw provider details."""
+
+    def __init__(self, reason_code: QualifiedName, *, retryable: bool) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+        self.retryable = retryable
+
+
+class TransientTelegramAttachmentError(TelegramAttachmentError):
+    def __init__(self, reason_code: QualifiedName) -> None:
+        super().__init__(reason_code, retryable=True)
+
+
+class TelegramAttachmentConflictError(RuntimeError):
+    """An attachment request or immutable quarantine outcome conflicted."""
 
 
 class TelegramPairingNotFoundError(LookupError):
@@ -126,6 +146,14 @@ class TelegramPairingStateStore(Protocol):
         pairing: TelegramOwnerPairing,
     ) -> TelegramOwnerPairing:
         """Persist an exact authority-reducing revocation."""
+
+
+class TelegramAttachmentBackend(Protocol):
+    def handle(
+        self,
+        request: TelegramAttachmentIntakeRequest,
+    ) -> tuple[TelegramAttachmentReceipt, ...]:
+        """Reject before fetch or idempotently quarantine every exact reference."""
 
 
 class TelegramUpdateSource(Protocol):

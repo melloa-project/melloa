@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from threading import RLock
 
-from melloa.domain.base import JsonObject, QualifiedName, utc_now
+from melloa.domain.base import JsonObject, QualifiedName, sha256_digest, utc_now
 from melloa.domain.telegram import (
+    TelegramAttachmentDisposition,
+    TelegramAttachmentIntakeRequest,
+    TelegramAttachmentKind,
+    TelegramAttachmentReceipt,
+    TelegramAttachmentReference,
     TelegramInboundUpdate,
     TelegramIngestionReceipt,
     TelegramOwnerPairing,
@@ -17,14 +23,17 @@ from melloa.domain.telegram import (
     TelegramPollRequest,
     TelegramPollState,
     TelegramUpdateId,
+    validate_telegram_attachment_receipts,
     validate_telegram_ingestion_receipt,
     validate_telegram_pairing_confirmation,
 )
 from melloa.ports.telegram import (
+    TelegramAttachmentConflictError,
     TelegramPairingChallenge,
     TelegramPairingConflictError,
     TelegramPairingNotFoundError,
     TelegramPollConflictError,
+    TransientTelegramAttachmentError,
     TransientTelegramPollingError,
 )
 
@@ -69,6 +78,244 @@ class FakeTelegramPairingChallengePublisher:
                 raise TelegramPairingNotFoundError(
                     "Telegram pairing challenge not found"
                 ) from error
+
+
+class RejectingTelegramAttachmentBackend:
+    """Reject every reference from metadata without fetching attachment bytes."""
+
+    def __init__(
+        self,
+        *,
+        reason_code: QualifiedName = "telegram.attachment.unsupported",
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
+        self._reason_code = reason_code
+        self._clock = clock
+        self._lock = RLock()
+        self._requests_by_update: dict[
+            tuple[QualifiedName, int], TelegramAttachmentIntakeRequest
+        ] = {}
+        self._receipts_by_update: dict[
+            tuple[QualifiedName, int], tuple[TelegramAttachmentReceipt, ...]
+        ] = {}
+        self.requests: list[TelegramAttachmentIntakeRequest] = []
+
+    def handle(
+        self,
+        request: TelegramAttachmentIntakeRequest,
+    ) -> tuple[TelegramAttachmentReceipt, ...]:
+        with self._lock:
+            key = (request.adapter_id, request.update_id)
+            self.requests.append(request)
+            existing_request = self._requests_by_update.get(key)
+            if existing_request is not None and existing_request != request:
+                raise TelegramAttachmentConflictError(
+                    "Telegram attachment request changed across replay"
+                )
+            self._requests_by_update[key] = request
+            existing = self._receipts_by_update.get(key)
+            if existing is not None:
+                return existing
+            recorded_at = max(request.received_at, self._clock())
+            receipts = tuple(
+                TelegramAttachmentReceipt(
+                    file_unique_id=attachment.file_unique_id,
+                    disposition=TelegramAttachmentDisposition.REJECTED,
+                    recorded_at=recorded_at,
+                    reason_code=self._reason_code,
+                )
+                for attachment in request.attachments
+            )
+            validate_telegram_attachment_receipts(request, receipts)
+            self._receipts_by_update[key] = receipts
+            return receipts
+
+
+@dataclass(frozen=True)
+class SyntheticTelegramAttachmentPayload:
+    content: bytes = field(repr=False)
+    media_type: str
+
+    def __post_init__(self) -> None:
+        if not self.media_type.strip():
+            raise ValueError("synthetic Telegram attachment media type cannot be empty")
+
+
+class InMemoryTelegramAttachmentQuarantine:
+    """Apply fail-closed metadata policy and content-address synthetic bytes."""
+
+    def __init__(
+        self,
+        payloads: Mapping[str, SyntheticTelegramAttachmentPayload],
+        *,
+        allowed_kinds: frozenset[TelegramAttachmentKind],
+        allowed_media_types: frozenset[str],
+        max_attachment_bytes: int,
+        max_quarantine_bytes: int,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
+        if max_attachment_bytes < 1:
+            raise ValueError("Telegram attachment size limit must be positive")
+        if max_quarantine_bytes < max_attachment_bytes:
+            raise ValueError("Telegram quarantine quota must cover one attachment")
+        self._payloads = dict(payloads)
+        self._allowed_kinds = allowed_kinds
+        self._allowed_media_types = frozenset(
+            self._normalize_media_type(item) for item in allowed_media_types
+        )
+        self._max_attachment_bytes = max_attachment_bytes
+        self._max_quarantine_bytes = max_quarantine_bytes
+        self._clock = clock
+        self._lock = RLock()
+        self._requests_by_update: dict[
+            tuple[QualifiedName, int], TelegramAttachmentIntakeRequest
+        ] = {}
+        self._receipts_by_update: dict[
+            tuple[QualifiedName, int], tuple[TelegramAttachmentReceipt, ...]
+        ] = {}
+        self._blobs: dict[str, bytes] = {}
+        self.requests: list[TelegramAttachmentIntakeRequest] = []
+        self.fetched_file_unique_ids: list[str] = []
+
+    @property
+    def stored_blob_ids(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(sorted(self._blobs))
+
+    def has_blob(self, blob_id: str) -> bool:
+        with self._lock:
+            return blob_id in self._blobs
+
+    def handle(
+        self,
+        request: TelegramAttachmentIntakeRequest,
+    ) -> tuple[TelegramAttachmentReceipt, ...]:
+        with self._lock:
+            key = (request.adapter_id, request.update_id)
+            self.requests.append(request)
+            existing_request = self._requests_by_update.get(key)
+            if existing_request is not None and existing_request != request:
+                raise TelegramAttachmentConflictError(
+                    "Telegram attachment request changed across replay"
+                )
+            self._requests_by_update[key] = request
+            existing = self._receipts_by_update.get(key)
+            if existing is not None:
+                return existing
+            recorded_at = max(request.received_at, self._clock())
+            receipts = tuple(
+                self._handle_reference(attachment, recorded_at)
+                for attachment in request.attachments
+            )
+            validate_telegram_attachment_receipts(request, receipts)
+            self._receipts_by_update[key] = receipts
+            return receipts
+
+    def _handle_reference(
+        self,
+        attachment: TelegramAttachmentReference,
+        recorded_at: datetime,
+    ) -> TelegramAttachmentReceipt:
+        if attachment.kind not in self._allowed_kinds:
+            return self._rejected(attachment, recorded_at, "telegram.attachment.kind_denied")
+        if attachment.declared_size_bytes is None:
+            return self._rejected(attachment, recorded_at, "telegram.attachment.size_unknown")
+        if attachment.declared_size_bytes > self._max_attachment_bytes:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.declared_size_exceeded",
+            )
+        if attachment.media_type is None:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.media_type_unknown",
+            )
+        declared_media_type = self._normalize_media_type(attachment.media_type)
+        if declared_media_type not in self._allowed_media_types:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.media_type_denied",
+            )
+
+        self.fetched_file_unique_ids.append(attachment.file_unique_id)
+        try:
+            payload = self._payloads[attachment.file_unique_id]
+        except KeyError as error:
+            raise TransientTelegramAttachmentError(
+                "telegram.attachment.fetch_unavailable"
+            ) from error
+        size_bytes = len(payload.content)
+        if size_bytes > self._max_attachment_bytes:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.actual_size_exceeded",
+            )
+        if size_bytes != attachment.declared_size_bytes:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.size_mismatch",
+            )
+        media_type = self._normalize_media_type(payload.media_type)
+        if media_type not in self._allowed_media_types:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.actual_media_type_denied",
+            )
+        if media_type != declared_media_type:
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.media_type_mismatch",
+            )
+
+        content_hash = sha256_digest(payload.content)
+        blob_id = f"quarantine_{content_hash.removeprefix('sha256:')[:32]}"
+        existing = self._blobs.get(blob_id)
+        if existing is not None and existing != payload.content:
+            raise TelegramAttachmentConflictError(
+                "Telegram quarantine content-address collision"
+            )
+        if existing is None and sum(map(len, self._blobs.values())) + size_bytes > (
+            self._max_quarantine_bytes
+        ):
+            return self._rejected(
+                attachment,
+                recorded_at,
+                "telegram.attachment.quarantine_quota_exceeded",
+            )
+        self._blobs[blob_id] = payload.content
+        return TelegramAttachmentReceipt(
+            file_unique_id=attachment.file_unique_id,
+            disposition=TelegramAttachmentDisposition.QUARANTINED,
+            recorded_at=recorded_at,
+            quarantine_blob_id=blob_id,
+            content_hash=content_hash,
+            size_bytes=size_bytes,
+            media_type=media_type,
+        )
+
+    @staticmethod
+    def _rejected(
+        attachment: TelegramAttachmentReference,
+        recorded_at: datetime,
+        reason_code: QualifiedName,
+    ) -> TelegramAttachmentReceipt:
+        return TelegramAttachmentReceipt(
+            file_unique_id=attachment.file_unique_id,
+            disposition=TelegramAttachmentDisposition.REJECTED,
+            recorded_at=recorded_at,
+            reason_code=reason_code,
+        )
+
+    @staticmethod
+    def _normalize_media_type(value: str) -> str:
+        return value.split(";", maxsplit=1)[0].strip().lower()
 
 
 class InMemoryTelegramPairingStateStore:
