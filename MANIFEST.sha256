@@ -186,7 +186,7 @@ c038debfec5f2e7b2bc90eef3e7e0f76997068a503d6342887ebae9ec8311449  ./src/melloa/a
 efbf234016061a11c0883590b1a17de579be996edc31b3b247d620cf05eb220e  ./src/melloa/adapters/postgres/delivery.py
 a543f5e8b65cad81f2b510dac4bd25556c8eddf6e0fe7b0eabd9d5c4c16080fc  ./src/melloa/adapters/postgres/memory.py
 857c2586d5ff4e74700cc45a12e490839f1a2a3ff5ea5d14af12691d06aec0b9  ./src/melloa/adapters/postgres/migrations.py
-ccad2b0638fd28da0a16ec7c15b5886b7bdbedac19c934d0ccd8270a39a887ab  ./src/melloa/adapters/postgres/mvp.py
+21568325732bc2ea273a4e4d887688bdbbc36935fcce987a7e616fbfdf10f513  ./src/melloa/adapters/postgres/mvp.py
 02c8d5c3b28d9b9c455be9124a7cb5c6984708c9b3060cf411e24ebfafd87342  ./src/melloa/adapters/postgres/store.py
 d6a07a027f1bba1eb9ebb5b365acd94f4b028088a6b9588c1f750fec533ecf20  ./src/melloa/adapters/postgres/telegram.py
 2601ef6aa7777ca1a658e18ef240f6c9fa3488367482ea963158d7813444b801  ./src/melloa/adapters/telegram/__init__.py

@@ -275,7 +275,7 @@ def _ensure_owner(
     seeded_at: datetime,
 ) -> OwnerIdentity:
     row = connection.execute(
-        "SELECT document FROM melloa.owners WHERE owner_id = %s FOR UPDATE",
+        "SELECT document FROM melloa.owners WHERE owner_id = %s",
         (owner_id,),
     ).fetchone()
     if row is None:
