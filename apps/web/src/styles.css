@@ -546,7 +546,7 @@ pre {
   align-items: center;
   background: var(--sidebar-soft);
   border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--sidebar-ink);
   display: grid;
   gap: 9px;
@@ -1905,6 +1905,44 @@ pre {
 
 .memory-metadata {
   margin-top: 12px;
+}
+
+.memory-deletion-disclosure {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.memory-deletion-disclosure > div {
+  border-bottom: 1px solid #fed7aa;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.memory-deletion-disclosure > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.memory-deletion-disclosure span {
+  color: #9a3412;
+  font-size: 0.62rem;
+  font-weight: 750;
+}
+
+.memory-deletion-disclosure strong,
+.memory-deletion-disclosure code {
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .memory-actions {

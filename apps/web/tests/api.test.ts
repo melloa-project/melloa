@@ -66,6 +66,10 @@ describe("MelloaApi", () => {
       status: 403,
       code: "recent_authentication_required",
     });
+    await expect(api.deleteMemoryContent("assertion_01")).rejects.toMatchObject({
+      status: 403,
+      code: "recent_authentication_required",
+    });
     expect(called).toBe(false);
   });
 
@@ -107,5 +111,23 @@ describe("MelloaApi", () => {
     ]);
     expect(requested[4]).toContain("from=2026-08-10T00%3A00%3A00.000Z");
     expect(requested[4]).toContain("to=2026-08-17T00%3A00%3A00.000Z");
+  });
+
+  it("deletes assertion content through a CSRF-bound memory route", async () => {
+    const calls: Array<{ readonly input: string; readonly init?: RequestInit }> = [];
+    const api = new MelloaApi(async (input, init) => {
+      calls.push({ input: String(input), init });
+      if (String(input) === "/api/v1/auth/session") {
+        return jsonResponse({ principal, csrf_token: "csrf-proof" });
+      }
+      return jsonResponse({ created: true });
+    });
+
+    await api.login("owner-credential");
+    await api.deleteMemoryContent("assertion/needs encoding");
+
+    expect(calls[1]?.input).toBe("/api/v1/memory/assertion%2Fneeds%20encoding/content");
+    expect(calls[1]?.init?.method).toBe("DELETE");
+    expect(new Headers(calls[1]?.init?.headers).get("X-Melloa-CSRF")).toBe("csrf-proof");
   });
 });

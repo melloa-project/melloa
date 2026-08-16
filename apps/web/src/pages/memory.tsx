@@ -12,12 +12,12 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
-import type { MemoryInspection } from "../api";
+import type { JsonObject, MemoryInspection } from "../api";
 import { errorMessage, useMelloa } from "../app";
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Modal, SectionHeader } from "../components/ui";
-import { formatInstant, readString, safeJson, shortId, titleCase } from "../lib/format";
+import { asObject, formatInstant, readNumber, readString, safeJson, shortId, titleCase } from "../lib/format";
 
-type MemoryAction = "correct" | "dispute" | "retract";
+type MemoryAction = "correct" | "dispute" | "retract" | "delete_content";
 
 export function MemoryPage() {
   const { api, canMutate, notify } = useMelloa();
@@ -69,7 +69,9 @@ export function MemoryPage() {
     try {
       const assertionId = inspection.assertion.assertion_id;
       const version = inspection.current_state.version;
-      if (action === "correct") {
+      if (action === "delete_content") {
+        await api.deleteMemoryContent(assertionId);
+      } else if (action === "correct") {
         const form = event.currentTarget;
         const field = form.elements.namedItem("value");
         if (!(field instanceof HTMLTextAreaElement)) {
@@ -87,7 +89,7 @@ export function MemoryPage() {
       }
       await inspect(assertionId);
       setAction(null);
-      notify(`Memory ${action === "correct" ? "corrected" : action === "dispute" ? "disputed" : "retracted"}.`, "success");
+      notify(memoryActionPastTense(action), "success");
     } catch (caught) {
       notify(errorMessage(caught), "error");
     } finally {
@@ -97,6 +99,9 @@ export function MemoryPage() {
 
   const status = inspection?.current_state.current_status ?? "unknown";
   const assertionValue = inspection?.assertion.value;
+  const contentDeleted = inspection?.content_state === "deleted";
+  const deletionTombstone = asObject(inspection?.deletion_tombstone);
+  const backupExpiry = asObject(inspection?.backup_expiry);
 
   return (
     <div className="standard-page memory-page">
@@ -143,7 +148,9 @@ export function MemoryPage() {
             </div>
             <div className="memory-id-row"><code>{inspection.assertion.assertion_id}</code><span>v{inspection.current_state.version}</span></div>
             <div className="memory-value">
-              {assertionValue === undefined ? <p>No structured value recorded.</p> : Object.entries(assertionValue).map(([key, value]) => (
+              {contentDeleted ? (
+                <p>Assertion content was deleted by owner request. Metadata, state history, and deletion evidence remain inspectable.</p>
+              ) : assertionValue === undefined ? <p>No structured value recorded.</p> : Object.entries(assertionValue).map(([key, value]) => (
                 <div key={key}><span>{titleCase(key)}</span><strong>{typeof value === "string" ? value : safeJson(value)}</strong></div>
               ))}
             </div>
@@ -153,10 +160,31 @@ export function MemoryPage() {
               <div><dt>Sensitivity</dt><dd>{titleCase(readString(inspection.assertion, "sensitivity"))}</dd></div>
               <div><dt>Observed</dt><dd>{formatInstant(readString(inspection.assertion, "observed_at"))}</dd></div>
             </dl>
+            {contentDeleted && deletionTombstone !== null ? (
+              <div className="memory-deletion-disclosure">
+                <div>
+                  <span>Deleted</span>
+                  <strong>{formatInstant(readString(deletionTombstone, "deleted_at"))}</strong>
+                </div>
+                <div>
+                  <span>Tombstone</span>
+                  <code>{shortId(readString(deletionTombstone, "tombstone_id"))}</code>
+                </div>
+                <div>
+                  <span>Rebuild work</span>
+                  <code>{shortId(readString(deletionTombstone, "rebuild_work_id"))}</code>
+                </div>
+                <div>
+                  <span>Backup expiry</span>
+                  <strong>{backupExpiry === null ? "Not disclosed" : titleCase(readString(backupExpiry, "state"))}</strong>
+                </div>
+              </div>
+            ) : null}
             <div className="memory-actions">
-              <Button disabled={!canMutate} onClick={() => setAction("correct")}><PencilLine size={15} /> Correct</Button>
-              <Button disabled={!canMutate} onClick={() => setAction("dispute")}><AlertTriangle size={15} /> Dispute</Button>
-              <Button disabled={!canMutate} onClick={() => setAction("retract")} tone="danger"><Trash2 size={15} /> Retract</Button>
+              <Button disabled={!canMutate || contentDeleted} onClick={() => setAction("correct")}><PencilLine size={15} /> Correct</Button>
+              <Button disabled={!canMutate || contentDeleted} onClick={() => setAction("dispute")}><AlertTriangle size={15} /> Dispute</Button>
+              <Button disabled={!canMutate || contentDeleted} onClick={() => setAction("delete_content")} tone="danger"><Trash2 size={15} /> Delete content</Button>
+              <Button disabled={!canMutate || contentDeleted} onClick={() => setAction("retract")} tone="danger"><Trash2 size={15} /> Retract</Button>
             </div>
           </Card>
 
@@ -176,7 +204,7 @@ export function MemoryPage() {
                 <div className="history-empty"><CheckCircle2 size={17} /><span>No correction-state changes recorded.</span></div>
               ) : inspection.state_changes.map((change, index) => (
                 <details className="record-details" key={`${readString(change, "change_id")}-${index}`}>
-                  <summary><span>{titleCase(readString(change, "change_type"))}</span><code>v{readString(change, "version")}</code></summary>
+                  <summary><span>{stateChangeLabel(change)}</span><code>v{readNumber(change, "version")}</code></summary>
                   <pre>{safeJson(change)}</pre>
                 </details>
               ))}
@@ -186,10 +214,10 @@ export function MemoryPage() {
       )}
 
       <Modal
-        description={action === "correct" ? "A correction appends a new version; it does not rewrite history." : "This appends an owner-authored state change to the assertion history."}
+        description={modalDescription(action)}
         onClose={() => setAction(null)}
         open={action !== null && inspection !== null}
-        title={action === "correct" ? "Correct memory" : action === "dispute" ? "Dispute memory" : "Retract memory"}
+        title={modalTitle(action)}
       >
         <form className="stack-form" onSubmit={(event) => void submitAction(event)}>
           {action === "correct" ? (
@@ -197,6 +225,11 @@ export function MemoryPage() {
               <label className="field-label" htmlFor="memory-correction">Corrected JSON object</label>
               <textarea className="json-editor" defaultValue={safeJson(assertionValue ?? {})} id="memory-correction" name="value" required rows={9} spellCheck={false} />
             </>
+          ) : action === "delete_content" ? (
+            <div className="destructive-confirmation danger">
+              <AlertTriangle size={19} />
+              <p>Delete the retained assertion value while preserving metadata, state history, tombstone evidence, and rebuild obligations?</p>
+            </div>
           ) : (
             <div className={`destructive-confirmation ${action === "retract" ? "danger" : "warning"}`}>
               <AlertTriangle size={19} />
@@ -205,10 +238,58 @@ export function MemoryPage() {
           )}
           <div className="modal-actions">
             <Button onClick={() => setAction(null)} type="button">Cancel</Button>
-            <Button loading={mutating} tone={action === "retract" ? "danger" : "primary"} type="submit">Confirm {action}</Button>
+            <Button loading={mutating} tone={action === "retract" || action === "delete_content" ? "danger" : "primary"} type="submit">{confirmLabel(action)}</Button>
           </div>
         </form>
       </Modal>
     </div>
   );
+}
+
+function modalTitle(action: MemoryAction | null): string {
+  if (action === "correct") {
+    return "Correct memory";
+  }
+  if (action === "dispute") {
+    return "Dispute memory";
+  }
+  if (action === "delete_content") {
+    return "Delete memory content";
+  }
+  return "Retract memory";
+}
+
+function modalDescription(action: MemoryAction | null): string {
+  if (action === "correct") {
+    return "A correction appends a new version; it does not rewrite history.";
+  }
+  if (action === "delete_content") {
+    return "Content deletion removes the retained value, not the accountability record.";
+  }
+  return "This appends an owner-authored state change to the assertion history.";
+}
+
+function confirmLabel(action: MemoryAction | null): string {
+  if (action === "delete_content") {
+    return "Delete content";
+  }
+  return `Confirm ${action ?? "change"}`;
+}
+
+function memoryActionPastTense(action: MemoryAction): string {
+  if (action === "correct") {
+    return "Memory corrected.";
+  }
+  if (action === "dispute") {
+    return "Memory disputed.";
+  }
+  if (action === "delete_content") {
+    return "Memory content deleted.";
+  }
+  return "Memory retracted.";
+}
+
+function stateChangeLabel(change: JsonObject): string {
+  const explicitType = readString(change, "change_type");
+  return titleCase(explicitType === "unknown" ? readString(change, "reason") : explicitType);
 }

@@ -69,6 +69,7 @@ from melloa.domain.conversation import (
 from melloa.domain.delivery import DeliveryWorkState, DeliveryWorkStatus
 from melloa.domain.inspection import OwnerModelActivityReport
 from melloa.domain.memory import (
+    AssertionContentDeletionResult,
     AssertionCorrectionResult,
     AssertionStateTransitionResult,
     MemoryInspection,
@@ -1171,6 +1172,20 @@ def create_app(
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
     ) -> MemoryInspection:
         return _configured_memory(request).inspect(principal, assertion_id)
+
+    @app.delete(
+        "/api/v1/memory/{assertion_id}/content",
+        response_model=AssertionContentDeletionResult,
+    )
+    async def delete_memory_content(
+        request: Request,
+        assertion_id: RecordId,
+        principal: Annotated[
+            AuthenticatedOwner,
+            Depends(_authenticated_owner_sensitive_mutation),
+        ],
+    ) -> AssertionContentDeletionResult:
+        return _configured_memory(request).delete_content(principal, assertion_id)
 
     @app.post(
         "/api/v1/memory/{assertion_id}/corrections",

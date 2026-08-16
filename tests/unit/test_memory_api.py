@@ -200,6 +200,67 @@ def test_memory_api_requires_recent_authentication(fixed_time) -> None:
     assert response.json()["code"] == "recent_authentication_required"
 
 
+def test_memory_api_deletes_content_with_recent_csrf_and_preserves_tombstone(
+    fixed_time,
+) -> None:
+    original = _assertion(fixed_time)
+    ids = iter(
+        (
+            record_id("deletion", 1),
+            record_id("work", 1),
+            record_id("deletion", 2),
+            record_id("work", 2),
+        )
+    )
+
+    def id_factory(_prefix: str) -> str:
+        return next(ids)
+
+    memory = MemoryService(
+        owner_id=original.subject_id,
+        store=InMemoryMemoryRepository((original,)),
+        guardian_reader=_guardian(fixed_time),
+        clock=lambda: fixed_time + timedelta(minutes=2),
+        id_factory=id_factory,
+    )
+    client, csrf = _authenticated_client(fixed_time, memory_service=memory)
+
+    missing_csrf = client.delete(f"/api/v1/memory/{original.assertion_id}/content")
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["code"] == "csrf_validation_failed"
+
+    deleted = client.delete(
+        f"/api/v1/memory/{original.assertion_id}/content",
+        headers={"X-Melloa-CSRF": csrf},
+    )
+    assert deleted.status_code == 200
+    body = deleted.json()
+    assert body["created"] is True
+    assert body["assertion"]["assertion_id"] == original.assertion_id
+    assert "value" not in body["assertion"]
+    assert body["tombstone"]["assertion_id"] == original.assertion_id
+    assert body["tombstone"]["deleted_by_record_id"] == original.subject_id
+    assert body["tombstone"]["reason_code"] == "memory.assertion-content-owner-deleted"
+    assert body["rebuild_work"]["assertion_id"] == original.assertion_id
+    assert body["backup_expiry"]["state"] == "unknown"
+
+    inspection = client.get(f"/api/v1/memory/{original.assertion_id}")
+    assert inspection.status_code == 200
+    inspected = inspection.json()
+    assert inspected["content_state"] == "deleted"
+    assert "value" not in inspected["assertion"]
+    assert inspected["deletion_tombstone"] == body["tombstone"]
+    assert inspected["backup_expiry"]["state"] == "unknown"
+
+    repeated = client.delete(
+        f"/api/v1/memory/{original.assertion_id}/content",
+        headers={"X-Melloa-CSRF": csrf},
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["created"] is False
+    assert repeated.json()["tombstone"] == body["tombstone"]
+
+
 def test_memory_api_appends_dispute_and_retraction_transitions(fixed_time) -> None:
     original = _assertion(fixed_time)
     guardian = _guardian(fixed_time)
@@ -304,6 +365,12 @@ def test_memory_api_conceals_ownership_and_fails_closed(fixed_time) -> None:
     )
     assert unavailable.status_code == 503
     assert unavailable.json()["code"] == "memory_write_unavailable"
+    delete_unavailable = read_only_client.delete(
+        f"/api/v1/memory/{original.assertion_id}/content",
+        headers={"X-Melloa-CSRF": read_only_csrf},
+    )
+    assert delete_unavailable.status_code == 503
+    assert delete_unavailable.json()["code"] == "memory_write_unavailable"
 
     absent_client, _csrf = _authenticated_client(fixed_time, memory_service=None)
     absent = absent_client.get(f"/api/v1/memory/{original.assertion_id}")

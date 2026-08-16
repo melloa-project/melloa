@@ -239,7 +239,10 @@ export type ConversationTurnInspection = {
 };
 
 export type MemoryInspection = {
-  readonly assertion: JsonObject & { readonly assertion_id: string; readonly value: JsonObject };
+  readonly content_state: "retained" | "deleted";
+  readonly assertion: JsonObject & { readonly assertion_id: string; readonly value?: JsonObject };
+  readonly deletion_tombstone?: JsonObject | null;
+  readonly backup_expiry?: JsonObject | null;
   readonly current_state: JsonObject & {
     readonly current_status: string;
     readonly version: number;
@@ -696,6 +699,16 @@ export class MelloaApi {
 
   async retractMemory(assertionId: string, expectedVersion: number): Promise<JsonObject> {
     return this.#changeMemoryState(assertionId, "retractions", expectedVersion);
+  }
+
+  async deleteMemoryContent(assertionId: string): Promise<JsonObject> {
+    return this.#request<JsonObject>(
+      `/api/v1/memory/${encodeURIComponent(assertionId)}/content`,
+      {
+        method: "DELETE",
+        csrf: true,
+      },
+    );
   }
 
   async modelActivity(windowStart?: Date, windowEnd?: Date): Promise<ModelActivityReport> {
