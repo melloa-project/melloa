@@ -19,6 +19,7 @@ from melloa.adapters.fakes.retention import (
     ConversationBackedRetentionReader,
     InMemoryRetentionReader,
     MemoryBackedRetentionReader,
+    TelegramQuarantineBackedRetentionReader,
 )
 from melloa.adapters.fakes.telegram import (
     DeterministicTelegramPairingCodeIssuer,
@@ -507,11 +508,14 @@ def build_synthetic_runtime(
         owner_id=SYNTHETIC_OWNER_ID,
         reader=ConversationBackedRetentionReader(
             MemoryBackedRetentionReader(
-                InMemoryRetentionReader(
-                    SYNTHETIC_OWNER_ID,
-                    policies=_synthetic_retention_policies(),
-                    inventory=_synthetic_retention_inventory(),
-                    backup_expiry=backup_expiry,
+                TelegramQuarantineBackedRetentionReader(
+                    InMemoryRetentionReader(
+                        SYNTHETIC_OWNER_ID,
+                        policies=_synthetic_retention_policies(),
+                        inventory=_synthetic_retention_inventory(),
+                        backup_expiry=backup_expiry,
+                    ),
+                    telegram_attachment_backend,
                 ),
                 memory_store,
             ),

@@ -150,10 +150,21 @@ class TelegramPairingStateStore(Protocol):
         """Persist an exact authority-reducing revocation."""
 
 
+@dataclass(frozen=True)
+class TelegramQuarantineRetentionInventory:
+    retained_objects: int
+    retained_bytes: int
+    deletion_receipts: int
+    oldest_retained_at: datetime | None
+
+
 class TelegramAttachmentBackend(Protocol):
     @property
     def owner_id(self) -> RecordId:
         """Return the local owner whose quarantine namespace this backend serves."""
+
+    def retention_inventory(self) -> TelegramQuarantineRetentionInventory:
+        """Return aggregate retained quarantine counts for this owner namespace."""
 
     def handle(
         self,

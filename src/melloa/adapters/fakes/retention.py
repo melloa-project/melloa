@@ -12,6 +12,7 @@ from melloa.domain.retention import (
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.memory import MemoryRepository
 from melloa.ports.retention import OwnerRetentionReader
+from melloa.ports.telegram import TelegramAttachmentBackend
 
 
 class InMemoryRetentionReader:
@@ -79,6 +80,46 @@ class MemoryBackedRetentionReader:
         )
         return tuple(
             memory_item if item.policy_id == self._memory_policy_id else item
+            for item in inventory
+        )
+
+    def backup_expiry(self, owner_id: RecordId) -> BackupExpiryDisclosure | None:
+        return self._base_reader.backup_expiry(owner_id)
+
+
+class TelegramQuarantineBackedRetentionReader:
+    def __init__(
+        self,
+        base_reader: OwnerRetentionReader,
+        attachment_backend: TelegramAttachmentBackend,
+        *,
+        quarantine_policy_id: str = "retention.telegram-quarantine",
+    ) -> None:
+        self._base_reader = base_reader
+        self._attachment_backend = attachment_backend
+        self._quarantine_policy_id = quarantine_policy_id
+
+    def policies(self, owner_id: RecordId) -> tuple[RetentionPolicyStatus, ...]:
+        return self._base_reader.policies(owner_id)
+
+    def inventory(self, owner_id: RecordId) -> tuple[RetentionInventoryStatus, ...]:
+        inventory = self._base_reader.inventory(owner_id)
+        if not inventory or owner_id != self._attachment_backend.owner_id:
+            return inventory
+        quarantine_inventory = self._attachment_backend.retention_inventory()
+        quarantine_item = RetentionInventoryStatus(
+            policy_id=self._quarantine_policy_id,
+            coverage=RetentionInventoryCoverage.COMPLETE,
+            retained_objects=quarantine_inventory.retained_objects,
+            retained_bytes=quarantine_inventory.retained_bytes,
+            overdue_objects=0,
+            pending_deletions=0,
+            deletion_receipts=quarantine_inventory.deletion_receipts,
+            oldest_retained_at=quarantine_inventory.oldest_retained_at,
+            status_reason="retention.inventory.telegram_quarantine_backend",
+        )
+        return tuple(
+            quarantine_item if item.policy_id == self._quarantine_policy_id else item
             for item in inventory
         )
 

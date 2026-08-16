@@ -186,6 +186,11 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     )
     assert quarantine_inventory["coverage"] == "complete"
     assert quarantine_inventory["retained_objects"] == 0
+    assert quarantine_inventory["retained_bytes"] == 0
+    assert quarantine_inventory["deletion_receipts"] == 0
+    assert quarantine_inventory["status_reason"] == (
+        "retention.inventory.telegram_quarantine_backend"
+    )
     media_catalog = client.get("/api/v1/inspection/media")
     assert media_catalog.status_code == 200
     assert media_catalog.json()["capture_enabled"] is False

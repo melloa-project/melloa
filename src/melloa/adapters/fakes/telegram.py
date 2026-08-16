@@ -42,6 +42,7 @@ from melloa.ports.telegram import (
     TelegramPairingConflictError,
     TelegramPairingNotFoundError,
     TelegramPollConflictError,
+    TelegramQuarantineRetentionInventory,
     TransientTelegramAttachmentError,
     TransientTelegramPollingError,
 )
@@ -122,6 +123,14 @@ class RejectingTelegramAttachmentBackend:
     @property
     def owner_id(self) -> RecordId:
         return self._owner_id
+
+    def retention_inventory(self) -> TelegramQuarantineRetentionInventory:
+        return TelegramQuarantineRetentionInventory(
+            retained_objects=0,
+            retained_bytes=0,
+            deletion_receipts=0,
+            oldest_retained_at=None,
+        )
 
     def handle(
         self,
@@ -248,6 +257,16 @@ class InMemoryTelegramAttachmentQuarantine:
     def deletion_receipts(self) -> tuple[RetentionDeletionReceipt, ...]:
         with self._lock:
             return tuple(self._deletion_receipts)
+
+    def retention_inventory(self) -> TelegramQuarantineRetentionInventory:
+        with self._lock:
+            retained_times = tuple(blob.retained_at for blob in self._blobs.values())
+            return TelegramQuarantineRetentionInventory(
+                retained_objects=len(self._blobs),
+                retained_bytes=sum(len(blob.content) for blob in self._blobs.values()),
+                deletion_receipts=len(self._deletion_receipts),
+                oldest_retained_at=min(retained_times) if retained_times else None,
+            )
 
     def has_blob(self, blob_id: str) -> bool:
         with self._lock:

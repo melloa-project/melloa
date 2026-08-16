@@ -9,7 +9,15 @@ from pydantic import ValidationError
 from melloa.adapters.fakes.auth import InMemoryOwnerSessionManager
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
-from melloa.adapters.fakes.retention import InMemoryRetentionReader, MemoryBackedRetentionReader
+from melloa.adapters.fakes.retention import (
+    InMemoryRetentionReader,
+    MemoryBackedRetentionReader,
+    TelegramQuarantineBackedRetentionReader,
+)
+from melloa.adapters.fakes.telegram import (
+    InMemoryTelegramAttachmentQuarantine,
+    SyntheticTelegramAttachmentPayload,
+)
 from melloa.application.retention import (
     OwnerRetentionService,
     RetentionInspectionUnavailableError,
@@ -33,6 +41,11 @@ from melloa.domain.retention import (
     RetentionInventoryStatus,
     RetentionMode,
     RetentionPolicyStatus,
+)
+from melloa.domain.telegram import (
+    TelegramAttachmentIntakeRequest,
+    TelegramAttachmentKind,
+    TelegramAttachmentReference,
 )
 from melloa.ports.memory import AssertionContentDeletionWrite
 from tests.conftest import record_id
@@ -312,6 +325,72 @@ def test_memory_backed_retention_reader_counts_canonical_assertion_content(
     assert after_delete.retained_bytes == 0
     assert after_delete.deletion_receipts == 1
     assert after_delete.oldest_retained_at is None
+    assert reader.inventory(record_id("owner", 2)) == ()
+
+
+def test_telegram_quarantine_backed_retention_reader_counts_backend_inventory(
+    fixed_time: datetime,
+) -> None:
+    owner_id = record_id("owner", 1)
+    backend = InMemoryTelegramAttachmentQuarantine(
+        {
+            "unique-file-1": SyntheticTelegramAttachmentPayload(
+                content=b"abc",
+                media_type="text/plain",
+            )
+        },
+        owner_id=owner_id,
+        allowed_kinds=frozenset({TelegramAttachmentKind.DOCUMENT}),
+        allowed_media_types=frozenset({"text/plain"}),
+        max_attachment_bytes=16,
+        max_quarantine_bytes=16,
+        retention_ttl=timedelta(hours=1),
+        clock=lambda: fixed_time,
+    )
+    reader = TelegramQuarantineBackedRetentionReader(
+        InMemoryRetentionReader(
+            owner_id,
+            policies=(policy("retention.telegram-quarantine"),),
+            inventory=(inventory("retention.telegram-quarantine"),),
+            backup_expiry=backup(),
+        ),
+        backend,
+    )
+
+    backend.handle(
+        TelegramAttachmentIntakeRequest(
+            adapter_id="telegram.synthetic",
+            update_id=1,
+            update_fingerprint="sha256:" + "1" * 64,
+            received_at=fixed_time,
+            attachments=(
+                TelegramAttachmentReference(
+                    kind=TelegramAttachmentKind.DOCUMENT,
+                    file_id="provider-file-1",
+                    file_unique_id="unique-file-1",
+                    declared_size_bytes=3,
+                    media_type="text/plain; charset=utf-8",
+                    file_name="note.txt",
+                ),
+            ),
+        )
+    )
+    item = reader.inventory(owner_id)[0]
+
+    assert item.policy_id == "retention.telegram-quarantine"
+    assert item.coverage is RetentionInventoryCoverage.COMPLETE
+    assert item.retained_objects == 1
+    assert item.retained_bytes == 3
+    assert item.deletion_receipts == 0
+    assert item.oldest_retained_at == fixed_time
+
+    backend.sweep_expired(as_of=fixed_time + timedelta(hours=1), limit=10)
+    after_expiry = reader.inventory(owner_id)[0]
+
+    assert after_expiry.retained_objects == 0
+    assert after_expiry.retained_bytes == 0
+    assert after_expiry.deletion_receipts == 1
+    assert after_expiry.oldest_retained_at is None
     assert reader.inventory(record_id("owner", 2)) == ()
 
 
