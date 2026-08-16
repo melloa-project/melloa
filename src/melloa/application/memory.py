@@ -200,7 +200,7 @@ class MemoryService:
             changed_at=now,
             version=target_state.version,
         )
-        return self._store.apply_correction(
+        result = self._store.apply_correction(
             AssertionCorrectionWrite(
                 correction=correction,
                 provenance_edge=provenance_edge,
@@ -209,6 +209,14 @@ class MemoryService:
                 target_change=target_change,
             )
         )
+        event_audit_store = self._event_audit_store
+        if event_audit_store is not None:
+            self._append_correction_audit(
+                event_audit_store=event_audit_store,
+                principal=principal,
+                result=result,
+            )
+        return result
 
     def dispute(
         self,
@@ -279,13 +287,21 @@ class MemoryService:
             changed_at=now,
             version=state.version,
         )
-        return self._store.apply_state_transition(
+        result = self._store.apply_state_transition(
             AssertionStateTransitionWrite(
                 expected_state=expected_state,
                 state=state,
                 change=change,
             )
         )
+        event_audit_store = self._event_audit_store
+        if event_audit_store is not None:
+            self._append_state_transition_audit(
+                event_audit_store=event_audit_store,
+                principal=principal,
+                result=result,
+            )
+        return result
 
     def _owned_assertion(
         self,
@@ -353,6 +369,7 @@ class MemoryService:
                 "event",
                 tombstone.tombstone_id,
                 "memory.assertion-content-deleted.v1",
+                source_key="tombstone_id",
             ),
             event_type="memory.assertion-content-deleted.v1",
             schema_version="1.0.0",
@@ -382,6 +399,7 @@ class MemoryService:
                 "audit",
                 tombstone.tombstone_id,
                 "memory.assertion-content.delete",
+                source_key="tombstone_id",
             ),
             event_type="audit.event-appended.v1",
             occurred_at=occurred_at,
@@ -401,13 +419,178 @@ class MemoryService:
         event_audit_store.append_event(event, audit)
 
     @staticmethod
-    def _derived_audit_record_id(prefix: str, tombstone_id: RecordId, purpose: str) -> str:
+    def _memory_state_action(status: AssertionStatus) -> str:
+        if status is AssertionStatus.DISPUTED:
+            return "memory.assertion.dispute"
+        if status is AssertionStatus.RETRACTED:
+            return "memory.assertion.retract"
+        return "memory.assertion.state-transition"
+
+    def _append_correction_audit(
+        self,
+        *,
+        event_audit_store: EventAuditStore,
+        principal: AuthenticatedOwner,
+        result: AssertionCorrectionResult,
+    ) -> None:
+        change = result.target_change
+        correction = result.correction
+        occurred_at = change.changed_at
+        payload: JsonObject = {
+            "assertion_id": change.assertion_id,
+            "correction_assertion_id": correction.assertion_id,
+            "correction_status": result.correction_state.current_status.value,
+            "previous_status": (
+                None if change.previous_status is None else change.previous_status.value
+            ),
+            "provenance_edge_id": result.provenance_edge.edge_id,
+            "reason_code": change.reason,
+            "sensitivity": correction.sensitivity.value,
+            "target_change_id": change.change_id,
+            "target_status": change.new_status.value,
+            "target_version": change.version,
+        }
+        event = EventEnvelope(
+            event_id=self._derived_audit_record_id(
+                "event",
+                change.change_id,
+                "memory.assertion-corrected.v1",
+            ),
+            event_type="memory.assertion-corrected.v1",
+            schema_version="1.0.0",
+            occurred_at=occurred_at,
+            recorded_at=occurred_at,
+            subject_ids=(correction.subject_id,),
+            source=EventSource(
+                capability_id="memory.owner-console",
+                execution_id=change.change_id,
+            ),
+            producer=EventProducer(
+                component="memory.service",
+                version="0.1.0",
+            ),
+            epistemic_status=EpistemicStatus.OBSERVATION,
+            sensitivity=correction.sensitivity,
+            trust=TrustLabel.TRUSTED_SYSTEM,
+            retention_policy="retention.audit-ledger",
+            correlation_id=change.change_id,
+            payload=payload,
+            integrity=EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(payload))
+            ),
+        )
+        audit = AuditContent(
+            audit_id=self._derived_audit_record_id(
+                "audit",
+                change.change_id,
+                "memory.assertion.correct",
+            ),
+            event_type="audit.event-appended.v1",
+            occurred_at=occurred_at,
+            actor_id=principal.owner_id,
+            action="memory.assertion.correct",
+            object_ids=(
+                change.assertion_id,
+                correction.assertion_id,
+                change.change_id,
+                result.provenance_edge.edge_id,
+            ),
+            metadata={
+                "event_id": event.event_id,
+                "reason_code": change.reason,
+                "result": "assertion_corrected",
+                "target_status": change.new_status.value,
+                "target_version": change.version,
+            },
+        )
+        event_audit_store.append_event(event, audit)
+
+    def _append_state_transition_audit(
+        self,
+        *,
+        event_audit_store: EventAuditStore,
+        principal: AuthenticatedOwner,
+        result: AssertionStateTransitionResult,
+    ) -> None:
+        change = result.state_change
+        assertion = result.assertion
+        occurred_at = change.changed_at
+        action = self._memory_state_action(change.new_status)
+        payload: JsonObject = {
+            "assertion_id": assertion.assertion_id,
+            "new_status": change.new_status.value,
+            "previous_status": (
+                None if change.previous_status is None else change.previous_status.value
+            ),
+            "reason_code": change.reason,
+            "sensitivity": assertion.sensitivity.value,
+            "state_change_id": change.change_id,
+            "version": change.version,
+        }
+        event = EventEnvelope(
+            event_id=self._derived_audit_record_id(
+                "event",
+                change.change_id,
+                "memory.assertion-state-transitioned.v1",
+            ),
+            event_type="memory.assertion-state-transitioned.v1",
+            schema_version="1.0.0",
+            occurred_at=occurred_at,
+            recorded_at=occurred_at,
+            subject_ids=(assertion.subject_id,),
+            source=EventSource(
+                capability_id="memory.owner-console",
+                execution_id=change.change_id,
+            ),
+            producer=EventProducer(
+                component="memory.service",
+                version="0.1.0",
+            ),
+            epistemic_status=EpistemicStatus.OBSERVATION,
+            sensitivity=assertion.sensitivity,
+            trust=TrustLabel.TRUSTED_SYSTEM,
+            retention_policy="retention.audit-ledger",
+            correlation_id=change.change_id,
+            payload=payload,
+            integrity=EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(payload))
+            ),
+        )
+        audit = AuditContent(
+            audit_id=self._derived_audit_record_id(
+                "audit",
+                change.change_id,
+                action,
+            ),
+            event_type="audit.event-appended.v1",
+            occurred_at=occurred_at,
+            actor_id=principal.owner_id,
+            action=action,
+            object_ids=(assertion.assertion_id, change.change_id),
+            metadata={
+                "event_id": event.event_id,
+                "new_status": change.new_status.value,
+                "reason_code": change.reason,
+                "result": "assertion_state_changed",
+                "version": change.version,
+            },
+        )
+        event_audit_store.append_event(event, audit)
+
+    @staticmethod
+    def _derived_audit_record_id(
+        prefix: str,
+        source_id: RecordId,
+        purpose: str,
+        *,
+        source_key: str = "source_id",
+    ) -> str:
         digest = sha256_digest(
             canonical_json_bytes(
                 {
                     "prefix": prefix,
                     "purpose": purpose,
-                    "tombstone_id": tombstone_id,
+                    source_key: source_id,
                 }
             )
         ).removeprefix("sha256:")

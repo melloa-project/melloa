@@ -1872,7 +1872,7 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert retention.status_code == 200
         inventory = {item["policy_id"]: item for item in retention.json()["inventory"]}
         assert inventory["retention.audit-ledger"]["coverage"] == "complete"
-        assert inventory["retention.audit-ledger"]["retained_objects"] == 1
+        assert inventory["retention.audit-ledger"]["retained_objects"] == 2
         assert inventory["retention.audit-ledger"]["retained_bytes"] > 0
         assert inventory["retention.owner-memory"]["deletion_receipts"] == 1
         health = second_client.get("/api/v1/inspection/health")

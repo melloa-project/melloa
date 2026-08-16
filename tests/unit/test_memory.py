@@ -173,6 +173,65 @@ def test_memory_service_appends_correction_without_mutating_original(fixed_time)
     assert correction_inspection.provenance_edges == (result.provenance_edge,)
 
 
+def test_memory_service_audits_owner_correction_without_assertion_values(
+    fixed_time,
+) -> None:
+    original = _assertion(fixed_time)
+    repository = InMemoryMemoryRepository((original,))
+    audit_store = InMemoryEventAuditStore()
+    correction_time = fixed_time + timedelta(minutes=2)
+    service = MemoryService(
+        owner_id=original.subject_id,
+        store=repository,
+        guardian_reader=_guardian(fixed_time),
+        event_audit_store=audit_store,
+        clock=lambda: correction_time,
+        id_factory=_id_factory(
+            assertion=record_id("assertion", 2),
+            edge=record_id("edge", 1),
+            state_change=record_id("state_change", 2),
+        ),
+    )
+    principal = _principal(fixed_time)
+
+    result = service.correct(
+        principal,
+        original.assertion_id,
+        value={"activity": "reading"},
+        expected_version=1,
+    )
+
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
+    event = audit_store.events[0]
+    assert event.event_type == "memory.assertion-corrected.v1"
+    assert event.subject_ids == (original.subject_id,)
+    assert event.correlation_id == result.target_change.change_id
+    assert event.payload == {
+        "assertion_id": original.assertion_id,
+        "correction_assertion_id": result.correction.assertion_id,
+        "correction_status": "confirmed",
+        "previous_status": "active",
+        "provenance_edge_id": result.provenance_edge.edge_id,
+        "reason_code": "assertion.owner-corrected",
+        "sensitivity": original.sensitivity.value,
+        "target_change_id": result.target_change.change_id,
+        "target_status": "superseded",
+        "target_version": 2,
+    }
+    assert "reading" not in event.model_dump_json()
+    assert "content_hash" not in event.model_dump_json()
+    audit = audit_store.audit_records[0].content
+    assert audit.actor_id == principal.owner_id
+    assert audit.action == "memory.assertion.correct"
+    assert audit.object_ids == (
+        original.assertion_id,
+        result.correction.assertion_id,
+        result.target_change.change_id,
+        result.provenance_edge.edge_id,
+    )
+
+
 def test_memory_correction_rejects_stale_version_without_partial_write(fixed_time) -> None:
     original = _assertion(fixed_time)
     conflicting_edge = ProvenanceEdge(
@@ -396,6 +455,79 @@ def test_memory_service_appends_dispute_and_retraction_history(fixed_time) -> No
             original.assertion_id,
             expected_version=3,
         )
+
+
+def test_memory_service_audits_owner_state_transition_without_content(
+    fixed_time,
+) -> None:
+    original = _assertion(fixed_time)
+    repository = InMemoryMemoryRepository((original,))
+    audit_store = InMemoryEventAuditStore()
+    principal = _principal(fixed_time)
+    disputed_at = fixed_time + timedelta(minutes=1)
+    service = MemoryService(
+        owner_id=original.subject_id,
+        store=repository,
+        guardian_reader=_guardian(fixed_time),
+        event_audit_store=audit_store,
+        clock=lambda: disputed_at,
+        id_factory=_id_factory(state_change=record_id("state_change", 2)),
+    )
+
+    result = service.dispute(
+        principal,
+        original.assertion_id,
+        expected_version=1,
+    )
+
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
+    event = audit_store.events[0]
+    assert event.event_type == "memory.assertion-state-transitioned.v1"
+    assert event.subject_ids == (original.subject_id,)
+    assert event.correlation_id == result.state_change.change_id
+    assert event.payload == {
+        "assertion_id": original.assertion_id,
+        "new_status": "disputed",
+        "previous_status": "active",
+        "reason_code": "assertion.owner-disputed",
+        "sensitivity": original.sensitivity.value,
+        "state_change_id": result.state_change.change_id,
+        "version": 2,
+    }
+    assert "sleeping" not in event.model_dump_json()
+    assert "content_hash" not in event.model_dump_json()
+    audit = audit_store.audit_records[0].content
+    assert audit.actor_id == principal.owner_id
+    assert audit.action == "memory.assertion.dispute"
+    assert audit.object_ids == (original.assertion_id, result.state_change.change_id)
+
+    retracted_at = fixed_time + timedelta(minutes=2)
+    retraction = MemoryService(
+        owner_id=original.subject_id,
+        store=repository,
+        guardian_reader=_guardian(fixed_time),
+        event_audit_store=audit_store,
+        clock=lambda: retracted_at,
+        id_factory=_id_factory(state_change=record_id("state_change", 3)),
+    ).retract(
+        principal,
+        original.assertion_id,
+        expected_version=2,
+    )
+
+    assert len(audit_store.events) == 2
+    assert len(audit_store.audit_records) == 2
+    retraction_event = audit_store.events[1]
+    assert retraction_event.event_type == "memory.assertion-state-transitioned.v1"
+    assert retraction_event.payload["new_status"] == "retracted"
+    assert retraction_event.payload["previous_status"] == "disputed"
+    retraction_audit = audit_store.audit_records[1].content
+    assert retraction_audit.action == "memory.assertion.retract"
+    assert retraction_audit.object_ids == (
+        original.assertion_id,
+        retraction.state_change.change_id,
+    )
 
 
 def test_memory_service_deletes_only_content_and_preserves_inspection(fixed_time) -> None:
