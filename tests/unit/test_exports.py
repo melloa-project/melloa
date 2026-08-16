@@ -25,7 +25,14 @@ _BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
 
 
 def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) -> None:
-    runtime = _runtime(fixed_time)
+    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
+    reply = runtime.conversation_service.post_owner_message(
+        _owner(runtime.owner_id, fixed_time),
+        thread_id=runtime.telegram_thread_id,
+        text="What should I inspect before enabling a real provider?",
+        idempotency_key="export-model-activity",
+    )
+    assert reply.turn is not None
     bundle_dir = tmp_path / "export"
 
     manifest = OwnerExportService(
@@ -43,11 +50,26 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     assert report.export_id == manifest.export_id
     assert report.record_counts["conversations/threads.jsonl"] == 1
     assert report.record_counts["assertions/inspections.jsonl"] == 1
+    assert report.record_counts["inspection/model-activity.jsonl"] == 1
     assert (bundle_dir / "schemas/owner-export/manifest-v1.json").is_file()
+    assert (bundle_dir / "schemas/inspection/owner-model-activity-v1.json").is_file()
     assert "export.preview-unencrypted" in manifest.limitations
     assert manifest.encrypted is False
     assert manifest.includes_sql_snapshot is False
     assert manifest.includes_blobs is False
+    activity_records = [
+        json.loads(line)
+        for line in (bundle_dir / "inspection/model-activity.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line
+    ]
+    assert activity_records[0]["total_runs"] == 1
+    assert activity_records[0]["total_cost_gbp"] == 0.0
+    assert activity_records[0]["external_disclosure_runs"] == 0
+    assert activity_records[0]["entries"][0]["turn_id"] == reply.turn.turn_id
+    assert activity_records[0]["entries"][0]["route_id"] == "model.fake.deterministic"
+    assert activity_records[0]["entries"][0]["external_disclosure"] is False
 
 
 def test_owner_export_includes_deleted_memory_tombstone_evidence(
@@ -218,6 +240,61 @@ def test_import_validation_reports_missing_checksum_manifest_and_references(
     assert reference_report.valid is False
     assert any("message references missing thread" in error for error in reference_report.errors)
 
+    bundle_dir = tmp_path / "activity-reference-export"
+    OwnerExportService(
+        owner_id=runtime.owner_id,
+        intelligence_id=runtime.intelligence_id,
+        conversation=runtime.conversation_service,
+        memory=runtime.memory_service,
+        memory_repository=runtime.memory_store,
+        clock=lambda: fixed_time,
+        id_factory=_fixed_ids(),
+    ).write_bundle(bundle_dir, schema_root=_schema_root())
+    activity_path = bundle_dir / "inspection/model-activity.jsonl"
+    activity_records = [
+        json.loads(line)
+        for line in activity_path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    activity_records[0]["entries"] = (
+        {
+            "turn_id": "turn_0000000000000000000000000000ffff",
+            "thread_id": runtime.telegram_thread_id,
+            "result_id": "result_00000000000000000000000000000001",
+            "request_id": "request_00000000000000000000000000000001",
+            "route_id": "model.fake.deterministic",
+            "provider_id": "provider.synthetic",
+            "model_id": "deterministic-fixture-v1",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_gbp": 0.0,
+            "started_at": fixed_time.isoformat(),
+            "completed_at": fixed_time.isoformat(),
+            "external_disclosure": False,
+            "disclosure": None,
+        },
+    )
+    activity_records[0]["total_runs"] = 1
+    activity_records[0]["external_disclosure_runs"] = 0
+    activity_records[0]["total_input_tokens"] = 0
+    activity_records[0]["total_output_tokens"] = 0
+    activity_records[0]["total_cost_gbp"] = 0.0
+    activity_records[0]["external_cost_gbp"] = 0.0
+    activity_records[0]["window_start"] = (fixed_time - timedelta(seconds=1)).isoformat()
+    activity_records[0]["window_end"] = (fixed_time + timedelta(seconds=1)).isoformat()
+    activity_path.write_text(
+        "".join(json.dumps(record, sort_keys=True) + "\n" for record in activity_records),
+        encoding="utf-8",
+    )
+
+    activity_reference_report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
+
+    assert activity_reference_report.valid is False
+    assert any(
+        "model activity references missing turn" in error
+        for error in activity_reference_report.errors
+    )
+
 
 def test_import_validation_reports_malformed_checksum_file(tmp_path, fixed_time) -> None:
     malformed = tmp_path / "malformed"
@@ -346,6 +423,17 @@ def _runtime(fixed_time, *, mode: GuardianMode = GuardianMode.READ_ONLY):
         _BOOTSTRAP_TOKEN,
         clock=lambda: fixed_time,
         id_factory=_fixed_ids(),
+    )
+
+
+def _owner(owner_id: str, fixed_time) -> AuthenticatedOwner:
+    return AuthenticatedOwner(
+        owner_id=owner_id,
+        session_id="session_00000000000000000000000000000001",
+        authentication_method="auth.owner-export-test",
+        authenticated_at=fixed_time,
+        reauthenticated_until=fixed_time + timedelta(minutes=5),
+        expires_at=fixed_time + timedelta(minutes=30),
     )
 
 

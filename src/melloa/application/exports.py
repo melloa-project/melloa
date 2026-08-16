@@ -35,6 +35,12 @@ from melloa.domain.exports import (
     ExportFileEntry,
     ExportFileKind,
 )
+from melloa.domain.inspection import (
+    DisclosedMemoryReference,
+    ModelActivityEntry,
+    ModelDisclosureInspection,
+    OwnerModelActivityReport,
+)
 from melloa.domain.memory import MemoryInspection
 from melloa.ports.memory import MemoryRepository
 
@@ -63,6 +69,11 @@ DATA_SCHEMAS: dict[str, tuple[str, type[BaseModel], str]] = {
         "export.conversation-processing-status",
         ConversationProcessingStatus,
         "schemas/conversation/processing-status-v1.json",
+    ),
+    "inspection/model-activity.jsonl": (
+        "export.owner-model-activity-report",
+        OwnerModelActivityReport,
+        "schemas/inspection/owner-model-activity-v1.json",
     ),
     "assertions/inspections.jsonl": (
         "export.memory-inspection",
@@ -210,14 +221,92 @@ class OwnerExportService:
         sorted_processing: tuple[ConversationProcessingStatus, ...] = tuple(
             sorted(processing, key=lambda item: (item.available_at, item.work_id))
         )
+        model_activity = self._model_activity_report(sorted_turn_inspections)
         return {
             "conversations/threads.jsonl": sorted_threads,
             "conversations/messages.jsonl": sorted_messages,
             "conversations/turns.jsonl": sorted_turns,
             "conversations/turn-inspections.jsonl": sorted_turn_inspections,
             "conversations/processing.jsonl": sorted_processing,
+            "inspection/model-activity.jsonl": (model_activity,),
             "assertions/inspections.jsonl": inspections,
         }
+
+    def _model_activity_report(
+        self,
+        inspections: tuple[ConversationTurnInspection, ...],
+    ) -> OwnerModelActivityReport:
+        generated_at = self._clock()
+        entries = tuple(
+            sorted(
+                (self._model_activity_entry(inspection) for inspection in inspections),
+                key=lambda entry: (entry.completed_at, entry.result_id),
+            )
+        )
+        if entries:
+            window_start = min(entry.completed_at for entry in entries)
+            window_end = max(entry.completed_at for entry in entries) + timedelta(
+                microseconds=1
+            )
+        else:
+            window_start = generated_at - timedelta(days=366)
+            window_end = generated_at
+        return OwnerModelActivityReport(
+            owner_id=self._owner_id,
+            window_start=window_start,
+            window_end=window_end,
+            generated_at=generated_at,
+            total_runs=len(entries),
+            external_disclosure_runs=sum(entry.external_disclosure for entry in entries),
+            total_input_tokens=sum(entry.input_tokens for entry in entries),
+            total_output_tokens=sum(entry.output_tokens for entry in entries),
+            total_cost_gbp=sum(entry.cost_gbp for entry in entries),
+            external_cost_gbp=sum(
+                entry.cost_gbp for entry in entries if entry.external_disclosure
+            ),
+            entries=entries,
+        )
+
+    @staticmethod
+    def _model_activity_entry(
+        inspection: ConversationTurnInspection,
+    ) -> ModelActivityEntry:
+        result = inspection.model_result
+        manifest = inspection.retrieval_manifest
+        disclosure = None
+        if result.external_disclosure:
+            disclosure = ModelDisclosureInspection(
+                retrieval_manifest_id=manifest.manifest_id,
+                purpose=manifest.purpose,
+                triggering_message_ids=inspection.turn.triggering_message_ids,
+                memory_references=tuple(
+                    DisclosedMemoryReference(
+                        citation_id=citation.citation_id,
+                        assertion_id=citation.assertion_id,
+                        sensitivity=citation.sensitivity,
+                    )
+                    for citation in manifest.citations
+                ),
+                external_attempts=tuple(
+                    attempt for attempt in result.attempts if attempt.external_disclosure
+                ),
+            )
+        return ModelActivityEntry(
+            turn_id=inspection.turn.turn_id,
+            thread_id=inspection.turn.thread_id,
+            result_id=result.result_id,
+            request_id=result.request_id,
+            route_id=result.route_id,
+            provider_id=result.provider_id,
+            model_id=result.model_id,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            cost_gbp=result.cost_gbp,
+            started_at=result.started_at,
+            completed_at=result.completed_at,
+            external_disclosure=result.external_disclosure,
+            disclosure=disclosure,
+        )
 
     def _export_principal(self) -> AuthenticatedOwner:
         now = self._clock()
@@ -466,6 +555,7 @@ def _validate_references(root: Path, errors: list[str]) -> None:
         messages = _load_jsonl(root, "conversations/messages.jsonl")
         turns = _load_jsonl(root, "conversations/turns.jsonl")
         inspections = _load_jsonl(root, "conversations/turn-inspections.jsonl")
+        activity_reports = _load_jsonl(root, "inspection/model-activity.jsonl")
         memories = _load_jsonl(root, "assertions/inspections.jsonl")
     except (OSError, json.JSONDecodeError, ExportBundleError):
         errors.append("export data cannot be loaded for referential integrity checks")
@@ -489,6 +579,31 @@ def _validate_references(root: Path, errors: list[str]) -> None:
                 "turn inspection references missing turn: "
                 f"{inspection['turn']['turn_id']}"
             )
+    for report in activity_reports:
+        for entry in report["entries"]:
+            if entry["thread_id"] not in thread_ids:
+                errors.append(
+                    f"model activity references missing thread: {entry['result_id']}"
+                )
+            if entry["turn_id"] not in turn_ids:
+                errors.append(
+                    f"model activity references missing turn: {entry['result_id']}"
+                )
+            disclosure = entry.get("disclosure")
+            if disclosure is None:
+                continue
+            for message_id in disclosure["triggering_message_ids"]:
+                if message_id not in message_ids:
+                    errors.append(
+                        "model disclosure references missing message: "
+                        f"{entry['result_id']}"
+                    )
+            for reference in disclosure["memory_references"]:
+                if reference["assertion_id"] not in memory_ids:
+                    errors.append(
+                        "model disclosure references missing memory: "
+                        f"{entry['result_id']}"
+                    )
     for memory in memories:
         assertion_id = memory["assertion"]["assertion_id"]
         if memory["current_state"]["assertion_id"] != assertion_id:
