@@ -9,12 +9,9 @@ from psycopg.types.json import Jsonb
 
 from melloa.domain.audit import AuditContent, AuditRecord, audit_record_hash
 from melloa.domain.events import EventEnvelope
+from melloa.ports.store import EventConflictError
 
 _AUDIT_LOCK_ID = 5_281_102_019_001
-
-
-class EventConflictError(RuntimeError):
-    """An immutable event ID was reused with different content."""
 
 
 class PostgresEventAuditStore:
