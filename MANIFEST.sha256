@@ -35,7 +35,7 @@ a2746eeeb7f1f194521d6c075f755eeffcaa8cc5ada079728c663a6c43d8d8a1  ./apps/web/scr
 9b8491b2075e60c3c1e74e020e5c3d1f258f90d412007a1a9bfef5f50a7e1c39  ./docs/03-conceptual-model.md
 7ceaf71afe7d580e019d944dd63d17814d55a68cc1e78e9f3afef3d74a7cbb33  ./docs/04-alternative-architectures.md
 2697e6a626cd518261ea5f2082db954499f8fa3eee30882a669f2e5d59d4a9e0  ./docs/05-chosen-v1-architecture.md
-a82978277cd2a641ddc719e4e327ee78d7a7ccf7ec59bc86a639b522ac60ebeb  ./docs/06-events-memory-data.md
+285eabee0f9cfa1094173a6320872e76ea3e060cc0497e5a589facec0740f1c5  ./docs/06-events-memory-data.md
 4f84c47726c07fd8e082b11514120382873fe39856f4fa0b98e60be2bce3d257  ./docs/07-agents-models-goals.md
 16311818598670d0f2686c19a8eaeafd0cf9372fe9c3b182f0260c6bed8ee83e  ./docs/08-capabilities-policy-autonomy.md
 9b2e12abbc350744455c2ddf9b609819b9ac83f87595c4f6a1cbf60de7fda544  ./docs/09-security-threat-injection.md
@@ -54,7 +54,7 @@ afde7c16ec2b3582a3497aef8b95a34fcd1192eb739a41a4d6b1b21b199ed165  ./docs/21-revi
 5852f70ce8cf8e58ed5034cbdc1062aa50c73a66029470eb90c2c84d8c853c95  ./docs/22-final-synthesis.md
 44a3db513e0454571ab58ba1cd330327664e02dc30e572ebaf4f6a18210031f7  ./docs/23-v0.2-decisions.md
 a98b2657cf236c2c0b16d0a85611fd2566cff6448d68d74932fd0c275f133758  ./docs/24-m0-implementation.md
-2965218d2f5e0433975cedbcfa9d8bd3bbf1ca8b1c32510adc55df6cbb5aedb9  ./docs/25-m1-implementation.md
+e4de6ee3ae0752e9f8a579183b210690d785a500eb05f193dd71f85ec90efed8  ./docs/25-m1-implementation.md
 926510904a18d0f582bc498e6d7a780e1aa9c61d2e67e94d380622b751e68260  ./docs/adr/ADR-001-event-oriented-provenance-ledger.md
 725fd9f2048fa570db36387aeae26d5821a549cd2a56af09659037ff018562aa  ./docs/adr/ADR-002-postgresql-primary-store-and-jobs.md
 31517d8fc1cb8bb74ae96a6222e839322b398da126d1aa89d9df63089eb6ca78  ./docs/adr/ADR-003-policy-aware-model-routing.md
@@ -84,7 +84,8 @@ b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f  ./migrations/0
 c2f4ce8d46fcec197833c9d9829911839a06db93836798b34facadc5cd5956d6  ./migrations/0003_m1_projection_trigger_privilege.sql
 ec9da887cc725ca68550ee2152e663b6daaa8cdfad81798e1f8b0d06a0f1d84e  ./migrations/0004_m1_assertion_state_history.sql
 3b92486d589677c3b46ea2cb5b5fb51b9084f95bc2430b1fc030501b1054dc38  ./migrations/0005_m1_outbound_delivery.sql
-d3c62b026de725d0fa2e8ebf86ffcbcc600c1e55e08b54154001f461e66f53d3  ./migrations/manifest.json
+f9891c35a5c51728853522b39ab2aaa140eb9208cb11bb11f469304578f20afb  ./migrations/0006_m1_assertion_content_boundary.sql
+e096101a6cf8b34f8a2a1db67dfbde075cfb3f533dbeb15cbeb5e55c4ab4017b  ./migrations/manifest.json
 54ae253f44d61ab26097d3f02924a6ce6acbb4dd7f1f0647ea49a4739ae1b00b  ./mkdocs.yml
 5a3a7b0b640550dca64155a4a01a0196d9d84a57b34a0999000983255b905263  ./pyproject.toml
 48e45686b7fb2d6d52c378514515fbc61c90bfd28723b1c7393d286c4a44741a  ./schemas/actions/authorization-request-v1.json
@@ -155,7 +156,7 @@ dac83a290943b2ec83f1ee0fc8154575b0151c7065b142b40f3e647a827e991c  ./src/melloa/a
 7a2f1e80e497413d2d925f7cb362cf4986a947199299c974811e06191fff7f24  ./src/melloa/adapters/postgres/__init__.py
 02b40b987ee3298f1c5f0ee41006680cadcd7ba62238fa23545327e4b57e4ae4  ./src/melloa/adapters/postgres/conversation.py
 efbf234016061a11c0883590b1a17de579be996edc31b3b247d620cf05eb220e  ./src/melloa/adapters/postgres/delivery.py
-51c644664cd0ba6b44b89420de9aca5e4424a1c2100acc47ad7cb12304a70d5c  ./src/melloa/adapters/postgres/memory.py
+a543f5e8b65cad81f2b510dac4bd25556c8eddf6e0fe7b0eabd9d5c4c16080fc  ./src/melloa/adapters/postgres/memory.py
 857c2586d5ff4e74700cc45a12e490839f1a2a3ff5ea5d14af12691d06aec0b9  ./src/melloa/adapters/postgres/migrations.py
 02c8d5c3b28d9b9c455be9124a7cb5c6984708c9b3060cf411e24ebfafd87342  ./src/melloa/adapters/postgres/store.py
 b67650fefe22965449bb9f702ed2e23a705a32faf203a8fd8f329b552af4bb5f  ./src/melloa/application/__init__.py
@@ -205,7 +206,7 @@ bdc48d9ab081e07d89b12eb0fc46765eb2855b0fa3b1c2f017ef406112f0b4c3  ./src/melloa/p
 8288e99de93ccdce67eb5e89d26bca1bf91743994e8da0f86d40362732636d74  ./src/melloa/ports/telegram.py
 c0616f5ffa0e452d22cbc5533f7c44439ba9e1e1249df03a9c1d41c6700da1c0  ./tests/__init__.py
 a9e88751254da2d9145f89c984c05d8c8bb8bc478d5e3195d1dbdc3e70583f17  ./tests/conftest.py
-83ff649a79289d619354dca42aa05dee145f01bdb91ac2885d4f803c3bb30946  ./tests/integration/test_postgres.py
+345b58138095244c58329c67303d297b8851294562da5f011c4741199a4f9069  ./tests/integration/test_postgres.py
 58ebd0681800e0939c4f0557b2c8f55ecb5c526bc0c44289baf3e664539dc33c  ./tests/unit/test_auth.py
 22bd3700ed01781e65fca34e7aba6ad1b8648f6bf18030a5c46d1660cf188fc6  ./tests/unit/test_cli.py
 641ad36fb86a390b5bffcf8621886fa8a3dbbbebb7b2331d689fabc7e35d90a4  ./tests/unit/test_contracts.py

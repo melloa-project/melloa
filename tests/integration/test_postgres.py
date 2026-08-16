@@ -3,9 +3,12 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import sql
+from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
 
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
@@ -13,6 +16,7 @@ from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.delivery import PostgresDeliveryStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
+from melloa.adapters.postgres.migrations import apply_migrations, discover_migrations
 from melloa.adapters.postgres.store import EventConflictError, PostgresEventAuditStore
 from melloa.application.conversation import ConversationService
 from melloa.application.inspection import OwnerInspectionService
@@ -97,31 +101,16 @@ def reset_append_tables(connection) -> None:
 def _insert_assertion(connection, assertion: Assertion) -> None:
     connection.execute(
         """
-        INSERT INTO melloa.assertions (
-            assertion_id, subject_id, predicate, epistemic_status, assertion_status,
-            confidence, sensitivity, source_authority, observed_at,
-            valid_from, valid_to, correction_target_id, document
-        ) VALUES (
-            %(assertion_id)s, %(subject_id)s, %(predicate)s, %(epistemic_status)s,
-            %(assertion_status)s, %(confidence)s, %(sensitivity)s,
-            %(source_authority)s, %(observed_at)s, %(valid_from)s, %(valid_to)s,
-            %(correction_target_id)s, %(document)s
+        SELECT melloa.append_assertion(
+            %(document)s::jsonb,
+            'memory.assertion-owner-lifecycle'::text,
+            %(retained_at)s::timestamptz,
+            NULL::timestamptz
         )
         """,
         {
-            "assertion_id": assertion.assertion_id,
-            "subject_id": assertion.subject_id,
-            "predicate": assertion.predicate,
-            "epistemic_status": assertion.epistemic_status.value,
-            "assertion_status": assertion.status.value,
-            "confidence": assertion.confidence,
-            "sensitivity": assertion.sensitivity.value,
-            "source_authority": assertion.source_authority.value,
-            "observed_at": assertion.observed_at,
-            "valid_from": assertion.valid_from,
-            "valid_to": assertion.valid_to,
-            "correction_target_id": assertion.correction_target_id,
             "document": Jsonb(assertion.model_dump(mode="json")),
+            "retained_at": assertion.observed_at,
         },
     )
 
@@ -437,29 +426,117 @@ def test_runtime_roles_are_narrow(connection) -> None:
     finally:
         connection.execute("RESET ROLE")
 
+    connection.execute("SET ROLE melloa_backup")
+    try:
+        connection.execute("SELECT count(*) FROM melloa.assertion_contents").fetchone()
+    finally:
+        connection.execute("RESET ROLE")
+
+
+def test_assertion_content_migration_backfills_legacy_documents(
+    connection,
+    fixed_time,
+) -> None:
+    database_name = f"melloa_assertion_upgrade_{os.getpid()}"
+    database = sql.Identifier(database_name)
+    connection.execute(
+        sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(database)
+    )
+    connection.execute(sql.SQL("CREATE DATABASE {}").format(database))
+    try:
+        migration_root = Path(__file__).resolve().parents[2] / "migrations"
+        migrations = discover_migrations(
+            migration_root,
+            migration_root / "manifest.json",
+        )
+        dsn = make_conninfo(connection.info.dsn, dbname=database_name)
+        with psycopg.connect(dsn, autocommit=True) as upgrade_connection:
+            apply_migrations(upgrade_connection, migrations[:5])
+            legacy = Assertion(
+                assertion_id=record_id("assertion", 90),
+                subject_id=record_id("owner", 90),
+                predicate="preference.synthetic",
+                value={"topic": "migration rehearsal"},
+                epistemic_status=EpistemicStatus.OWNER_CONFIRMED,
+                status=AssertionStatus.CONFIRMED,
+                confidence=1.0,
+                source_authority=TrustLabel.OWNER_AUTHORED,
+                sensitivity=Sensitivity.PERSONAL,
+                observed_at=fixed_time,
+            )
+            upgrade_connection.execute(
+                """
+                INSERT INTO melloa.assertions (
+                    assertion_id, subject_id, predicate, epistemic_status,
+                    assertion_status, confidence, sensitivity, source_authority,
+                    observed_at, valid_from, valid_to, correction_target_id, document
+                ) VALUES (
+                    %(assertion_id)s, %(subject_id)s, %(predicate)s,
+                    %(epistemic_status)s, %(assertion_status)s, %(confidence)s,
+                    %(sensitivity)s, %(source_authority)s, %(observed_at)s,
+                    NULL, NULL, NULL, %(document)s
+                )
+                """,
+                {
+                    "assertion_id": legacy.assertion_id,
+                    "subject_id": legacy.subject_id,
+                    "predicate": legacy.predicate,
+                    "epistemic_status": legacy.epistemic_status.value,
+                    "assertion_status": legacy.status.value,
+                    "confidence": legacy.confidence,
+                    "sensitivity": legacy.sensitivity.value,
+                    "source_authority": legacy.source_authority.value,
+                    "observed_at": legacy.observed_at,
+                    "document": Jsonb(legacy.model_dump(mode="json")),
+                },
+            )
+
+            status = apply_migrations(upgrade_connection, migrations)
+            assert status.pending == ()
+            metadata, value, content_hash, size_bytes, policy, retained_at, expires_at = (
+                upgrade_connection.execute(
+                    """
+                    SELECT assertion.document, content.value, content.content_hash,
+                           content.size_bytes, content.retention_policy,
+                           content.retained_at, content.expires_at
+                      FROM melloa.assertions AS assertion
+                      JOIN melloa.assertion_contents AS content USING (assertion_id)
+                     WHERE assertion.assertion_id = %s
+                    """,
+                    (legacy.assertion_id,),
+                ).fetchone()
+            )
+            assert metadata == legacy.model_dump(mode="json", exclude={"value"})
+            assert value == legacy.value
+            assert content_hash.startswith("sha256:") and len(content_hash) == 71
+            assert size_bytes > 0
+            assert policy == "memory.assertion-owner-lifecycle"
+            assert retained_at == legacy.observed_at
+            assert expires_at is None
+            assert PostgresMemoryRepository(upgrade_connection).get_assertion(
+                legacy.assertion_id
+            ) == legacy
+    finally:
+        connection.execute(
+            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(database)
+        )
+
 
 def test_m1_manifest_is_append_only_and_assertion_state_is_a_projection(connection) -> None:
-    assertion_id = "assertion_11111111111111111111111111111111"
-    connection.execute(
-        """
-        INSERT INTO melloa.assertions (
-            assertion_id, subject_id, predicate, epistemic_status, assertion_status,
-            confidence, sensitivity, source_authority, observed_at, document
-        ) VALUES (
-            %s,
-            'owner_11111111111111111111111111111111',
-            'preference.synthetic',
-            'belief',
-            'active',
-            0.8,
-            'personal',
-            'model_generated',
-            '2026-08-16T12:00:00Z',
-            '{}'::jsonb
-        )
-        """,
-        (assertion_id,),
+    assertion = Assertion(
+        assertion_id="assertion_11111111111111111111111111111111",
+        subject_id="owner_11111111111111111111111111111111",
+        predicate="preference.synthetic",
+        value={"preference": "synthetic"},
+        epistemic_status=EpistemicStatus.BELIEF,
+        status=AssertionStatus.ACTIVE,
+        confidence=0.8,
+        sensitivity=Sensitivity.PERSONAL,
+        source_authority=TrustLabel.MODEL_GENERATED,
+        observed_at=datetime.fromisoformat("2026-08-16T12:00:00+00:00"),
     )
+    assertion_id = assertion.assertion_id
+    _insert_assertion(connection, assertion)
     state = connection.execute(
         """
         SELECT current_status, preferred_assertion_id, version
@@ -469,6 +546,21 @@ def test_m1_manifest_is_append_only_and_assertion_state_is_a_projection(connecti
         (assertion_id,),
     ).fetchone()
     assert state == ("active", None, 1)
+    metadata, value, content_hash, size_bytes, retention_policy = connection.execute(
+        """
+        SELECT assertion.document, content.value, content.content_hash,
+               content.size_bytes, content.retention_policy
+          FROM melloa.assertions AS assertion
+          JOIN melloa.assertion_contents AS content USING (assertion_id)
+         WHERE assertion.assertion_id = %s
+        """,
+        (assertion_id,),
+    ).fetchone()
+    assert metadata == assertion.model_dump(mode="json", exclude={"value"})
+    assert value == assertion.value
+    assert content_hash.startswith("sha256:") and len(content_hash) == 71
+    assert size_bytes > 0
+    assert retention_policy == "memory.assertion-owner-lifecycle"
     initial_change = connection.execute(
         """
         SELECT previous_status, new_status, reason, version
@@ -504,6 +596,22 @@ def test_m1_manifest_is_append_only_and_assertion_state_is_a_projection(connecti
     }
     connection.execute("SET ROLE melloa_core")
     try:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                "INSERT INTO melloa.assertions (assertion_id) VALUES (%s)",
+                ("assertion_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",),
+            )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                "UPDATE melloa.assertion_contents SET value = '{}'::jsonb "
+                "WHERE assertion_id = %s",
+                (assertion_id,),
+            )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                "DELETE FROM melloa.assertion_contents WHERE assertion_id = %s",
+                (assertion_id,),
+            )
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 """
@@ -587,29 +695,27 @@ def test_m1_manifest_is_append_only_and_assertion_state_is_a_projection(connecti
             (manifest_id,),
         )
 
-    worker_assertion_id = "assertion_33333333333333333333333333333333"
+    worker_assertion = Assertion(
+        assertion_id="assertion_33333333333333333333333333333333",
+        subject_id="owner_33333333333333333333333333333333",
+        predicate="observation.synthetic",
+        value={"observation": "synthetic"},
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        status=AssertionStatus.PROVISIONAL,
+        confidence=0.5,
+        sensitivity=Sensitivity.INTERNAL,
+        source_authority=TrustLabel.TRUSTED_SYSTEM,
+        observed_at=datetime.fromisoformat("2026-08-16T12:00:00+00:00"),
+    )
+    worker_assertion_id = worker_assertion.assertion_id
     connection.execute("SET ROLE melloa_worker")
     try:
-        connection.execute(
-            """
-            INSERT INTO melloa.assertions (
-                assertion_id, subject_id, predicate, epistemic_status, assertion_status,
-                confidence, sensitivity, source_authority, observed_at, document
-            ) VALUES (
-                %s,
-                'owner_33333333333333333333333333333333',
-                'observation.synthetic',
-                'observation',
-                'provisional',
-                0.5,
-                'internal',
-                'trusted_system',
-                '2026-08-16T12:00:00Z',
-                '{}'::jsonb
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute(
+                "INSERT INTO melloa.assertions (assertion_id) VALUES (%s)",
+                (worker_assertion_id,),
             )
-            """,
-            (worker_assertion_id,),
-        )
+        _insert_assertion(connection, worker_assertion)
     finally:
         connection.execute("RESET ROLE")
     worker_state = connection.execute(
@@ -630,6 +736,10 @@ def test_m1_manifest_is_append_only_and_assertion_state_is_a_projection(connecti
         (worker_assertion_id,),
     ).fetchone()
     assert worker_history == ("provisional", "assertion.initialized", 1)
+    assert connection.execute(
+        "SELECT count(*) FROM melloa.assertion_contents WHERE assertion_id = %s",
+        (worker_assertion_id,),
+    ).fetchone()[0] == 1
 
 
 def test_postgres_memory_correction_is_atomic_durable_and_version_checked(
@@ -801,12 +911,13 @@ def test_postgres_memory_correction_is_atomic_durable_and_version_checked(
         """
         SELECT
             (SELECT count(*) FROM melloa.assertions),
+            (SELECT count(*) FROM melloa.assertion_contents),
             (SELECT count(*) FROM melloa.provenance_edges),
             (SELECT count(*) FROM melloa.assertion_current_state),
             (SELECT count(*) FROM melloa.assertion_state_changes)
         """
     ).fetchone()
-    assert counts == (2, 1, 2, 3)
+    assert counts == (2, 2, 1, 2, 3)
 
 
 def test_postgres_memory_dispute_and_retraction_history_is_durable(
@@ -898,11 +1009,12 @@ def test_postgres_memory_dispute_and_retraction_history_is_durable(
         """
         SELECT
             (SELECT count(*) FROM melloa.assertions),
+            (SELECT count(*) FROM melloa.assertion_contents),
             (SELECT count(*) FROM melloa.assertion_current_state),
             (SELECT count(*) FROM melloa.assertion_state_changes)
         """
     ).fetchone()
-    assert counts == (1, 1, 3)
+    assert counts == (1, 1, 1, 3)
 
 
 def test_postgres_conversation_completion_is_atomic_cited_and_idempotent(

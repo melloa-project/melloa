@@ -26,6 +26,8 @@ from melloa.ports.memory import (
     MemoryNotFoundError,
 )
 
+_ASSERTION_RETENTION_POLICY = "memory.assertion-owner-lifecycle"
+
 
 class PostgresMemoryRepository:
     def __init__(self, connection: psycopg.Connection[tuple[Any, ...]]) -> None:
@@ -33,18 +35,28 @@ class PostgresMemoryRepository:
 
     def get_assertion(self, assertion_id: RecordId) -> Assertion:
         row = self._connection.execute(
-            "SELECT document FROM melloa.assertions WHERE assertion_id = %s",
+            """
+            SELECT assertion.document, content.value
+              FROM melloa.assertions AS assertion
+              LEFT JOIN melloa.assertion_contents AS content
+                ON content.assertion_id = assertion.assertion_id
+             WHERE assertion.assertion_id = %s
+            """,
             (assertion_id,),
         ).fetchone()
         if row is None:
             raise MemoryNotFoundError(f"assertion not found: {assertion_id}")
-        return self._parse_assertion(row[0])
+        if row[1] is None:
+            raise MemoryNotFoundError(f"assertion content not found: {assertion_id}")
+        return self._parse_assertion(row[0], row[1])
 
     def list_assertions(self, subject_id: RecordId) -> tuple[Assertion, ...]:
         rows = self._connection.execute(
             """
-            SELECT assertion.document, current.current_status
+            SELECT assertion.document, content.value, current.current_status
               FROM melloa.assertions AS assertion
+              JOIN melloa.assertion_contents AS content
+                ON content.assertion_id = assertion.assertion_id
               LEFT JOIN melloa.assertion_current_state AS current
                 ON current.assertion_id = assertion.assertion_id
              WHERE assertion.subject_id = %s
@@ -53,10 +65,8 @@ class PostgresMemoryRepository:
             (subject_id,),
         ).fetchall()
         assertions: list[Assertion] = []
-        for document, current_status in rows:
-            if not isinstance(document, dict):
-                raise ValueError("persisted assertion document is not an object")
-            projected = cast(JsonObject, document.copy())
+        for document, value, current_status in rows:
+            projected = self._assertion_document(document, value)
             if current_status is not None:
                 projected["status"] = str(current_status)
             assertions.append(
@@ -205,31 +215,18 @@ class PostgresMemoryRepository:
     def _insert_assertion(self, assertion: Assertion) -> None:
         self._connection.execute(
             """
-            INSERT INTO melloa.assertions (
-                assertion_id, subject_id, predicate, epistemic_status, assertion_status,
-                confidence, sensitivity, source_authority, observed_at,
-                valid_from, valid_to, correction_target_id, document
-            ) VALUES (
-                %(assertion_id)s, %(subject_id)s, %(predicate)s, %(epistemic_status)s,
-                %(assertion_status)s, %(confidence)s, %(sensitivity)s,
-                %(source_authority)s, %(observed_at)s, %(valid_from)s, %(valid_to)s,
-                %(correction_target_id)s, %(document)s
+            SELECT melloa.append_assertion(
+                %(document)s::jsonb,
+                %(retention_policy)s::text,
+                %(retained_at)s::timestamptz,
+                %(expires_at)s::timestamptz
             )
             """,
             {
-                "assertion_id": assertion.assertion_id,
-                "subject_id": assertion.subject_id,
-                "predicate": assertion.predicate,
-                "epistemic_status": assertion.epistemic_status.value,
-                "assertion_status": assertion.status.value,
-                "confidence": assertion.confidence,
-                "sensitivity": assertion.sensitivity.value,
-                "source_authority": assertion.source_authority.value,
-                "observed_at": assertion.observed_at,
-                "valid_from": assertion.valid_from,
-                "valid_to": assertion.valid_to,
-                "correction_target_id": assertion.correction_target_id,
                 "document": Jsonb(assertion.model_dump(mode="json")),
+                "retention_policy": _ASSERTION_RETENTION_POLICY,
+                "retained_at": assertion.observed_at,
+                "expires_at": None,
             },
         )
 
@@ -340,10 +337,22 @@ class PostgresMemoryRepository:
             raise MemoryConflictError("assertion state transition is inconsistent")
 
     @staticmethod
-    def _parse_assertion(document: object) -> Assertion:
+    def _assertion_document(document: object, value: object) -> JsonObject:
         if not isinstance(document, dict):
             raise ValueError("persisted assertion document is not an object")
-        return Assertion.model_validate_json(canonical_json_bytes(cast(JsonObject, document)))
+        if "value" in document:
+            raise ValueError("persisted assertion metadata contains content")
+        if not isinstance(value, dict):
+            raise ValueError("persisted assertion content is not an object")
+        combined = cast(JsonObject, document.copy())
+        combined["value"] = cast(JsonObject, value)
+        return combined
+
+    @classmethod
+    def _parse_assertion(cls, document: object, value: object) -> Assertion:
+        return Assertion.model_validate_json(
+            canonical_json_bytes(cls._assertion_document(document, value))
+        )
 
     @staticmethod
     def _parse_state(document: object) -> AssertionStateProjection:

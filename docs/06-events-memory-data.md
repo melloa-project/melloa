@@ -185,6 +185,12 @@ When the owner says “I wasn't asleep; I was reading,” Melloa should:
 
 Deletion is different from correction. A deletion request may remove blobs and payloads while retaining a minimal tombstone proving that an ID was intentionally removed, unless the owner requires complete erasure and accepts loss of audit linkage.
 
+### Assertion content boundary
+
+Assertion identity, epistemic metadata, state history, and provenance remain append-oriented, but the assertion value is stored in a separate retention-bearing content row. The immutable assertion metadata document never duplicates that value. While content is present, repositories reconstruct the versioned assertion contract through an exact metadata/content join; derived retrieval excludes assertions whose content has been removed.
+
+Runtime roles append metadata and content through one transactional database function and cannot update or delete either table directly. A future owner-deletion path must use a narrower recent-authenticated, Guardian-gated transaction that verifies owner scope, removes the content row, appends a minimal non-content tombstone and rebuild work, and leaves the assertion ID, correction state, and provenance graph inspectable. Backups retain content until their disclosed expiry horizon.
+
 ## Retrieval architecture
 
 Retrieval is a policy-constrained query plan:
