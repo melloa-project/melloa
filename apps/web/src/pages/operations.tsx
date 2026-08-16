@@ -211,10 +211,10 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
               <div className="retention-card-header"><div><p className="eyebrow">{titleCase(policy.data_category)}</p><h2>{policy.summary}</h2></div><Badge tone={policy.automatic_expiry ? "positive" : "warning"}>{titleCase(policy.mode)}</Badge></div>
               <dl className="detail-list">
                 <div><dt>Coverage</dt><dd>{titleCase(inventory?.coverage ?? "unknown")}</dd></div>
-                <div><dt>Retained</dt><dd>{formatCount(inventory?.retained_objects ?? 0)} objects</dd></div>
-                <div><dt>Retained bytes</dt><dd>{formatBytes(inventory?.retained_bytes ?? 0)}</dd></div>
-                <div><dt>Pending deletion</dt><dd>{formatCount(inventory?.pending_deletions ?? 0)}</dd></div>
-                <div><dt>Deletion receipts</dt><dd>{formatCount(inventory?.deletion_receipts ?? 0)}</dd></div>
+                <div><dt>Retained</dt><dd>{formatInventoryObjects(inventory?.retained_objects)}</dd></div>
+                <div><dt>Retained bytes</dt><dd>{formatInventoryBytes(inventory?.retained_bytes)}</dd></div>
+                <div><dt>Pending deletion</dt><dd>{formatInventoryCount(inventory?.pending_deletions)}</dd></div>
+                <div><dt>Deletion receipts</dt><dd>{formatInventoryCount(inventory?.deletion_receipts)}</dd></div>
                 <div><dt>External copies</dt><dd>{titleCase(policy.external_copy_state)}</dd></div>
                 <div><dt>Owner deletion</dt><dd>{titleCase(policy.deletion_control)}</dd></div>
                 <div><dt>Oldest retained</dt><dd>{formatInstant(inventory?.oldest_retained_at)}</dd></div>
@@ -317,4 +317,19 @@ function formatBytes(value: number): string {
 
 function formatEstimatedRecords(value: number): string {
   return `${formatCount(value)} estimated ${value === 1 ? "record" : "records"}`;
+}
+
+function formatInventoryCount(value: number | null | undefined): string {
+  return value === null || value === undefined ? "Not measured" : formatCount(value);
+}
+
+function formatInventoryObjects(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "Not measured";
+  }
+  return `${formatCount(value)} ${value === 1 ? "object" : "objects"}`;
+}
+
+function formatInventoryBytes(value: number | null | undefined): string {
+  return value === null || value === undefined ? "Not measured" : formatBytes(value);
 }

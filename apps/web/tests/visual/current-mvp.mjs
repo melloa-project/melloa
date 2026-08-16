@@ -74,7 +74,23 @@ try {
     fullPage: true,
   });
 
+  await page.getByRole("tab", { name: "Retention" }).click();
+  await page.getByText("Backup expiry", { exact: true }).waitFor();
+  await page.getByText("Not measured", { exact: true }).first().waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/operations-retention-desktop.png`,
+    fullPage: true,
+  });
+
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: `${outputDirectory}/operations-retention-mobile.png`,
+  });
+
+  await page.getByRole("tab", { name: "Export" }).click();
+  await page.getByText("melloa.canonical-owner-export", { exact: true }).waitFor();
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: `${outputDirectory}/operations-export-mobile.png`,
   });

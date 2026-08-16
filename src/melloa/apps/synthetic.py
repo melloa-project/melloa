@@ -745,18 +745,18 @@ def _synthetic_retention_policies() -> tuple[RetentionPolicyStatus, ...]:
 
 
 def _synthetic_retention_inventory() -> tuple[RetentionInventoryStatus, ...]:
-    unavailable = (
-        "retention.audit-ledger",
-        "retention.owner-conversation",
-        "retention.owner-memory",
-    )
+    unavailable = {
+        "retention.audit-ledger": "retention.inventory.audit_not_assembled",
+        "retention.owner-conversation": "retention.inventory.not_assembled",
+        "retention.owner-memory": "retention.inventory.not_assembled",
+    }
     unavailable_inventory = tuple(
         RetentionInventoryStatus(
             policy_id=policy_id,
             coverage=RetentionInventoryCoverage.UNAVAILABLE,
-            status_reason="retention.inventory.not_assembled",
+            status_reason=status_reason,
         )
-        for policy_id in unavailable
+        for policy_id, status_reason in unavailable.items()
     )
     return (
         *unavailable_inventory,

@@ -49,6 +49,19 @@ describe("OperationsPage retention view", () => {
       },
       policies: [
         {
+          policy_id: "retention.audit-ledger",
+          data_category: "data.audit-ledger",
+          summary: "Security and action evidence is append-oriented and deletion-restricted.",
+          mode: "append-only",
+          automatic_expiry: false,
+          deletion_control: "restricted",
+          owner_deletion_scopes: [],
+          tombstone_retained: true,
+          derived_rebuild_required: false,
+          external_copy_state: "none",
+          status_reason: "retention.audit.restricted",
+        },
+        {
           policy_id: "retention.owner-memory",
           data_category: "data.memory-assertion",
           summary: "Memory values can be deleted by owner request.",
@@ -63,6 +76,11 @@ describe("OperationsPage retention view", () => {
         },
       ],
       inventory: [
+        {
+          policy_id: "retention.audit-ledger",
+          coverage: "unavailable",
+          status_reason: "retention.inventory.audit_not_assembled",
+        },
         {
           policy_id: "retention.owner-memory",
           coverage: "complete",
@@ -131,11 +149,13 @@ describe("OperationsPage retention view", () => {
     fireEvent.click(await screen.findByRole("tab", { name: /Retention/i }));
 
     const retention = screen.getByLabelText("Retention policies");
-    expect(within(retention).getByText("Retained bytes")).toBeInTheDocument();
+    expect(within(retention).getAllByText("Retained bytes")).toHaveLength(2);
     expect(within(retention).getByText("12.0 KiB")).toBeInTheDocument();
-    expect(within(retention).getByText("Deletion receipts")).toBeInTheDocument();
+    expect(within(retention).getByText("Unavailable")).toBeInTheDocument();
+    expect(within(retention).getAllByText("Not measured")).toHaveLength(4);
+    expect(within(retention).getAllByText("Deletion receipts")).toHaveLength(2);
     expect(within(retention).getByText("Owner Request")).toBeInTheDocument();
-    expect(within(retention).getByText("Oldest retained")).toBeInTheDocument();
+    expect(within(retention).getAllByText("Oldest retained")).toHaveLength(2);
   });
 
   it("renders export coverage and validation commands without claiming backup coverage", async () => {
