@@ -377,6 +377,11 @@ def _delivery_resumption(
 
 def test_atomic_event_audit_append_is_idempotent(connection, event, audit_content) -> None:
     store = PostgresEventAuditStore(connection)
+    empty_inventory = store.audit_retention_inventory()
+    assert empty_inventory.retained_objects == 0
+    assert empty_inventory.retained_bytes == 0
+    assert empty_inventory.oldest_retained_at is None
+
     record = store.append_event(event, audit_content)
     assert record is not None
     assert record.previous_hash is None
@@ -392,6 +397,11 @@ def test_atomic_event_audit_append_is_idempotent(connection, event, audit_conten
     ).fetchone()[0]
     assert event_count == 1
     assert audit_count == 1
+    inventory = store.audit_retention_inventory()
+    assert inventory.retained_objects == 1
+    assert inventory.retained_bytes > 0
+    assert inventory.oldest_retained_at == audit_content.occurred_at
+    assert inventory.status_reason == "retention.inventory.audit_event_store"
 
 
 def test_immutable_event_id_cannot_change_content(connection, event, audit_content) -> None:
@@ -1719,7 +1729,7 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
     with ExitStack() as first_run:
         first_connections = tuple(
             first_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
-            for _ in range(4)
+            for _ in range(5)
         )
         for database in first_connections:
             database.execute("SET ROLE melloa_core")
@@ -1788,11 +1798,17 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
             },
         )
         assert correction.status_code == 201
+        deletion = first_client.delete(
+            f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/content",
+            headers=headers,
+        )
+        assert deletion.status_code == 200
+        assert deletion.json()["created"] is True
 
     with ExitStack() as second_run:
         second_connections = tuple(
             second_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
-            for _ in range(4)
+            for _ in range(5)
         )
         for database in second_connections:
             database.execute("SET ROLE melloa_core")
@@ -1849,8 +1865,16 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert [item["work_id"] for item in deliveries.json()] == [work_id]
         memory = second_client.get(f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}")
         assert memory.status_code == 200
+        assert memory.json()["content_state"] == "deleted"
         assert memory.json()["current_state"]["version"] == 2
         assert memory.json()["current_state"]["current_status"] == "superseded"
+        retention = second_client.get("/api/v1/retention")
+        assert retention.status_code == 200
+        inventory = {item["policy_id"]: item for item in retention.json()["inventory"]}
+        assert inventory["retention.audit-ledger"]["coverage"] == "complete"
+        assert inventory["retention.audit-ledger"]["retained_objects"] == 1
+        assert inventory["retention.audit-ledger"]["retained_bytes"] > 0
+        assert inventory["retention.owner-memory"]["deletion_receipts"] == 1
         health = second_client.get("/api/v1/inspection/health")
         assert health.status_code == 200
         components = {
@@ -1909,7 +1933,7 @@ def test_postgres_telegram_state_survives_core_restarts(database_dsn, fixed_time
     with ExitStack() as first_run:
         connections = tuple(
             first_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
-            for _ in range(4)
+            for _ in range(5)
         )
         for database in connections:
             database.execute("SET ROLE melloa_core")
@@ -1950,7 +1974,7 @@ def test_postgres_telegram_state_survives_core_restarts(database_dsn, fixed_time
     with ExitStack() as second_run:
         connections = tuple(
             second_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
-            for _ in range(4)
+            for _ in range(5)
         )
         for database in connections:
             database.execute("SET ROLE melloa_core")
@@ -1991,7 +2015,7 @@ def test_postgres_telegram_state_survives_core_restarts(database_dsn, fixed_time
     with ExitStack() as third_run:
         connections = tuple(
             third_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
-            for _ in range(4)
+            for _ in range(5)
         )
         for database in connections:
             database.execute("SET ROLE melloa_core")

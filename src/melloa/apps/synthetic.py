@@ -85,6 +85,7 @@ from melloa.ports.conversation import ConversationNotFoundError, ConversationSto
 from melloa.ports.delivery import DeliveryStore
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import MemoryStore
+from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import (
     TelegramPairingChallengePublisher,
     TelegramPairingCodeIssuer,
@@ -115,6 +116,7 @@ class DurableRuntimeStores:
     delivery_store: DeliveryStore
     database_health_reader: Callable[[], ComponentHealth]
     status: RuntimePersistenceStatus
+    event_audit_store: EventAuditStore | None = None
     telegram_pairing_store: TelegramPairingStateStore | None = None
     telegram_poll_state_store: TelegramPollStateStore | None = None
 
@@ -136,7 +138,7 @@ class SyntheticRuntime:
     telegram_delivery_adapter: ClientAdapter | None
     telegram_reply_dispatcher: TelegramReplyDispatcher | None
     delivery_store: DeliveryStore
-    event_audit_store: InMemoryEventAuditStore
+    event_audit_store: EventAuditStore
     conversation_service: ConversationService
     memory_service: MemoryService
     memory_store: MemoryStore
@@ -229,7 +231,11 @@ def build_synthetic_runtime(
             updated_at=seeded_at,
         ),
     )
-    event_audit_store = InMemoryEventAuditStore()
+    event_audit_store: EventAuditStore = (
+        InMemoryEventAuditStore()
+        if durable_stores is None or durable_stores.event_audit_store is None
+        else durable_stores.event_audit_store
+    )
     model_backend = FakeModelGateway(
         _synthetic_conversation_response,
         clock=clock,

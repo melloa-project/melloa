@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.delivery import PostgresDeliveryStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
+from melloa.adapters.postgres.store import PostgresEventAuditStore
 from melloa.adapters.postgres.telegram import (
     PostgresTelegramPairingStateStore,
     PostgresTelegramPollStateStore,
@@ -40,6 +41,7 @@ from melloa.domain.operations import ComponentHealth, HealthCategory, HealthStat
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.delivery import DeliveryStore
 from melloa.ports.memory import MemoryNotFoundError, MemoryStore
+from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import (
     TelegramPairingStateStore,
     TelegramPollConflictError,
@@ -59,6 +61,7 @@ class PostgresMvpStores:
     conversation_store: ConversationStore
     memory_store: MemoryStore
     delivery_store: DeliveryStore
+    event_audit_store: EventAuditStore
     telegram_pairing_store: TelegramPairingStateStore
     telegram_poll_state_store: TelegramPollStateStore
     database_health_reader: Callable[[], ComponentHealth]
@@ -128,6 +131,7 @@ def build_postgres_mvp_store_bundle(
     memory_connection: psycopg.Connection[tuple[Any, ...]],
     delivery_connection: psycopg.Connection[tuple[Any, ...]],
     telegram_connection: psycopg.Connection[tuple[Any, ...]],
+    audit_connection: psycopg.Connection[tuple[Any, ...]],
     *,
     owner_id: RecordId,
     intelligence_id: RecordId,
@@ -147,11 +151,13 @@ def build_postgres_mvp_store_bundle(
     memory_lock = RLock()
     delivery_lock = RLock()
     telegram_lock = RLock()
+    audit_lock = RLock()
     connections = (
         (conversation_connection, conversation_lock),
         (memory_connection, memory_lock),
         (delivery_connection, delivery_lock),
         (telegram_connection, telegram_lock),
+        (audit_connection, audit_lock),
     )
 
     def database_health() -> ComponentHealth:
@@ -183,7 +189,7 @@ def build_postgres_mvp_store_bundle(
             observed_at=clock(),
             summary=(
                 "Private PostgreSQL backs canonical MVP stores, Telegram control state, "
-                "and durable work queues."
+                "durable work queues, and audit append records."
             ),
             version=version,
         )
@@ -196,6 +202,10 @@ def build_postgres_mvp_store_bundle(
     delivery_store = _serialized(
         PostgresDeliveryStore(delivery_connection, id_factory=id_factory),
         delivery_lock,
+    )
+    event_audit_store = _serialized(
+        PostgresEventAuditStore(audit_connection),
+        audit_lock,
     )
     telegram_pairing_store = _serialized(
         PostgresTelegramPairingStateStore(telegram_connection),
@@ -219,6 +229,7 @@ def build_postgres_mvp_store_bundle(
         conversation_store=cast(ConversationStore, conversation_store),
         memory_store=cast(MemoryStore, memory_store),
         delivery_store=cast(DeliveryStore, delivery_store),
+        event_audit_store=cast(EventAuditStore, event_audit_store),
         telegram_pairing_store=cast(TelegramPairingStateStore, telegram_pairing_store),
         telegram_poll_state_store=cast(TelegramPollStateStore, telegram_poll_state_store),
         database_health_reader=database_health,

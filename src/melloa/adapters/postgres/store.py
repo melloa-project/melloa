@@ -8,7 +8,12 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from melloa.domain.audit import AuditContent, AuditRecord, audit_record_hash
+from melloa.domain.base import QualifiedName
 from melloa.domain.events import EventEnvelope
+from melloa.domain.retention import (
+    RetentionInventoryCoverage,
+    RetentionInventoryStatus,
+)
 from melloa.ports.store import EventConflictError
 
 _AUDIT_LOCK_ID = 5_281_102_019_001
@@ -92,3 +97,37 @@ class PostgresEventAuditStore:
                 ),
             )
             return record
+
+    def audit_retention_inventory(
+        self,
+        *,
+        policy_id: QualifiedName = "retention.audit-ledger",
+    ) -> RetentionInventoryStatus:
+        row = self._connection.execute(
+            """
+            SELECT
+                count(*)::bigint,
+                coalesce(sum(octet_length(document::text)), 0)::bigint,
+                min(occurred_at)
+              FROM melloa.audit_events
+            """
+        ).fetchone()
+        if row is None:
+            retained_objects = 0
+            retained_bytes = 0
+            oldest_retained_at = None
+        else:
+            retained_objects = int(row[0])
+            retained_bytes = int(row[1])
+            oldest_retained_at = row[2]
+        return RetentionInventoryStatus(
+            policy_id=policy_id,
+            coverage=RetentionInventoryCoverage.COMPLETE,
+            retained_objects=retained_objects,
+            retained_bytes=retained_bytes,
+            overdue_objects=0,
+            pending_deletions=0,
+            deletion_receipts=0,
+            oldest_retained_at=oldest_retained_at,
+            status_reason="retention.inventory.audit_event_store",
+        )

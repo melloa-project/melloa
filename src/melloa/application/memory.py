@@ -127,13 +127,12 @@ class MemoryService:
             )
         )
         event_audit_store = self._event_audit_store
-        if persisted.created and event_audit_store is not None:
+        if event_audit_store is not None:
             self._append_content_deletion_audit(
                 event_audit_store=event_audit_store,
                 principal=principal,
                 metadata=metadata,
                 result=persisted,
-                occurred_at=now,
             )
         return AssertionContentDeletionResult(
             assertion=metadata,
@@ -335,10 +334,10 @@ class MemoryService:
         principal: AuthenticatedOwner,
         metadata: AssertionMetadata,
         result: AssertionContentDeletionStoreResult,
-        occurred_at: datetime,
     ) -> None:
         tombstone = result.tombstone
         rebuild_work = result.rebuild_work
+        occurred_at = tombstone.deleted_at
         payload: JsonObject = {
             "assertion_id": metadata.assertion_id,
             "backup_expiry_state": self._backup_expiry.state.value,
@@ -350,7 +349,11 @@ class MemoryService:
             "tombstone_id": tombstone.tombstone_id,
         }
         event = EventEnvelope(
-            event_id=self._id_factory("event"),
+            event_id=self._derived_audit_record_id(
+                "event",
+                tombstone.tombstone_id,
+                "memory.assertion-content-deleted.v1",
+            ),
             event_type="memory.assertion-content-deleted.v1",
             schema_version="1.0.0",
             occurred_at=occurred_at,
@@ -375,7 +378,11 @@ class MemoryService:
             ),
         )
         audit = AuditContent(
-            audit_id=self._id_factory("audit"),
+            audit_id=self._derived_audit_record_id(
+                "audit",
+                tombstone.tombstone_id,
+                "memory.assertion-content.delete",
+            ),
             event_type="audit.event-appended.v1",
             occurred_at=occurred_at,
             actor_id=principal.owner_id,
@@ -392,3 +399,16 @@ class MemoryService:
             },
         )
         event_audit_store.append_event(event, audit)
+
+    @staticmethod
+    def _derived_audit_record_id(prefix: str, tombstone_id: RecordId, purpose: str) -> str:
+        digest = sha256_digest(
+            canonical_json_bytes(
+                {
+                    "prefix": prefix,
+                    "purpose": purpose,
+                    "tombstone_id": tombstone_id,
+                }
+            )
+        ).removeprefix("sha256:")
+        return f"{prefix}_{digest[:32]}"

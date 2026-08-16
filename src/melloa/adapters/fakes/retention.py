@@ -12,9 +12,8 @@ from melloa.domain.retention import (
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.memory import MemoryRepository
 from melloa.ports.retention import OwnerRetentionReader
+from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import TelegramAttachmentBackend
-
-from .store import InMemoryEventAuditStore
 
 
 class InMemoryRetentionReader:
@@ -134,7 +133,7 @@ class AuditBackedRetentionReader:
         self,
         base_reader: OwnerRetentionReader,
         owner_id: RecordId,
-        event_audit_store: InMemoryEventAuditStore,
+        event_audit_store: EventAuditStore,
         *,
         audit_policy_id: str = "retention.audit-ledger",
     ) -> None:

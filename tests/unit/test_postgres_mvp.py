@@ -69,6 +69,7 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
     conversation_store = object()
     memory_store = object()
     delivery_store = object()
+    event_audit_store = object()
     telegram_pairing_store = object()
     telegram_poll_state_store = object()
 
@@ -84,13 +85,14 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
             conversation_store=conversation_store,
             memory_store=memory_store,
             delivery_store=delivery_store,
+            event_audit_store=event_audit_store,
             telegram_pairing_store=telegram_pairing_store,
             telegram_poll_state_store=telegram_poll_state_store,
             database_health_reader=health_reader,
         )
 
     monkeypatch.setattr(postgres_mvp, "build_postgres_mvp_store_bundle", build)
-    connections = (object(), object(), object(), object())
+    connections = (object(), object(), object(), object(), object())
     stores = postgres_mvp.build_postgres_mvp_stores(
         *connections,
         clock=lambda: fixed_time,
@@ -105,12 +107,15 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
     assert stores.conversation_store is conversation_store
     assert stores.memory_store is memory_store
     assert stores.delivery_store is delivery_store
+    assert stores.event_audit_store is event_audit_store
     assert stores.telegram_pairing_store is telegram_pairing_store
     assert stores.telegram_poll_state_store is telegram_poll_state_store
     assert stores.database_health_reader is health_reader
     assert stores.status.mode == "postgresql-partial-preview"
     assert any("conversations" in item for item in stores.status.durable_state)
     assert any("Telegram" in item for item in stores.status.durable_state)
+    assert any("audit" in item for item in stores.status.durable_state)
+    assert any("not yet assembled" in item for item in stores.status.ephemeral_state)
     assert "authentication sessions" in stores.status.ephemeral_state
 
 

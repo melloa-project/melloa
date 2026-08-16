@@ -35,6 +35,18 @@ from melloa.ports.memory import (
 from tests.conftest import record_id
 
 
+class _FailFirstAuditStore(InMemoryEventAuditStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self._failed = False
+
+    def append_event(self, event, audit):
+        if not self._failed:
+            self._failed = True
+            raise RuntimeError("synthetic audit outage")
+        return super().append_event(event, audit)
+
+
 def _assertion(
     fixed_time: datetime,
     *,
@@ -515,6 +527,49 @@ def test_memory_service_audits_owner_content_deletion_without_content(
     assert repeated.created is False
     assert len(audit_store.events) == 1
     assert len(audit_store.audit_records) == 1
+
+
+def test_memory_service_retries_audit_after_deletion_replay(
+    fixed_time,
+) -> None:
+    original = _assertion(fixed_time)
+    repository = InMemoryMemoryRepository((original,))
+    audit_store = _FailFirstAuditStore()
+    deleted_at = fixed_time + timedelta(minutes=2)
+    service = MemoryService(
+        owner_id=original.subject_id,
+        store=repository,
+        guardian_reader=_guardian(fixed_time),
+        event_audit_store=audit_store,
+        clock=lambda: deleted_at,
+        id_factory=_id_factory(
+            deletion=record_id("deletion", 1),
+            work=record_id("work", 1),
+        ),
+    )
+    principal = _principal(fixed_time)
+
+    with pytest.raises(RuntimeError, match="synthetic audit outage"):
+        service.delete_content(principal, original.assertion_id)
+
+    with pytest.raises(MemoryContentDeletedError):
+        repository.get_assertion(original.assertion_id)
+
+    replay = service.delete_content(principal, original.assertion_id)
+
+    assert replay.created is False
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
+    event = audit_store.events[0]
+    assert event.correlation_id == replay.tombstone.tombstone_id
+    assert event.occurred_at == replay.tombstone.deleted_at
+    audit = audit_store.audit_records[0].content
+    assert audit.occurred_at == replay.tombstone.deleted_at
+    assert audit.object_ids == (
+        original.assertion_id,
+        replay.tombstone.tombstone_id,
+        replay.rebuild_work.work_id,
+    )
 
 
 def test_memory_repository_missing_records_fail_closed(fixed_time) -> None:

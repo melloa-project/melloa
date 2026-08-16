@@ -339,7 +339,7 @@ def test_serve_mvp_wires_optional_private_postgres_and_closes_connections(
         encoding="utf-8",
     )
     dsn_file.chmod(0o600)
-    connections = [object(), object(), object(), object()]
+    connections = [object(), object(), object(), object(), object()]
     contexts = []
     connect_calls = []
 
@@ -431,12 +431,14 @@ def test_serve_mvp_wires_optional_private_postgres_and_closes_connections(
     assert captured["store_kwargs"] == {
         "telegram_adapter_id": "client.telegram.synthetic"
     }
-    assert len(connect_calls) == 4
+    assert len(connect_calls) == 5
     assert all(call[1]["autocommit"] is True for call in connect_calls)
     assert all("statement_timeout=5000" in call[1]["options"] for call in connect_calls)
     assert all(context.closed for context in contexts)
     startup = capsys.readouterr().out
     assert '"mode": "postgresql-partial-preview"' in startup
+    assert '"assembled_records": "postgresql"' in startup
+    assert '"coverage": "partial"' in startup
     assert '"delivery_records": "postgresql"' in startup
     assert '"pairing_offsets_ingestion": "postgresql"' in startup
     assert database_secret not in startup

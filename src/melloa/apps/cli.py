@@ -188,7 +188,13 @@ def serve_mvp(args: argparse.Namespace) -> int:
                             ),
                         )
                     )
-                    for store_name in ("conversation", "memory", "delivery", "telegram")
+                    for store_name in (
+                        "conversation",
+                        "memory",
+                        "delivery",
+                        "telegram",
+                        "audit",
+                    )
                 )
                 durable_stores = build_postgres_mvp_stores(
                     *connections,
@@ -258,6 +264,14 @@ def serve_mvp(args: argparse.Namespace) -> int:
                     "runtime": "owner-console-mvp-preview",
                     "seed_assertion_id": runtime.seed_assertion_id,
                     "synthetic_fallback": True,
+                    "audit": {
+                        "assembled_records": (
+                            "postgresql"
+                            if runtime.persistence.mode == "postgresql-partial-preview"
+                            else "process-only-preview"
+                        ),
+                        "coverage": "partial",
+                    },
                     "telegram": {
                         "adapter_id": (
                             None if telegram_config is None else telegram_config.adapter_id
@@ -330,7 +344,13 @@ def export_mvp(args: argparse.Namespace) -> int:
                             ),
                         )
                     )
-                    for store_name in ("conversation", "memory", "delivery", "telegram")
+                    for store_name in (
+                        "conversation",
+                        "memory",
+                        "delivery",
+                        "telegram",
+                        "audit",
+                    )
                 )
                 durable_stores = build_postgres_mvp_stores(
                     *connections,
