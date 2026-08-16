@@ -16,6 +16,7 @@ from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.fakes.operations import InMemoryOperationsReader
 from melloa.adapters.fakes.retention import (
+    ConversationBackedRetentionReader,
     InMemoryRetentionReader,
     MemoryBackedRetentionReader,
 )
@@ -504,14 +505,17 @@ def build_synthetic_runtime(
     )
     retention = OwnerRetentionService(
         owner_id=SYNTHETIC_OWNER_ID,
-        reader=MemoryBackedRetentionReader(
-            InMemoryRetentionReader(
-                SYNTHETIC_OWNER_ID,
-                policies=_synthetic_retention_policies(),
-                inventory=_synthetic_retention_inventory(),
-                backup_expiry=backup_expiry,
+        reader=ConversationBackedRetentionReader(
+            MemoryBackedRetentionReader(
+                InMemoryRetentionReader(
+                    SYNTHETIC_OWNER_ID,
+                    policies=_synthetic_retention_policies(),
+                    inventory=_synthetic_retention_inventory(),
+                    backup_expiry=backup_expiry,
+                ),
+                memory_store,
             ),
-            memory_store,
+            conversation_store,
         ),
         clock=clock,
     )
@@ -686,14 +690,17 @@ def _synthetic_retention_policies() -> tuple[RetentionPolicyStatus, ...]:
         RetentionPolicyStatus(
             policy_id="retention.owner-conversation",
             data_category="data.canonical-conversation",
-            summary="Canonical conversation is owner-controlled; deletion is not assembled yet.",
+            summary=(
+                "Canonical conversation records are inventory-backed; deletion is not "
+                "assembled yet."
+            ),
             mode=RetentionMode.OWNER_LIFECYCLE,
             automatic_expiry=False,
             deletion_control=RetentionDeletionControl.NOT_IMPLEMENTED,
             tombstone_retained=True,
             derived_rebuild_required=True,
             external_copy_state=RetentionExternalCopyState.SOURCE_CONTROLLED,
-            status_reason="retention.owner_control.not_implemented",
+            status_reason="retention.owner_conversation.inventory_available",
         ),
         RetentionPolicyStatus(
             policy_id="retention.owner-memory",

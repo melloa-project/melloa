@@ -38,6 +38,7 @@ from melloa.ports.conversation import (
     CompletedConversationTurn,
     ConversationConflictError,
     ConversationNotFoundError,
+    ConversationRetentionInventory,
     InboundAppendResult,
 )
 
@@ -125,6 +126,52 @@ class PostgresConversationStore:
             (owner_id,),
         ).fetchall()
         return tuple(self._parse_contract(ConversationThread, row[0]) for row in rows)
+
+    def retention_inventory(self, owner_id: RecordId) -> ConversationRetentionInventory:
+        row = self._connection.execute(
+            """
+            WITH owner_threads AS (
+                SELECT thread_id, created_at, document
+                  FROM melloa.conversation_threads
+                 WHERE owner_id = %s
+            ),
+            retained AS (
+                SELECT created_at, document FROM owner_threads
+                UNION ALL
+                SELECT message.created_at, message.document
+                  FROM melloa.conversation_messages AS message
+                  JOIN owner_threads AS thread
+                    ON thread.thread_id = message.thread_id
+                UNION ALL
+                SELECT turn.started_at, turn.document
+                  FROM melloa.conversation_turns AS turn
+                  JOIN owner_threads AS thread
+                    ON thread.thread_id = turn.thread_id
+                UNION ALL
+                SELECT work.created_at, work.payload
+                  FROM melloa.jobs_outbox AS work
+                  JOIN owner_threads AS thread
+                    ON thread.thread_id = work.payload->>'thread_id'
+                 WHERE work.work_type = %s
+            )
+            SELECT count(*),
+                   COALESCE(sum(octet_length(document::text)), 0),
+                   min(created_at)
+              FROM retained
+            """,
+            (owner_id, _REPLY_WORK_TYPE),
+        ).fetchone()
+        if row is None:
+            return ConversationRetentionInventory(
+                retained_objects=0,
+                retained_bytes=0,
+                oldest_retained_at=None,
+            )
+        return ConversationRetentionInventory(
+            retained_objects=int(row[0]),
+            retained_bytes=int(row[1]),
+            oldest_retained_at=row[2],
+        )
 
     def get_inbound_by_idempotency_key(
         self,

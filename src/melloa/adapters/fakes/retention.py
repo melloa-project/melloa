@@ -9,6 +9,7 @@ from melloa.domain.retention import (
     RetentionInventoryStatus,
     RetentionPolicyStatus,
 )
+from melloa.ports.conversation import ConversationStore
 from melloa.ports.memory import MemoryRepository
 from melloa.ports.retention import OwnerRetentionReader
 
@@ -78,6 +79,46 @@ class MemoryBackedRetentionReader:
         )
         return tuple(
             memory_item if item.policy_id == self._memory_policy_id else item
+            for item in inventory
+        )
+
+    def backup_expiry(self, owner_id: RecordId) -> BackupExpiryDisclosure | None:
+        return self._base_reader.backup_expiry(owner_id)
+
+
+class ConversationBackedRetentionReader:
+    def __init__(
+        self,
+        base_reader: OwnerRetentionReader,
+        conversation_store: ConversationStore,
+        *,
+        conversation_policy_id: str = "retention.owner-conversation",
+    ) -> None:
+        self._base_reader = base_reader
+        self._conversation_store = conversation_store
+        self._conversation_policy_id = conversation_policy_id
+
+    def policies(self, owner_id: RecordId) -> tuple[RetentionPolicyStatus, ...]:
+        return self._base_reader.policies(owner_id)
+
+    def inventory(self, owner_id: RecordId) -> tuple[RetentionInventoryStatus, ...]:
+        inventory = self._base_reader.inventory(owner_id)
+        if not inventory:
+            return inventory
+        conversation_inventory = self._conversation_store.retention_inventory(owner_id)
+        conversation_item = RetentionInventoryStatus(
+            policy_id=self._conversation_policy_id,
+            coverage=RetentionInventoryCoverage.COMPLETE,
+            retained_objects=conversation_inventory.retained_objects,
+            retained_bytes=conversation_inventory.retained_bytes,
+            overdue_objects=0,
+            pending_deletions=0,
+            deletion_receipts=0,
+            oldest_retained_at=conversation_inventory.oldest_retained_at,
+            status_reason="retention.inventory.canonical_conversation",
+        )
+        return tuple(
+            conversation_item if item.policy_id == self._conversation_policy_id else item
             for item in inventory
         )
 

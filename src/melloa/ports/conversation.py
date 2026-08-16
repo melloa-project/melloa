@@ -51,6 +51,13 @@ class ClaimedConversationReplyWork:
     lease_expires_at: datetime
 
 
+@dataclass(frozen=True)
+class ConversationRetentionInventory:
+    retained_objects: int
+    retained_bytes: int
+    oldest_retained_at: datetime | None
+
+
 class ConversationStore(Protocol):
     def create_thread(self, thread: ConversationThread) -> None:
         """Create a canonical thread or accept an exact idempotent replay."""
@@ -60,6 +67,9 @@ class ConversationStore(Protocol):
 
     def list_threads(self, owner_id: RecordId) -> tuple[ConversationThread, ...]:
         """Return the owner's threads in deterministic update order."""
+
+    def retention_inventory(self, owner_id: RecordId) -> ConversationRetentionInventory:
+        """Return aggregate owner-scoped canonical conversation retention counts."""
 
     def get_inbound_by_idempotency_key(
         self,

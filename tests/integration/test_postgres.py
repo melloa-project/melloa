@@ -1358,6 +1358,10 @@ def test_postgres_conversation_completion_is_atomic_cited_and_idempotent(
             reference.assertion_id
             for reference in activity.entries[0].disclosure.memory_references
         ) == (memory.assertion_id,)
+        inventory = durable.retention_inventory(owner_id)
+        assert inventory.retained_objects == 5
+        assert inventory.retained_bytes > 0
+        assert inventory.oldest_retained_at == fixed_time
         durable.complete_turn(completed)
     finally:
         connection.execute("RESET ROLE")

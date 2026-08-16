@@ -10,7 +10,7 @@ f6ca82c9e9da9f103fc80a96f41ea2e01119d702af0282bfb8d6a9f6a611cd27  ./CONSOLIDATED
 18b83e73c92039fd05cf3d7f8a158cf9e5e6a4d45675529749ff8b9301ddd55b  ./CONTRIBUTING.md
 dad31822f08fa134f602faea18c1cfff01254768770c0bdc04df67759094d11c  ./IMPLEMENTATION_AGENT_PROMPT.md
 0555da968164833e708b140b79ab45b9bcb81647b0ec0b0150a7b4c89ac4ce65  ./Makefile
-d84e1dd85b104e7d52d7b77730d9786bd2f4f6673d8fcb5cd15e88fcdf765049  ./README.md
+632bdf7ca878008183bd573d840f22b4e4bf7d45bbc429ad54453ce2771c4d15  ./README.md
 611eed4b37fd59aedd7698486c197fdce218aa03cde892368efc1b6a1b02ce32  ./SECURITY.md
 1d23e4f13943607130e76e8c4add9d3c434f21ac72eb1d31280acea4196fab82  ./VALIDATION.md
 3a951f66e7e0f3e2dd1832473a871357c4a507b51100636b73bcf6ff0dd78b6c  ./apps/web/.npmrc
@@ -72,7 +72,7 @@ afde7c16ec2b3582a3497aef8b95a34fcd1192eb739a41a4d6b1b21b199ed165  ./docs/21-revi
 5852f70ce8cf8e58ed5034cbdc1062aa50c73a66029470eb90c2c84d8c853c95  ./docs/22-final-synthesis.md
 44a3db513e0454571ab58ba1cd330327664e02dc30e572ebaf4f6a18210031f7  ./docs/23-v0.2-decisions.md
 a98b2657cf236c2c0b16d0a85611fd2566cff6448d68d74932fd0c275f133758  ./docs/24-m0-implementation.md
-d353101a26f6c2da099fcd22ad1ba0030b67d72a9f289e613d113c24cd468990  ./docs/25-m1-implementation.md
+9699fef24631e7c66ec05db13218c2a1a35747a83c7d234eb0052a4328da5b54  ./docs/25-m1-implementation.md
 926510904a18d0f582bc498e6d7a780e1aa9c61d2e67e94d380622b751e68260  ./docs/adr/ADR-001-event-oriented-provenance-ledger.md
 725fd9f2048fa570db36387aeae26d5821a549cd2a56af09659037ff018562aa  ./docs/adr/ADR-002-postgresql-primary-store-and-jobs.md
 31517d8fc1cb8bb74ae96a6222e839322b398da126d1aa89d9df63089eb6ca78  ./docs/adr/ADR-003-policy-aware-model-routing.md
@@ -102,7 +102,7 @@ ceceedca56a9accccdcc2753b4777c1459b0346a7b65786d961c1ae517b2aaad  ./docs/index.m
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
 2d1ef864609cb2fc96bf33e5aefe8cfebd25f2a8ccb2cc051331530f93a34d9f  ./docs/research/method-and-limitations.md
 fd9dd415102bb9d3335e0e2c430a1d1a24dd6bed0bc61fac591676296f5ee942  ./docs/research/primary-sources.md
-c4437cc4128862e628e899d4ff5f685564df1ed87adaff7727f30cf02796ef38  ./docs/run-current-mvp.md
+575fac7fb23950ca3b97387cfef7f5e2b19360a991dd9cbe277c2bf2ca0c8c01  ./docs/run-current-mvp.md
 16abfa728e0566f3e89793756a6ae71cd8fc9ffc6d888e2c1ac5902cfe59d64d  ./infra/postgres/init/001_roles.sql
 b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f  ./migrations/0001_m0_foundation.sql
 90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2  ./migrations/0002_m1_conversation_retrieval.sql
@@ -177,13 +177,13 @@ f9e4e707c1ddbd8a5916875749e7169c82ef770825ab4950d0d1816ea6c045c3  ./schemas/tele
 6289839b2af366d2b1b97f1af26ec8768d0ab7911bf747d2a3036388da116077  ./src/melloa/adapters/fakes/__init__.py
 f1ff3122edd760687c0d4f148f5567e212747c7af5ea0c8201402d794a1b8f2e  ./src/melloa/adapters/fakes/auth.py
 b3b3f1ed263d00349fd18633b8f22adfe0a89bc3dfbf320eff2884d5d464eb7b  ./src/melloa/adapters/fakes/client.py
-769f9152545c164d63bbe2adf4cf74da2c91245c2baa7d08b6a38762895d8d1e  ./src/melloa/adapters/fakes/conversation.py
+b26261e6eb56d72ae4b68f21a550e7199e58818ead83436e82240be3dd4ec97d  ./src/melloa/adapters/fakes/conversation.py
 ba64aac80ed71bacf92e9d6079142dd9b368ac381afd3814e72ffa19cbd98377  ./src/melloa/adapters/fakes/delivery.py
 5e46929ec1fe354c1573095a582d03ca923d6a1317031647d573b53f0d120a66  ./src/melloa/adapters/fakes/guardian.py
 237b98111b79a4731d218d4420ed45246a326f1f6e778138ebc46749cd23b8eb  ./src/melloa/adapters/fakes/memory.py
 6b8d92131a3d6119b65b9cc821432f860b6819f9ce2641c94c32855cab24dcc3  ./src/melloa/adapters/fakes/model.py
 7b9f2a6831e6b594663359efc3625be6ec7451ead955c3127a4da18a14d9ebae  ./src/melloa/adapters/fakes/operations.py
-18c454ebf8618e0c6f509b7943a20a579ccdb1b2b1853161cac40a870d8eb258  ./src/melloa/adapters/fakes/retention.py
+f04d1d5759096cf1b2be068447d27911c8659795878eb2ff4f064bc2ea445617  ./src/melloa/adapters/fakes/retention.py
 5b4055fd94b73502e1341c9d6187ccba5d1c70b67997ee973cb8f0ee1ddb745f  ./src/melloa/adapters/fakes/telegram.py
 6ea7e16851cc2bb9d78584b1aa01bd8140164416be505d3d9ad5501110d70793  ./src/melloa/adapters/guardian/__init__.py
 dac83a290943b2ec83f1ee0fc8154575b0151c7065b142b40f3e647a827e991c  ./src/melloa/adapters/guardian/file.py
@@ -191,7 +191,7 @@ dac83a290943b2ec83f1ee0fc8154575b0151c7065b142b40f3e647a827e991c  ./src/melloa/a
 a48faedfb7b52ed2786944c0ff4b159fe384eba4cf13d543fbd3b4112d94ae8f  ./src/melloa/adapters/models/codex_cli.py
 c038debfec5f2e7b2bc90eef3e7e0f76997068a503d6342887ebae9ec8311449  ./src/melloa/adapters/models/openai_compatible.py
 7a2f1e80e497413d2d925f7cb362cf4986a947199299c974811e06191fff7f24  ./src/melloa/adapters/postgres/__init__.py
-02b40b987ee3298f1c5f0ee41006680cadcd7ba62238fa23545327e4b57e4ae4  ./src/melloa/adapters/postgres/conversation.py
+d244a1bda0085425ac135094ae60b98c6cd6a5c681940249d1a029f80189a0b9  ./src/melloa/adapters/postgres/conversation.py
 efbf234016061a11c0883590b1a17de579be996edc31b3b247d620cf05eb220e  ./src/melloa/adapters/postgres/delivery.py
 a8393be30f96a935d2189eae402ee1bfc756b277108f009e0f2eee4165cab4c9  ./src/melloa/adapters/postgres/memory.py
 857c2586d5ff4e74700cc45a12e490839f1a2a3ff5ea5d14af12691d06aec0b9  ./src/melloa/adapters/postgres/migrations.py
@@ -217,7 +217,7 @@ bacea63c09137faa4983eb762ebc466b5915d5165db75ad35813190b6da2ffbe  ./src/melloa/a
 6ed79d38b312aad2cd326989fe6aef5089801a6582147ae4695df847b4c71677  ./src/melloa/apps/core.py
 f69f77cb917da49f776e671d1b57fd4396e07cd59b8a6e84bd6fe96fc70d70b1  ./src/melloa/apps/mvp.py
 2eaf6536a36731db24839a8942176c8751486940a20c1f935ba74a7869cbc530  ./src/melloa/apps/postgres_mvp.py
-a85d1210ecba2fb62974614eebcf621237f4b3d4f0ac91a435733ac029ed64c2  ./src/melloa/apps/synthetic.py
+19a562bcf671d9846ec4551527ec2b39e709c62fa73ea2ab324b7b0500ac25a6  ./src/melloa/apps/synthetic.py
 79db23448138546ff5c1edfbcd3c9fd3458b69c2a0fff2f498a590b23466c8ef  ./src/melloa/domain/__init__.py
 694eac11a7ee2ddad1fb059c1d237f2575d4793a4a52bdb97d0463c63bfdbefb  ./src/melloa/domain/audit.py
 751c6a6eafcc1228f98d221d903b27a593944af868db9c614d47915ce02a0d62  ./src/melloa/domain/auth.py
@@ -240,7 +240,7 @@ ac19fcc7278c61098b1f9f2cc22e115812a86c7b7b35c7ac662842891794e98c  ./src/melloa/d
 fd23ef07602e6c9c8d43b09411b035aedbf990761cf476022bbebd89692c01f7  ./src/melloa/ports/__init__.py
 a6790b7d11cbb26b4520e36b76700e9525b73e914c281e9a597fc49442ffa571  ./src/melloa/ports/auth.py
 02f76ac74cd7aaffa88b6bbf08de181065619e30f85f042997ab85fbef4950dc  ./src/melloa/ports/client.py
-8661cfda84d21d22f92b19a179c8bd5f2204758f098d0f176cc73cb79d9688d7  ./src/melloa/ports/conversation.py
+54628126dcc5145d6297ae60708171bff89895508a4e16fff429486a0024256f  ./src/melloa/ports/conversation.py
 4a8841206989bd36bbf672f5b838c415a5028eadf311284c93ad242114b35290  ./src/melloa/ports/delivery.py
 ea08c39a52b0794798c77e2042f9316914a9204935239bcd028178b6afd72d1b  ./src/melloa/ports/guardian.py
 c6a88bdaa7bf1c3fbbb5d4d02717197b89394c99d1efe7c4b26b3a9b030500c6  ./src/melloa/ports/memory.py
@@ -251,7 +251,7 @@ bdc48d9ab081e07d89b12eb0fc46765eb2855b0fa3b1c2f017ef406112f0b4c3  ./src/melloa/p
 962d88823918a298b0b6118b04d803f73d1890d4932a0a6100c0a1c3bdb9b4e3  ./src/melloa/ports/telegram.py
 c0616f5ffa0e452d22cbc5533f7c44439ba9e1e1249df03a9c1d41c6700da1c0  ./tests/__init__.py
 a9e88751254da2d9145f89c984c05d8c8bb8bc478d5e3195d1dbdc3e70583f17  ./tests/conftest.py
-09960e919a880d036e18bfdd261dffbaa71a8d0b07f8b0384d99d87fb69d18d3  ./tests/integration/test_postgres.py
+56724acd36748a82e7f2c00f229d71be3a10922334ae66ae41720bf15153e396  ./tests/integration/test_postgres.py
 58ebd0681800e0939c4f0557b2c8f55ecb5c526bc0c44289baf3e664539dc33c  ./tests/unit/test_auth.py
 e0f3e1b35b51b38195cce4b71098343016f1672914b868aea2ca9c50895b1eb2  ./tests/unit/test_cli.py
 207ce1630d846d6f4d70bb574c35f5523be4c73fa13920f43632e08efec202af  ./tests/unit/test_codex_cli_model.py
@@ -279,7 +279,7 @@ a6d8411709fb067a9b430201288d1e1393cd2ee62a58782b0e6413436e315595  ./tests/unit/t
 3e4d151e964324427d58583a03602067718a6c962a5a3b63b377b979bdd2d7f0  ./tests/unit/test_retention_inspection.py
 df9f042f5f1ab73857823f5b72b46742b4e649e486625f4982bc0f8bb5f61085  ./tests/unit/test_retrieval.py
 d968b63148413b91f3637a0bfb102e5dad76dfbb0df201cd5ea8b21dbd0dd04c  ./tests/unit/test_schemas.py
-406a67909386320df23e990b9b100bd742d46db5a1494300cbffeb0114d4f9dd  ./tests/unit/test_synthetic_runtime.py
+d83eeb8163a0ee8d3a95cee4a34585ad8297359a6964217915e01e99788291f7  ./tests/unit/test_synthetic_runtime.py
 4c90f83989da76ba43fcaecb34172c3a2c0cf5145820d58472ac55d6d63897cb  ./tests/unit/test_telegram.py
 a399dc1858557bdcb494e4ce77f4b068b93ecffaf9492184744af80ff600f404  ./tests/unit/test_telegram_attachments.py
 b00c84a5013ec594b6c390c4a4cadc8baadb69cff720f39f6df800592816305a  ./tests/unit/test_telegram_bot_api.py
