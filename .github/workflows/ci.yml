@@ -92,7 +92,7 @@ jobs:
           )
           "$guardian" init --instance-id ci-mvp-guardian --key-id guardian.status-v1 "${guardian_flags[@]}"
           "$guardian" transition --mode offline --reason ci.visual_smoke "${guardian_flags[@]}"
-          uv run melloa serve-mvp \
+          setsid uv run melloa serve-mvp \
             --status "$state/guardian-status.json" \
             --public-key "$state/guardian-public.pem" \
             --owner-credential-file "$state/owner-credential" \
@@ -100,6 +100,7 @@ jobs:
             --host 127.0.0.1 \
             --port 8000 \
             > "$RUNNER_TEMP/melloa-core.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/melloa-core.pid"
           echo "MELLOA_OWNER_CREDENTIAL_FILE=$state/owner-credential" >> "$GITHUB_ENV"
           curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 \
             http://127.0.0.1:8000/health/ready >/dev/null
@@ -108,9 +109,11 @@ jobs:
         run: |
           set -euo pipefail
           npm --prefix apps/web run build
-          MELLOA_CORE_URL=http://127.0.0.1:8000 \
-          MELLOA_WEB_PORT=8787 \
+          setsid env \
+            MELLOA_CORE_URL=http://127.0.0.1:8000 \
+            MELLOA_WEB_PORT=8787 \
             npm --prefix apps/web start > "$RUNNER_TEMP/melloa-web.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/melloa-web.pid"
           curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 \
             http://127.0.0.1:8787/ >/dev/null
       - name: Install headless Chromium
@@ -126,6 +129,17 @@ jobs:
           path: ${{ runner.temp }}/melloa-screenshots
           if-no-files-found: error
           retention-days: 14
+      - name: Stop visual fixture
+        if: always()
+        shell: bash
+        run: |
+          for process in web core; do
+            pid_file="$RUNNER_TEMP/melloa-$process.pid"
+            if [[ -s "$pid_file" ]]; then
+              kill -- "-$(cat "$pid_file")" 2>/dev/null || true
+            fi
+          done
+          sleep 1
 
   publish-docs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
