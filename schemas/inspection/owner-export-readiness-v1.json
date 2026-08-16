@@ -17,6 +17,19 @@
           "default": null,
           "title": "Artifact Path"
         },
+        "estimated_records": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Records"
+        },
         "group_id": {
           "maxLength": 128,
           "minLength": 2,

@@ -247,6 +247,7 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
             {
                 "group_id": "export.conversation-records",
                 "included": True,
+                "estimated_records": 1,
                 "artifact_path": "conversations/*.jsonl",
                 "summary": "Canonical conversation records.",
                 "status_reason": "export.coverage.conversation-jsonl",
@@ -268,6 +269,21 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
                     {
                         **report.coverage[0].model_dump(),
                         "artifact_path": "../secret",
+                    },
+                ),
+            }
+        )
+    with pytest.raises(ValidationError, match="excluded export groups"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "coverage": (
+                    {
+                        "group_id": "export.blobs",
+                        "included": False,
+                        "estimated_records": 1,
+                        "summary": "Blobs are excluded.",
+                        "status_reason": "export.coverage.blobs-not-included",
                     },
                 ),
             }
@@ -348,6 +364,9 @@ def test_owner_operations_service_sorts_and_scopes_reports(fixed_time) -> None:
     assert export.includes_sql_snapshot is False
     assert export.includes_blobs is False
     assert export.coverage[0].group_id == "export.assertion-inspections"
+    assert export.coverage[0].estimated_records == 0
+    assert export.coverage[-2].group_id == "export.schemas-checksums"
+    assert export.coverage[-2].estimated_records == 11
     assert "export.preview-unencrypted" in export.limitations
     assert reader.media_sources(record_id("owner", 2)) == ()
     assert reader.media_items(record_id("owner", 2)) == ()
@@ -401,6 +420,7 @@ def test_operational_inspection_api_is_authenticated_and_fail_closed(fixed_time)
     export_payload = client.get(export_endpoint).json()
     assert export_payload["encrypted"] is False
     assert export_payload["coverage"][0]["group_id"] == "export.assertion-inspections"
+    assert export_payload["coverage"][0]["estimated_records"] == 0
 
     absent = TestClient(
         create_app(_guardian(fixed_time), sessions),

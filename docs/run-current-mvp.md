@@ -497,7 +497,7 @@ If canonical records disappear, stop using the preview and check that the restar
 
 ## 8. Export and validate owner data
 
-The current MVP includes an offline canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity. Model-activity rows preserve route, token, cost, timing, and external-disclosure evidence without prompts or raw model output. Memory inspection rows include deleted-content tombstone and rebuild-work evidence instead of dropping the accountability record. Before running the CLI command, open **Operations → Export** to inspect the same covered record groups and explicit gaps through the authenticated Owner Console.
+The current MVP includes an offline canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity. Model-activity rows preserve route, token, cost, timing, and external-disclosure evidence without prompts or raw model output. Memory inspection rows include deleted-content tombstone and rebuild-work evidence instead of dropping the accountability record. Before running the CLI command, open **Operations → Export** to inspect estimated record counts, covered record groups, and explicit gaps through the authenticated Owner Console.
 
 Keep using the disposable state directory and run:
 

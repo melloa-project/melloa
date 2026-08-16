@@ -90,6 +90,7 @@ describe("OperationsPage retention view", () => {
         {
           group_id: "export.conversation-records",
           included: true,
+          estimated_records: 7,
           artifact_path: "conversations/*.jsonl",
           summary: "Canonical conversation records.",
           status_reason: "export.coverage.conversation-jsonl",
@@ -133,6 +134,11 @@ describe("OperationsPage retention view", () => {
     expect(within(commands).getByText("melloa import-validate --bundle-dir <export-dir>")).toBeInTheDocument();
     expect(screen.getByText("Unencrypted preview")).toBeInTheDocument();
     expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();
+    const conversationCoverage = screen
+      .getByText("conversations/*.jsonl")
+      .closest(".export-coverage-row");
+    expect(conversationCoverage).toBeInstanceOf(HTMLElement);
+    expect(within(conversationCoverage as HTMLElement).getByText("7 estimated records")).toBeInTheDocument();
     expect(screen.getByText("Logical SQL snapshots remain pending.")).toBeInTheDocument();
     expect(screen.getByText("Excluded")).toBeInTheDocument();
   });

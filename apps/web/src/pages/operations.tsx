@@ -73,7 +73,10 @@ export function OperationsPage() {
 
   const degradedComponents = snapshot.health?.components.filter((component) => component.state !== "healthy" && component.state !== "disabled").length ?? 0;
   const retainedObjects = snapshot.retention?.inventory.reduce((sum, item) => sum + (item.retained_objects ?? 0), 0) ?? 0;
-  const includedExportGroups = snapshot.exportReadiness?.coverage.filter((item) => item.included).length ?? 0;
+  const exportRecords = snapshot.exportReadiness?.coverage.reduce(
+    (sum, item) => sum + (item.estimated_records ?? 0),
+    0,
+  ) ?? 0;
 
   return (
     <div className="standard-page operations-page">
@@ -91,7 +94,7 @@ export function OperationsPage() {
         <Metric label="Overall health" value={titleCase(snapshot.health?.overall_state ?? "unknown")} detail={`${degradedComponents} degraded components`} />
         <Metric label="Capture" value={snapshot.media?.capture_enabled === true ? "Enabled" : "Disabled"} detail={`${snapshot.media?.items.length ?? 0} metadata records`} />
         <Metric label="Retained objects" value={formatCount(retainedObjects)} detail={`${snapshot.retention?.policies.length ?? 0} explicit policies`} />
-        <Metric label="Export" value={snapshot.exportReadiness === null ? "Unknown" : "Preview"} detail={`${includedExportGroups} covered record groups`} />
+        <Metric label="Export" value={snapshot.exportReadiness === null ? "Unknown" : "Preview"} detail={`${formatCount(exportRecords)} estimated records`} />
       </section>
 
       <div className="tab-list" role="tablist" aria-label="Operations views">
@@ -261,6 +264,9 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
               <div>
                 <strong>{titleCase(item.group_id.replace(/^export[.-]/, ""))}</strong>
                 <p>{item.summary}</p>
+                {item.estimated_records === null || item.estimated_records === undefined ? null : (
+                  <span className="export-record-count">{formatEstimatedRecords(item.estimated_records)}</span>
+                )}
                 {item.artifact_path === null || item.artifact_path === undefined ? null : (
                   <code>{item.artifact_path}</code>
                 )}
@@ -287,4 +293,8 @@ function formatBytes(value: number): string {
     return `${(value / 1_024).toFixed(1)} KiB`;
   }
   return `${(value / 1_048_576).toFixed(1)} MiB`;
+}
+
+function formatEstimatedRecords(value: number): string {
+  return `${formatCount(value)} estimated ${value === 1 ? "record" : "records"}`;
 }

@@ -196,6 +196,15 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert media_catalog.json()["capture_enabled"] is False
     assert media_catalog.json()["content_endpoint_available"] is False
     assert media_catalog.json()["items"] == []
+    export_before = client.get("/api/v1/inspection/export")
+    assert export_before.status_code == 200
+    export_before_coverage = {
+        item["group_id"]: item for item in export_before.json()["coverage"]
+    }
+    assert export_before_coverage["export.assertion-inspections"]["estimated_records"] == 1
+    assert export_before_coverage["export.conversation-records"]["estimated_records"] == 1
+    assert export_before_coverage["export.model-activity"]["estimated_records"] == 0
+    assert export_before_coverage["export.blobs"].get("estimated_records") is None
 
     memory = client.get(f"/api/v1/memory/{runtime.seed_assertion_id}")
     assert memory.status_code == 200
@@ -247,6 +256,13 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert activity.json()["total_runs"] == 1
     assert activity.json()["external_disclosure_runs"] == 0
     assert activity.json()["total_cost_gbp"] == 0.0
+    export_after = client.get("/api/v1/inspection/export")
+    export_after_coverage = {
+        item["group_id"]: item for item in export_after.json()["coverage"]
+    }
+    assert export_after_coverage["export.conversation-records"]["estimated_records"] == 7
+    assert export_after_coverage["export.model-activity"]["estimated_records"] == 1
+    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 11
 
     correction = client.post(
         f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",

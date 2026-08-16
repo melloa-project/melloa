@@ -439,6 +439,7 @@ export type OwnerRetentionReport = {
 export type ExportCoverageItem = {
   readonly group_id: string;
   readonly included: boolean;
+  readonly estimated_records?: number | null;
   readonly artifact_path?: string | null;
   readonly summary: string;
   readonly status_reason: string;

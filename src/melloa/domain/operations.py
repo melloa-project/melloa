@@ -193,12 +193,15 @@ class OwnerMediaCatalog(ContractModel):
 class ExportCoverageItem(ContractModel):
     group_id: QualifiedName
     included: bool
+    estimated_records: Annotated[int, Field(ge=0)] | None = None
     artifact_path: str | None = Field(default=None, min_length=1, max_length=256)
     summary: str = Field(min_length=1, max_length=512)
     status_reason: QualifiedName
 
     @model_validator(mode="after")
     def validate_item(self) -> ExportCoverageItem:
+        if not self.included and self.estimated_records is not None:
+            raise ValueError("excluded export groups cannot report record estimates")
         if self.artifact_path is None:
             return self
         if self.artifact_path.startswith("/") or ".." in self.artifact_path.split("/"):

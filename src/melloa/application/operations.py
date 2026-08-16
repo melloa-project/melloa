@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from melloa.application.conversation import ConversationService
 from melloa.application.inspection import InspectionOwnershipError
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, utc_now
@@ -15,6 +16,7 @@ from melloa.domain.operations import (
     OwnerMediaCatalog,
     aggregate_health_state,
 )
+from melloa.ports.memory import MemoryRepository
 from melloa.ports.operations import OperationsInspectionReader
 
 
@@ -24,10 +26,14 @@ class OwnerOperationsService:
         *,
         owner_id: RecordId,
         reader: OperationsInspectionReader,
+        conversation: ConversationService | None = None,
+        memory_repository: MemoryRepository | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._owner_id = owner_id
         self._reader = reader
+        self._conversation = conversation
+        self._memory_repository = memory_repository
         self._clock = clock
 
     def health(self, principal: AuthenticatedOwner) -> OwnerHealthReport:
@@ -72,6 +78,7 @@ class OwnerOperationsService:
         principal: AuthenticatedOwner,
     ) -> OwnerExportReadinessReport:
         self._require_owner(principal)
+        counts = self._export_counts(principal)
         return OwnerExportReadinessReport(
             owner_id=self._owner_id,
             generated_at=self._clock(),
@@ -89,6 +96,7 @@ class OwnerOperationsService:
                 ExportCoverageItem(
                     group_id="export.assertion-inspections",
                     included=True,
+                    estimated_records=counts["assertion_inspections"],
                     artifact_path="assertions/inspections.jsonl",
                     summary=(
                         "Memory inspection rows, including deleted-content tombstone "
@@ -106,6 +114,7 @@ class OwnerOperationsService:
                 ExportCoverageItem(
                     group_id="export.conversation-records",
                     included=True,
+                    estimated_records=counts["conversation_records"],
                     artifact_path="conversations/*.jsonl",
                     summary=(
                         "Canonical threads, messages, turns, turn inspections, and "
@@ -126,6 +135,7 @@ class OwnerOperationsService:
                 ExportCoverageItem(
                     group_id="export.model-activity",
                     included=True,
+                    estimated_records=counts["model_activity_entries"],
                     artifact_path="inspection/model-activity.jsonl",
                     summary=(
                         "Redacted route, model, token, cost, timing, disclosure, "
@@ -136,6 +146,7 @@ class OwnerOperationsService:
                 ExportCoverageItem(
                     group_id="export.schemas-checksums",
                     included=True,
+                    estimated_records=counts["validation_artifacts"],
                     artifact_path="schemas/**, manifest.json, checksums.sha256",
                     summary="Copied JSON Schemas, canonical manifest, and SHA-256 checksums.",
                     status_reason="export.coverage.validation-artifacts",
@@ -164,3 +175,31 @@ class OwnerOperationsService:
             raise InspectionOwnershipError(
                 "authenticated principal does not own this runtime"
             )
+
+    def _export_counts(self, principal: AuthenticatedOwner) -> dict[str, int]:
+        conversation = self._conversation
+        memory_repository = self._memory_repository
+        threads = conversation.list_threads(principal) if conversation is not None else ()
+        message_count = 0
+        turn_count = 0
+        processing_count = 0
+        for thread in threads:
+            if conversation is None:
+                continue
+            message_count += len(conversation.list_messages(principal, thread.thread_id))
+            thread_turns = conversation.list_turns(principal, thread.thread_id)
+            turn_count += len(thread_turns)
+            processing_count += len(conversation.list_processing(principal, thread.thread_id))
+        assertion_count = (
+            len(memory_repository.list_assertion_metadata(self._owner_id))
+            if memory_repository is not None
+            else 0
+        )
+        return {
+            "assertion_inspections": assertion_count,
+            "conversation_records": (
+                len(threads) + message_count + turn_count + turn_count + processing_count
+            ),
+            "model_activity_entries": turn_count,
+            "validation_artifacts": 11,
+        }

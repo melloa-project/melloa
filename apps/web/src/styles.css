@@ -2135,6 +2135,14 @@ pre {
   margin-top: 3px;
 }
 
+.export-record-count {
+  color: var(--accent-strong);
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 700;
+  margin-top: 5px;
+}
+
 .export-coverage-row code {
   color: var(--ink-soft);
   display: block;

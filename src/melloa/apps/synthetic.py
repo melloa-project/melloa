@@ -502,6 +502,8 @@ def build_synthetic_runtime(
                 ),
             ),
         ),
+        conversation=conversation,
+        memory_repository=memory_store,
         clock=clock,
     )
     retention = OwnerRetentionService(
