@@ -202,7 +202,7 @@ dac83a290943b2ec83f1ee0fc8154575b0151c7065b142b40f3e647a827e991c  ./src/melloa/a
 a48faedfb7b52ed2786944c0ff4b159fe384eba4cf13d543fbd3b4112d94ae8f  ./src/melloa/adapters/models/codex_cli.py
 c038debfec5f2e7b2bc90eef3e7e0f76997068a503d6342887ebae9ec8311449  ./src/melloa/adapters/models/openai_compatible.py
 7a2f1e80e497413d2d925f7cb362cf4986a947199299c974811e06191fff7f24  ./src/melloa/adapters/postgres/__init__.py
-f9a614516eec8e4f35c8801855afd086be4e2f4c11b61e7b7ce3aca0d29b659d  ./src/melloa/adapters/postgres/auth.py
+c8e187f6362bade279dbe23ffa592cac0c9ea724b7ce53eff39885a31bd6afbd  ./src/melloa/adapters/postgres/auth.py
 d244a1bda0085425ac135094ae60b98c6cd6a5c681940249d1a029f80189a0b9  ./src/melloa/adapters/postgres/conversation.py
 f42c546730dabf04176f2d2f26a8d81e4b2174dd2c391c39ebebd39bc46ff70e  ./src/melloa/adapters/postgres/delivery.py
 a8393be30f96a935d2189eae402ee1bfc756b277108f009e0f2eee4165cab4c9  ./src/melloa/adapters/postgres/memory.py
@@ -287,7 +287,7 @@ de02d65c601cd52a9ed0c0e991f9f26eaaa3b4b54d92276a8a718924e8618078  ./tests/unit/t
 7cae5a16cdf3abcff08062afa1f211282a5008ab2117d14d866e0d2dbde8c8f0  ./tests/unit/test_openai_compatible_model.py
 8b2f6d94ab8ac1e486f291888f717926dff3ebda5341cf7122454600562e53ac  ./tests/unit/test_operations.py
 e3c6307e8f7187b22cde9116cd723cd439e3e21733d9cc7903c4dda108b92e65  ./tests/unit/test_policy.py
-589a55ddd6b21505d62884c6e5fc312ffbb9f2b863bfa2dc716632e47f27d1f8  ./tests/unit/test_postgres_auth.py
+411fb5ac442f06f00ed16c6fd61b9786d58625c4304735c56d6882a3c5e53297  ./tests/unit/test_postgres_auth.py
 e66fc1eeda7cc7774eec8fc90b3464f12f5f1a940a9c1b47eddfa597d4dd5e81  ./tests/unit/test_postgres_mvp.py
 5b72222adcd219e0ed7d3f03b959c65d95ee398f010556bdcc11c9ba97cc0bc5  ./tests/unit/test_retention.py
 0117b58bb8114cb0fdaac96543f6e7d7e3909b2096428955aeab68fbb3046a48  ./tests/unit/test_retention_inspection.py

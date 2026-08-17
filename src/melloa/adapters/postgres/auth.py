@@ -229,6 +229,35 @@ class PostgresOwnerSessionManager:
     def revoke_other_sessions(self, current_session_id: RecordId) -> int:
         revoked_at = self._clock()
         with self._connection.transaction():
+            current = self._connection.execute(
+                """
+                SELECT session.session_id
+                  FROM melloa.owner_sessions AS session
+                 WHERE session.session_id = %s
+                   AND session.owner_id = %s
+                   AND session.credential_digest = %s
+                   AND session.expires_at > %s
+                 FOR UPDATE
+                """,
+                (
+                    current_session_id,
+                    self._owner_id,
+                    self._bootstrap_digest,
+                    revoked_at,
+                ),
+            ).fetchone()
+            if current is None:
+                raise OwnerSessionMissing("owner authentication failed")
+            current_revocation = self._connection.execute(
+                """
+                SELECT session_id
+                  FROM melloa.owner_session_revocations
+                 WHERE session_id = %s
+                """,
+                (current_session_id,),
+            ).fetchone()
+            if current_revocation is not None:
+                raise OwnerSessionMissing("owner authentication failed")
             revoked = self._connection.execute(
                 """
                 INSERT INTO melloa.owner_session_revocations (

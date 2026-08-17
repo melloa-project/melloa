@@ -93,6 +93,25 @@ class _Connection:
             credential_digest, csrf_digest, document, session_id = stored[:4]
             revoked = session_id if session_id in self.database.revoked_session_ids else None
             return _Result((credential_digest, csrf_digest, document, revoked))
+        if "FOR UPDATE" in statement and "session.session_id = %s" in statement:
+            current_session_id, owner_id, credential_digest, now = parameters
+            current = next(
+                (
+                    stored
+                    for stored in self.database.sessions.values()
+                    if stored[3] == current_session_id
+                    and stored[4] == owner_id
+                    and stored[0] == credential_digest
+                    and stored[6] > now
+                ),
+                None,
+            )
+            return _Result(None if current is None else (current_session_id,))
+        if "FROM melloa.owner_session_revocations" in statement:
+            session_id = parameters[0]
+            if session_id in self.database.revoked_session_ids:
+                return _Result((session_id,))
+            return _Result(None)
         if "'auth.owner-signout-other-sessions'" in statement:
             revoked_at, owner_id, credential_digest, current_session_id, now = parameters
             revoked_rows: list[tuple[Any, ...]] = []
@@ -410,6 +429,40 @@ def test_postgres_owner_lists_and_audits_other_session_revocation(fixed_time) ->
     assert all("second-session" not in document for document in audit_documents)
     assert all("first-csrf" not in document for document in audit_documents)
     assert all("second-csrf" not in document for document in audit_documents)
+
+
+def test_postgres_other_session_revocation_requires_active_current_session(
+    fixed_time,
+) -> None:
+    database = _SessionDatabase()
+    tokens = iter(
+        (
+            "first-csrf",
+            "first-session",
+            "second-csrf",
+            "second-session",
+        )
+    )
+    session_ids = iter((record_id("session", 1), record_id("session", 2)))
+    manager = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(tokens),
+        id_factory=lambda _prefix: next(session_ids),
+    )
+    first = manager.issue(_BOOTSTRAP_TOKEN)
+    second = manager.issue(_BOOTSTRAP_TOKEN)
+
+    with pytest.raises(OwnerSessionMissing):
+        manager.revoke_other_sessions(record_id("session", 99))
+    assert manager.active_sessions() == (second.principal, first.principal)
+
+    manager.revoke(first.session_token)
+    with pytest.raises(OwnerSessionMissing):
+        manager.revoke_other_sessions(first.principal.session_id)
+    assert manager.active_sessions() == (second.principal,)
 
 
 def test_postgres_owner_session_rolls_back_when_audit_fails(fixed_time) -> None:
