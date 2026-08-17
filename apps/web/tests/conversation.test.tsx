@@ -21,8 +21,10 @@ const mocks = vi.hoisted(() => ({
   listDeliveries: vi.fn(),
   inspectTurn: vi.fn(),
   postMessage: vi.fn(),
+  resumeMessage: vi.fn(),
   resumeDelivery: vi.fn(),
   notify: vi.fn(),
+  canMutate: true,
 }));
 
 vi.mock("../src/app", () => {
@@ -35,10 +37,13 @@ vi.mock("../src/app", () => {
       listDeliveries: mocks.listDeliveries,
       inspectTurn: mocks.inspectTurn,
       postMessage: mocks.postMessage,
+      resumeMessage: mocks.resumeMessage,
       resumeDelivery: mocks.resumeDelivery,
     },
     principal: { owner_id: "owner_01" },
-    canMutate: true,
+    get canMutate() {
+      return mocks.canMutate;
+    },
     notify: mocks.notify,
   };
   return {
@@ -121,6 +126,29 @@ const processing: ConversationProcessingStatus = {
   completed_at: "2026-08-16T12:00:02Z",
   attempts: [],
   resumptions: [],
+};
+
+const deadProcessing: ConversationProcessingStatus = {
+  ...processing,
+  state: "dead",
+  attempt_count: 3,
+  completed_at: null,
+  last_error_code: "model.route.exhausted",
+  attempts: [
+    {
+      attempt_id: "attempt_dead_01",
+      work_id: processing.work_id,
+      message_id: ownerMessage.message_id,
+      attempt: 3,
+      outcome: "dead",
+      error_code: "model.route.exhausted",
+      started_at: "2026-08-16T12:00:01Z",
+      completed_at: "2026-08-16T12:00:02Z",
+      model_route_attempts: [],
+      disclosed_memory_ids: [],
+      external_disclosure: false,
+    },
+  ],
 };
 
 const inspection: ConversationTurnInspection = {
@@ -220,9 +248,21 @@ const deadDelivery: DeliveryWorkStatus = {
 
 describe("ConversationPage", () => {
   beforeEach(() => {
-    for (const mock of Object.values(mocks)) {
+    for (const mock of [
+      mocks.listThreads,
+      mocks.listMessages,
+      mocks.listTurns,
+      mocks.listProcessing,
+      mocks.listDeliveries,
+      mocks.inspectTurn,
+      mocks.postMessage,
+      mocks.resumeMessage,
+      mocks.resumeDelivery,
+      mocks.notify,
+    ]) {
       mock.mockReset();
     }
+    mocks.canMutate = true;
     mocks.listThreads.mockResolvedValue([thread]);
     mocks.listMessages.mockResolvedValue([ownerMessage, outputMessage]);
     mocks.listTurns.mockResolvedValue([turn]);
@@ -231,6 +271,7 @@ describe("ConversationPage", () => {
     mocks.inspectTurn.mockResolvedValue(inspection);
     const reply: ConversationReply = { inbound_message: ownerMessage, output_message: outputMessage, turn, processing, duplicate: false };
     mocks.postMessage.mockResolvedValue(reply);
+    mocks.resumeMessage.mockResolvedValue({ ...deadProcessing, state: "queued", attempt_count: 3 });
     mocks.resumeDelivery.mockResolvedValue({ ...deadDelivery, state: "queued", attempt_count: 3 });
   });
 
@@ -402,6 +443,31 @@ describe("ConversationPage", () => {
 
     await waitFor(() => expect(mocks.resumeDelivery).toHaveBeenCalledWith(thread.thread_id, deadDelivery.work_id));
     expect(mocks.notify).toHaveBeenCalledWith("A new bounded delivery retry budget was added.", "success");
+  });
+
+  it("disables dead reply and delivery resume controls without mutation proof", async () => {
+    mocks.canMutate = false;
+    mocks.listProcessing.mockResolvedValue([deadProcessing]);
+    mocks.listDeliveries.mockResolvedValue([deadDelivery]);
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const replyResume = await screen.findByRole("button", { name: "Reply failed · resume" });
+    expect(replyResume).toBeDisabled();
+    fireEvent.click(replyResume);
+    expect(mocks.resumeMessage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("What should I focus on?"));
+    expect(await screen.findByRole("heading", { name: "Processing" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Resume with bounded retries/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByText("Delivery failed · inspect"));
+    expect(await screen.findByRole("heading", { name: "Delivery" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Resume delivery with bounded retries/i })).toBeDisabled();
+    expect(mocks.resumeDelivery).not.toHaveBeenCalled();
   });
 });
 

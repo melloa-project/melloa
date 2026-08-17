@@ -515,7 +515,7 @@ export function ConversationPage() {
                         )}
                       </button>
                       {status === undefined ? null : (
-                        <ProcessingPill status={status} onResume={() => void resumeMessage(status)} />
+                        <ProcessingPill canMutate={canMutate} status={status} onResume={() => void resumeMessage(status)} />
                       )}
                       {messageDeliveries.length === 0 ? null : (
                         <div className="delivery-pill-list" aria-label={`Deliveries for message ${message.message_id}`}>
@@ -577,10 +577,10 @@ export function ConversationPage() {
             />
           ) : null}
           {!inspectionLoading && selectedProcessing !== null ? (
-            <ProcessingInspector status={selectedProcessing} onResume={() => void resumeMessage(selectedProcessing)} />
+            <ProcessingInspector canMutate={canMutate} status={selectedProcessing} onResume={() => void resumeMessage(selectedProcessing)} />
           ) : null}
           {!inspectionLoading && selectedDelivery !== null ? (
-            <DeliveryInspector delivery={selectedDelivery} onResume={() => void resumeDelivery(selectedDelivery)} />
+            <DeliveryInspector canMutate={canMutate} delivery={selectedDelivery} onResume={() => void resumeDelivery(selectedDelivery)} />
           ) : null}
           {!inspectionLoading && inspection === null && selectedProcessing === null && selectedDelivery === null ? (
             <div className="inspector-placeholder"><Info size={20} /><p>Select a message to inspect its durable record.</p></div>
@@ -611,9 +611,11 @@ export function ConversationPage() {
 }
 
 function ProcessingPill({
+  canMutate,
   status,
   onResume,
 }: {
+  readonly canMutate: boolean;
   readonly status: ConversationProcessingStatus;
   readonly onResume: () => void;
 }) {
@@ -622,7 +624,7 @@ function ProcessingPill({
   }
   if (status.state === "dead") {
     return (
-      <button className="processing-pill failed" onClick={onResume} type="button">
+      <button className="processing-pill failed" disabled={!canMutate} onClick={onResume} type="button">
         <CircleAlert size={13} /> Reply failed · resume
       </button>
     );
@@ -773,9 +775,11 @@ export function TurnInspector({
 }
 
 function DeliveryInspector({
+  canMutate,
   delivery,
   onResume,
 }: {
+  readonly canMutate: boolean;
   readonly delivery: DeliveryWorkStatus;
   readonly onResume: () => void;
 }) {
@@ -800,7 +804,7 @@ function DeliveryInspector({
           <div><dt>Available</dt><dd>{formatInstant(delivery.available_at)}</dd></div>
           <div><dt>Completed</dt><dd>{formatInstant(delivery.completed_at)}</dd></div>
         </dl>
-        {dead ? <Button onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume delivery with bounded retries</Button> : null}
+        {dead ? <Button disabled={!canMutate} onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume delivery with bounded retries</Button> : null}
       </section>
       <section className="inspector-section">
         <div className="inspector-section-title"><h3>Attempts</h3><Badge>{delivery.attempts.length}</Badge></div>
@@ -840,9 +844,11 @@ function deliveryAttemptReceiptSummary(adapterReceipt: unknown, executionReceipt
 }
 
 function ProcessingInspector({
+  canMutate,
   status,
   onResume,
 }: {
+  readonly canMutate: boolean;
   readonly status: ConversationProcessingStatus;
   readonly onResume: () => void;
 }) {
@@ -860,7 +866,7 @@ function ProcessingInspector({
           <div><dt>Available</dt><dd>{formatInstant(status.available_at)}</dd></div>
           <div><dt>Resumptions</dt><dd>{status.resumptions.length}</dd></div>
         </dl>
-        {status.state === "dead" ? <Button onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume with bounded retries</Button> : null}
+        {status.state === "dead" ? <Button disabled={!canMutate} onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume with bounded retries</Button> : null}
       </section>
       <section className="inspector-section">
         <h3>Attempts</h3>
