@@ -31,7 +31,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import type {
   ConversationMessage,
@@ -63,6 +63,8 @@ export function ConversationPage() {
   const { api, principal, canMutate, notify } = useMelloa();
   const navigate = useNavigate();
   const { threadId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryTurnId = searchParams.get("turn");
   const [threads, setThreads] = useState<readonly ConversationThread[]>([]);
   const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([]);
@@ -179,6 +181,18 @@ export function ConversationPage() {
     setInspection(null);
     void loadConversation(threadId);
   }, [loadConversation, loadingThreads, navigate, threadId, threads]);
+
+  useEffect(() => {
+    if (queryTurnId === null || turns.length === 0) {
+      return;
+    }
+    if (!turns.some((turn) => turn.turn_id === queryTurnId)) {
+      return;
+    }
+    setSelectedTurnId(queryTurnId);
+    setSelectedMessageId(null);
+    setSelectedDeliveryWorkId(null);
+  }, [queryTurnId, turns]);
 
   useEffect(() => {
     if (!pending || threadId === undefined) {
@@ -314,7 +328,24 @@ export function ConversationPage() {
     }
   }
 
+  function clearTurnQuery() {
+    if (queryTurnId === null) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("turn");
+    setSearchParams(next, { replace: true });
+  }
+
+  function closeInspector() {
+    clearTurnQuery();
+    setSelectedTurnId(null);
+    setSelectedMessageId(null);
+    setSelectedDeliveryWorkId(null);
+  }
+
   function inspectMessage(message: ConversationMessage) {
+    clearTurnQuery();
     const turn = turnByOutputMessage.get(message.message_id);
     if (turn !== undefined) {
       setSelectedTurnId(turn.turn_id);
@@ -328,6 +359,7 @@ export function ConversationPage() {
   }
 
   function inspectDelivery(delivery: DeliveryWorkStatus) {
+    clearTurnQuery();
     setSelectedTurnId(null);
     setSelectedMessageId(null);
     setSelectedDeliveryWorkId(delivery.work_id);
@@ -469,7 +501,7 @@ export function ConversationPage() {
       <aside className={`inspector ${inspectorOpen ? "visible" : ""}`} aria-label="Turn inspector">
         <div className="inspector-header">
           <div><p className="eyebrow">Inspectable record</p><h2>{selectedDeliveryWorkId !== null ? "Delivery" : selectedTurnId === null ? "Processing" : "Turn details"}</h2></div>
-          <Button onClick={() => { setSelectedTurnId(null); setSelectedMessageId(null); setSelectedDeliveryWorkId(null); }} size="icon" tone="ghost"><PanelRightClose size={18} /><span className="sr-only">Close inspector</span></Button>
+          <Button onClick={closeInspector} size="icon" tone="ghost"><PanelRightClose size={18} /><span className="sr-only">Close inspector</span></Button>
         </div>
         <div className="inspector-body">
           {inspectionLoading ? <LoadingState label="Loading turn evidence" /> : null}
@@ -508,7 +540,7 @@ export function ConversationPage() {
         </form>
       </Modal>
 
-      {inspectorOpen ? <button aria-label="Close inspector" className="inspector-scrim" onClick={() => { setSelectedTurnId(null); setSelectedMessageId(null); setSelectedDeliveryWorkId(null); }} type="button" /> : null}
+      {inspectorOpen ? <button aria-label="Close inspector" className="inspector-scrim" onClick={closeInspector} type="button" /> : null}
     </div>
   );
 }

@@ -205,8 +205,8 @@ function ActivityRow({
         <span>Turn {shortId(entry.turn_id)}</span>
       </div>
       <Button
-        aria-label={`Open conversation for ${entry.model_id}`}
-        onClick={() => onOpenThread(`/conversation/${entry.thread_id}`)}
+        aria-label={`Open turn inspection for ${entry.model_id}`}
+        onClick={() => onOpenThread(`/conversation/${entry.thread_id}?turn=${encodeURIComponent(entry.turn_id)}`)}
         size="icon"
         tone="ghost"
       >

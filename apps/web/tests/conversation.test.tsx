@@ -288,6 +288,18 @@ describe("ConversationPage", () => {
     expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
   });
 
+  it("opens the exact turn inspector from a route query", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}?turn=${turn.turn_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Turn details" })).toBeInTheDocument();
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    expect(mocks.inspectTurn).toHaveBeenCalledWith(thread.thread_id, turn.turn_id);
+  });
+
   it("shows outbound delivery authority and resumes dead delivery work", async () => {
     mocks.listDeliveries.mockResolvedValue([completedDelivery, deadDelivery]);
     render(

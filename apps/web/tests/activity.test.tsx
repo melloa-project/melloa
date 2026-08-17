@@ -102,6 +102,7 @@ describe("ActivityPage", () => {
         <Routes>
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/memory" element={<MemoryLocation />} />
+          <Route path="/conversation/:threadId" element={<ConversationLocation />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -123,6 +124,22 @@ describe("ActivityPage", () => {
     expect(screen.getByText("Personal · citation_…000001")).toBeInTheDocument();
     expect(screen.getByText("Internal · citation_…000002")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: `Open turn inspection for ${externalEntry.model_id}` }));
+    expect(screen.getByText(`conversation-search=?turn=${externalEntry.turn_id}`)).toBeInTheDocument();
+  });
+
+  it("opens disclosed memories from external activity evidence", async () => {
+    render(
+      <MemoryRouter initialEntries={["/activity"]}>
+        <Routes>
+          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/memory" element={<MemoryLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "External 1" }));
     fireEvent.click(screen.getByRole("button", {
       name: `Inspect disclosed memory ${externalEntry.disclosure?.memory_references[0]?.assertion_id}`,
     }));
@@ -168,4 +185,9 @@ describe("ActivityPage", () => {
 function MemoryLocation() {
   const location = useLocation();
   return <div>{`memory-search=${location.search}`}</div>;
+}
+
+function ConversationLocation() {
+  const location = useLocation();
+  return <div>{`conversation-search=${location.search}`}</div>;
 }
