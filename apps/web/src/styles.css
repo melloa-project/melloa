@@ -1456,7 +1456,8 @@ pre {
   min-width: 0;
 }
 
-.turn-ledger-row code {
+.turn-ledger-row code,
+.ledger-id-copy {
   background: var(--surface-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1466,6 +1467,25 @@ pre {
   overflow: hidden;
   padding: 3px 5px;
   text-overflow: ellipsis;
+}
+
+.ledger-id-copy {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ledger-id-copy code {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.ledger-id-copy svg {
+  color: var(--muted);
+  flex: 0 0 auto;
 }
 
 .evidence-item,

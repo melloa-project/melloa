@@ -96,6 +96,7 @@ try {
   await page.locator(".message-row.melli").getByText("Synthetic fixture", { exact: true }).waitFor();
   await response.click();
   await page.getByRole("heading", { name: "Turn details" }).waitFor();
+  await page.getByRole("button", { name: /^Copy Turn ID turn_/ }).waitFor();
   await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
   await page.getByText("Synthetic fixture", { exact: true }).first().waitFor();
   await page.screenshot({

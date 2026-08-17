@@ -283,6 +283,12 @@ describe("ConversationPage", () => {
     mocks.postMessage.mockResolvedValue(reply);
     mocks.resumeMessage.mockResolvedValue({ ...deadProcessing, state: "queued", attempt_count: 3 });
     mocks.resumeDelivery.mockResolvedValue({ ...deadDelivery, state: "queued", attempt_count: 3 });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("supports send and exposes route, cost, disclosure, and provenance", async () => {
@@ -314,6 +320,9 @@ describe("ConversationPage", () => {
     expect(screen.getByText("proposal_01")).toBeInTheDocument();
     expect(screen.getByText("Executed actions")).toBeInTheDocument();
     expect(screen.getByText("action_01")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Copy Triggering messages ID ${ownerMessage.message_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(ownerMessage.message_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Triggering messages ID copied.", "success");
 
     fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Plan the next step." } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
@@ -325,6 +334,25 @@ describe("ConversationPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Inspect memory assertion assertion_01" }));
     expect(screen.getByText("memory-search=?assertion=assertion_01")).toBeInTheDocument();
+  });
+
+  it("reports when turn ledger id copy is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const response = await screen.findByText("A grounded response.");
+    fireEvent.click(response.closest("button") as HTMLButtonElement);
+    expect(await screen.findByText("Turn ledger")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Copy Turn ID ${turn.turn_id}` }));
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Turn ID copy failed.", "error"));
   });
 
   it("labels Codex CLI token and subscription cost metadata as unreported", async () => {

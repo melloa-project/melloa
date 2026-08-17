@@ -14,6 +14,7 @@ import {
   CircleAlert,
   Clock3,
   Coins,
+  Copy,
   ExternalLink,
   FileSearch,
   Info,
@@ -387,6 +388,18 @@ export function ConversationPage() {
     }
   }
 
+  async function copyTurnLedgerId(label: string, id: string) {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(id);
+      notify(`${label} ID copied.`, "success");
+    } catch {
+      notify(`${label} ID copy failed.`, "error");
+    }
+  }
+
   function clearTurnQuery() {
     if (queryTurnId === null) {
       return;
@@ -595,6 +608,7 @@ export function ConversationPage() {
           {!inspectionLoading && inspection !== null ? (
             <TurnInspector
               inspection={inspection}
+              onCopyLedgerId={(label, id) => void copyTurnLedgerId(label, id)}
               onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
             />
           ) : null}
@@ -730,9 +744,11 @@ function turnLedgerRows(turn: ConversationTurn): readonly TurnLedgerRow[] {
 
 export function TurnInspector({
   inspection,
+  onCopyLedgerId,
   onInspectMemory,
 }: {
   readonly inspection: ConversationTurnInspection;
+  readonly onCopyLedgerId: (label: string, id: string) => void;
   readonly onInspectMemory: (assertionId: string) => void;
 }) {
   const metadata = turnMetadata(inspection);
@@ -775,7 +791,19 @@ export function TurnInspector({
             <div className="turn-ledger-row" key={row.label}>
               <span><strong>{row.label}</strong><small>{row.ids.length} recorded</small></span>
               <div>
-                {row.ids.length === 0 ? <em>None recorded</em> : row.ids.map((id) => <code key={id}>{shortId(id)}</code>)}
+                {row.ids.length === 0 ? <em>None recorded</em> : row.ids.map((id) => (
+                  <button
+                    aria-label={`Copy ${row.label} ID ${id}`}
+                    className="ledger-id-copy"
+                    key={id}
+                    onClick={() => onCopyLedgerId(row.label, id)}
+                    title={id}
+                    type="button"
+                  >
+                    <code>{shortId(id)}</code>
+                    <Copy aria-hidden="true" size={12} />
+                  </button>
+                ))}
               </div>
             </div>
           ))}
