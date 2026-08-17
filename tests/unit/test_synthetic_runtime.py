@@ -437,6 +437,67 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert memory_after_deletion["deletion_receipts"] == 1
 
 
+def test_synthetic_runtime_counts_failed_login_security_audit(fixed_time) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.normal",
+        ),
+        receipt_hash="sha256:" + "0" * 64,
+    )
+    runtime = build_synthetic_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+    )
+    client = TestClient(runtime.app, base_url="https://testserver")
+
+    failed = client.post(
+        "/api/v1/auth/session",
+        json={"credential": "incorrect-owner-bootstrap-token-0001"},
+    )
+    assert failed.status_code == 401
+    assert failed.json()["code"] == "owner_authentication_failed"
+    assert len(runtime.event_audit_store.events) == 1
+    assert runtime.event_audit_store.events[0].event_type == (
+        "auth.owner-login-denied.v1"
+    )
+
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": _BOOTSTRAP_TOKEN},
+    )
+    assert login.status_code == 200
+    retention = client.get("/api/v1/retention")
+    assert retention.status_code == 200
+    audit_inventory = next(
+        item
+        for item in retention.json()["inventory"]
+        if item["policy_id"] == "retention.audit-ledger"
+    )
+    assert audit_inventory["coverage"] == "complete"
+    assert audit_inventory["retained_objects"] == 1
+    assert audit_inventory["retained_bytes"] > 0
+    assert audit_inventory["oldest_retained_at"] == fixed_time.isoformat().replace(
+        "+00:00",
+        "Z",
+    )
+
+    documents = tuple(
+        event.model_dump_json() for event in runtime.event_audit_store.events
+    ) + tuple(
+        record.model_dump_json() for record in runtime.event_audit_store.audit_records
+    )
+    assert all(
+        "incorrect-owner-bootstrap-token-0001" not in document
+        for document in documents
+    )
+    assert all(_BOOTSTRAP_TOKEN not in document for document in documents)
+
+
 def test_synthetic_runtime_preserves_guardian_write_denial(fixed_time) -> None:
     guardian = FakeGuardianStatusReader.from_payload(
         GuardianStatusPayload(

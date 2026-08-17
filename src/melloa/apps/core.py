@@ -60,9 +60,18 @@ from melloa.application.telegram import (
     TelegramReplyDispatcher,
     TelegramRetentionUnavailableError,
 )
+from melloa.domain.audit import AuditContent
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import JsonObject, QualifiedName, RecordId
-from melloa.domain.classification import Sensitivity
+from melloa.domain.base import (
+    JsonObject,
+    QualifiedName,
+    RecordId,
+    canonical_json_bytes,
+    new_record_id,
+    sha256_digest,
+    utc_now,
+)
+from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import (
     ConversationMessage,
     ConversationProcessingState,
@@ -72,6 +81,7 @@ from melloa.domain.conversation import (
     ConversationTurnInspection,
 )
 from melloa.domain.delivery import DeliveryWorkState, DeliveryWorkStatus
+from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
 from melloa.domain.inspection import OwnerModelActivityReport
 from melloa.domain.memory import (
     AssertionContentDeletionResult,
@@ -104,6 +114,7 @@ from melloa.ports.conversation import ConversationConflictError, ConversationNot
 from melloa.ports.delivery import DeliveryConflictError, DeliveryNotFoundError
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import MemoryConflictError, MemoryNotFoundError
+from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import (
     TelegramPairingConflictError,
     TelegramPairingNotFoundError,
@@ -399,6 +410,74 @@ def _create_export_workspace() -> Path:
     return Path(tempfile.mkdtemp(prefix="melloa-owner-export-"))
 
 
+def _append_failed_login_audit(
+    event_audit_store: EventAuditStore,
+    *,
+    owner_id: RecordId,
+    occurred_at: datetime,
+    id_factory: Callable[[str], str],
+) -> None:
+    event_id = id_factory("event")
+    audit_id = id_factory("audit")
+    payload: JsonObject = {
+        "authentication_method": "auth.local-opaque-token",
+        "reason_code": "auth.owner-credential.invalid",
+        "result": "denied",
+        "session_issued": False,
+    }
+    event = EventEnvelope(
+        event_id=event_id,
+        event_type="auth.owner-login-denied.v1",
+        schema_version="1.0.0",
+        occurred_at=occurred_at,
+        recorded_at=occurred_at,
+        subject_ids=(owner_id,),
+        source=EventSource(
+            capability_id="auth.owner-login",
+            execution_id=event_id,
+        ),
+        producer=EventProducer(
+            component="auth.private-core",
+            version="0.1.0",
+        ),
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        sensitivity=Sensitivity.INTERNAL,
+        trust=TrustLabel.TRUSTED_SYSTEM,
+        retention_policy="retention.audit-ledger",
+        correlation_id=event_id,
+        payload=payload,
+        integrity=EventIntegrity(
+            payload_hash=sha256_digest(canonical_json_bytes(payload))
+        ),
+    )
+    audit = AuditContent(
+        audit_id=audit_id,
+        event_type="audit.event-appended.v1",
+        occurred_at=occurred_at,
+        actor_id=_unauthenticated_actor_id(owner_id),
+        action="auth.owner-login.deny",
+        object_ids=(event_id,),
+        metadata={
+            "event_id": event_id,
+            "reason_code": "auth.owner-credential.invalid",
+            "result": "denied",
+        },
+    )
+    event_audit_store.append_event(event, audit)
+
+
+def _unauthenticated_actor_id(owner_id: RecordId) -> RecordId:
+    digest = sha256_digest(
+        canonical_json_bytes(
+            {
+                "actor": "unauthenticated-request",
+                "owner_id": owner_id,
+            }
+        )
+    ).removeprefix("sha256:")
+    return f"actor_{digest[:32]}"
+
+
 def _authenticated_owner(request: Request) -> AuthenticatedOwner:
     session_token = request.cookies.get(_SESSION_COOKIE, "")
     return _configured_sessions(request).verify(session_token)
@@ -445,6 +524,10 @@ def create_app(
     retention_service: OwnerRetentionService | None = None,
     model_route_service: OwnerModelRouteService | None = None,
     *,
+    owner_id: RecordId | None = None,
+    event_audit_store: EventAuditStore | None = None,
+    security_event_clock: Callable[[], datetime] = utc_now,
+    security_event_id_factory: Callable[[str], str] = new_record_id,
     export_service: OwnerExportService | None = None,
     export_schema_root: Path | None = None,
     secure_session_cookie: bool = True,
@@ -478,6 +561,8 @@ def create_app(
         raise ValueError("Telegram worker requires a configured poll worker")
     if run_telegram_retention_worker and telegram_retention_worker is None:
         raise ValueError("Telegram retention worker requires a configured retention worker")
+    if event_audit_store is not None and owner_id is None:
+        raise ValueError("owner ID is required for authentication audit events")
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -869,7 +954,19 @@ def create_app(
         payload: _OwnerLoginRequest,
         response: Response,
     ) -> _OwnerSessionResponse:
-        issued = _configured_sessions(request).issue(payload.credential.get_secret_value())
+        try:
+            issued = _configured_sessions(request).issue(
+                payload.credential.get_secret_value()
+            )
+        except AuthenticationError:
+            if event_audit_store is not None and owner_id is not None:
+                _append_failed_login_audit(
+                    event_audit_store,
+                    owner_id=owner_id,
+                    occurred_at=security_event_clock(),
+                    id_factory=security_event_id_factory,
+                )
+            raise
         maximum_age = int(
             (issued.principal.expires_at - issued.principal.authenticated_at).total_seconds()
         )

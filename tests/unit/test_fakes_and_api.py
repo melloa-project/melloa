@@ -10,6 +10,7 @@ from melloa.adapters.fakes.conversation import InMemoryConversationStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.model import FakeModelGateway
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.adapters.guardian.file import GuardianVerificationError
 from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
@@ -160,6 +161,72 @@ def test_owner_login_session_csrf_and_logout(fixed_time) -> None:
     )
     assert logout.status_code == 204
     assert client.get("/api/v1/auth/session").status_code == 401
+
+
+def test_failed_owner_login_appends_content_free_security_audit(fixed_time) -> None:
+    ids = iter((record_id("event", 1), record_id("audit", 1)))
+    tokens = iter(("session-token", "csrf-token"))
+    audit_store = InMemoryEventAuditStore()
+    sessions = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(tokens),
+    )
+    client = TestClient(
+        create_app(
+            guardian_reader(fixed_time),
+            sessions,
+            owner_id=record_id("owner", 1),
+            event_audit_store=audit_store,
+            security_event_clock=lambda: fixed_time,
+            security_event_id_factory=lambda prefix: next(ids),
+        ),
+        base_url="https://testserver",
+    )
+
+    failed = client.post(
+        "/api/v1/auth/session",
+        json={"credential": "incorrect-bootstrap-token-value-0000"},
+    )
+
+    assert failed.status_code == 401
+    assert failed.json()["code"] == "owner_authentication_failed"
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
+    event = audit_store.events[0]
+    assert event.event_type == "auth.owner-login-denied.v1"
+    assert event.subject_ids == (record_id("owner", 1),)
+    assert event.payload == {
+        "authentication_method": "auth.local-opaque-token",
+        "reason_code": "auth.owner-credential.invalid",
+        "result": "denied",
+        "session_issued": False,
+    }
+    audit = audit_store.audit_records[0].content
+    assert audit.actor_id.startswith("actor_")
+    assert audit.actor_id != record_id("owner", 1)
+    assert audit.action == "auth.owner-login.deny"
+    assert audit.object_ids == (record_id("event", 1),)
+    assert audit.metadata == {
+        "event_id": record_id("event", 1),
+        "reason_code": "auth.owner-credential.invalid",
+        "result": "denied",
+    }
+    documents = tuple(event.model_dump_json() for event in audit_store.events) + tuple(
+        record.model_dump_json() for record in audit_store.audit_records
+    )
+    assert all("incorrect-bootstrap-token-value-0000" not in document for document in documents)
+    assert all("synthetic-bootstrap-token-value-0001" not in document for document in documents)
+    assert all("session-token" not in document for document in documents)
+    assert all("csrf-token" not in document for document in documents)
+
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    assert login.status_code == 200
+    assert len(audit_store.events) == 1
 
 
 def test_owner_lists_sessions_and_recently_revokes_others(fixed_time) -> None:
