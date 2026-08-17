@@ -3303,6 +3303,13 @@ pre {
   margin-top: 2px;
 }
 
+.telegram-authority-copy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
 .paired-channel {
   align-items: center;
   background: var(--accent-faint);
@@ -3336,6 +3343,7 @@ pre {
 .paired-channel-meta {
   display: flex;
   gap: 20px;
+  flex-wrap: wrap;
 }
 
 .paired-channel-meta > div {

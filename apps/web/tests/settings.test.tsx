@@ -147,6 +147,12 @@ describe("SettingsPage Telegram inspection", () => {
         expires_at: "2026-08-16T12:10:00Z",
       },
     ]);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("shows real channel health and accepts the secure pairing-code shape", async () => {
@@ -157,6 +163,12 @@ describe("SettingsPage Telegram inspection", () => {
     expect(screen.getByText("Rejected before fetch")).toBeInTheDocument();
     expect(screen.getByText("PostgreSQL restart-safe")).toBeInTheDocument();
     expect(screen.getByText("Ambiguous sends do not retry")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram adapter ID client.telegram.bot-api" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("client.telegram.bot-api"));
+    expect(mocks.notify).toHaveBeenCalledWith("Telegram adapter ID copied.", "success");
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram candidate ID tgcandidate_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("tgcandidate_01"));
+    expect(mocks.notify).toHaveBeenCalledWith("Telegram candidate ID copied.", "success");
 
     fireEvent.click(screen.getByRole("button", { name: /Confirm/i }));
     const input = screen.getByLabelText("Confirmation code");
@@ -176,6 +188,20 @@ describe("SettingsPage Telegram inspection", () => {
     expect(screen.getByText("Synthetic no-network mode cannot receive /start updates.")).toBeInTheDocument();
     expect(screen.getByText("Enable Bot API before pairing.")).toBeInTheDocument();
     expect(screen.queryByText(/send \/start to the configured bot/i)).not.toBeInTheDocument();
+  });
+
+  it("reports when Telegram authority id copy is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText(/Bot API · Healthy/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram adapter ID client.telegram.bot-api" }));
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Telegram adapter ID copy failed.", "error"));
   });
 
   it("inspects active sessions and confirms signing out other browsers", async () => {
@@ -289,6 +315,10 @@ describe("SettingsPage Telegram inspection", () => {
     const rendered = render(<SettingsPage />);
 
     expect(await screen.findByText("Paired")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram pairing ID tgpairing_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("tgpairing_01"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram candidate ID tgcandidate_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("tgcandidate_01"));
     fireEvent.click(screen.getByRole("button", { name: "Revoke pairing" }));
     expect(screen.getByRole("heading", { name: "Revoke Telegram pairing?" })).toBeInTheDocument();
 

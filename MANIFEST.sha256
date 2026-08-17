@@ -30,9 +30,9 @@ ffb5cf3cb20f9604e0ecf0679ac64d2e1cf600fa1e4bbaa43b01f1510229e08e  ./apps/web/src
 31956ad244f7d134045ece12aec722d9e8675d5b6db8f05eba12631b561940c6  ./apps/web/src/pages/memory.tsx
 edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src/pages/operations.tsx
 f0c0073329d6bb73341437befc516fab3b00fcf164657fc79a8e1e60951119cb  ./apps/web/src/pages/providers.tsx
-424ecc932c0d414a885fe3e83229482fa89c027270b9b3b3b113a117a859051d  ./apps/web/src/pages/settings.tsx
+6e9bc31054099571d2fdb700cf342a009ea335eed0eb8c98846ad9f48a764893  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
-164e63036c57e80d6902cbbf138e2a337b88f427ad4d64a7c3bdbfe35b160c6f  ./apps/web/src/styles.css
+99068d10286e2330f46af372fe393ce9286ae8601d052efc5d09757fe62da331  ./apps/web/src/styles.css
 55d282e48d557fc1483a2a46fdbdc00206df98395c069a504222a8500060c70f  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
@@ -43,7 +43,7 @@ d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tes
 e261159e6bbdca355628f91c4c037176e04213f29bdafd3b05078109b656e785  ./apps/web/tests/memory.test.tsx
 0a18d03ce451081e7edc4eea1cfb286f2c85cc99dfebda599ff4001ce75d3762  ./apps/web/tests/operations.test.tsx
 ec13254ca52fdc566c1eb1305f6cf576dde963198670a2cd0437cee48dc2f333  ./apps/web/tests/providers.test.tsx
-841689a3c1ca7b23fcbd056729eaf817381590a983ea470311b9e88946f2c456  ./apps/web/tests/settings.test.tsx
+5c455056819d1581f07dae71710f5751743bfb95178c98a7c08f0353fae9e75a  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
 14e5cc8a1188f31df3541f97eae593cd16b0f90b2b5d3c58003de78c161013c5  ./apps/web/tests/visual/current-mvp.mjs

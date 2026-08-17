@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import {
   CheckCircle2,
   Clock3,
+  Copy,
   KeyRound,
   Link2,
   LockKeyhole,
@@ -171,6 +172,18 @@ export function SettingsPage() {
     }
   }
 
+  async function copyTelegramAuthorityId(label: string, id: string) {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(id);
+      notify(`${label} ID copied.`, "success");
+    } catch {
+      notify(`${label} ID copy failed.`, "error");
+    }
+  }
+
   const pollingState = telegram?.status.polling?.state ?? "unavailable";
   const realTransport = telegram?.status.capabilities?.network === true;
   const channelTone = pollingState === "healthy" ? "positive" : pollingState === "disabled" ? "neutral" : "warning";
@@ -252,6 +265,7 @@ export function SettingsPage() {
         {telegram === null ? null : (
           <dl className="channel-status-grid">
             <div><dt>Transport</dt><dd>{realTransport ? "Real Telegram Bot API" : "Synthetic, no network"}</dd></div>
+            <div><dt>Adapter</dt><dd><CopyableTelegramAuthorityId label="Telegram adapter" id={telegram.status.adapter_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} /></dd></div>
             <div><dt>Polling</dt><dd>{titleCase(telegram.status.polling?.reason_code ?? "not configured")}</dd></div>
             <div><dt>Replies</dt><dd>{telegram.status.replies === null ? "Not enabled" : `${telegram.status.replies.deliveries_submitted} sent · ${telegram.status.replies.pending_replies} pending`}</dd></div>
             <div><dt>Delivery</dt><dd>{titleCase(telegram.status.delivery?.status ?? "not configured")}</dd></div>
@@ -277,7 +291,13 @@ export function SettingsPage() {
                 {telegram.candidates.map((candidate) => (
                   <article className="candidate-row" key={candidate.candidate_id}>
                     <span className="candidate-icon"><Smartphone size={17} /></span>
-                    <div><strong>Telegram user {redactNumericIdentifier(candidate.telegram_user_id)}</strong><span>Chat {redactNumericIdentifier(candidate.telegram_chat_id)} · expires {formatRelative(candidate.expires_at)}</span></div>
+                    <div>
+                      <strong>Telegram user {redactNumericIdentifier(candidate.telegram_user_id)}</strong>
+                      <span>Chat {redactNumericIdentifier(candidate.telegram_chat_id)} · expires {formatRelative(candidate.expires_at)}</span>
+                      <div className="telegram-authority-copy-list">
+                        <CopyableTelegramAuthorityId label="Telegram candidate" id={candidate.candidate_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} />
+                      </div>
+                    </div>
                     <Button disabled={!canMutate} onClick={() => setSelectedCandidate(candidate)} tone="primary"><Link2 size={15} /> Confirm</Button>
                   </article>
                 ))}
@@ -290,7 +310,11 @@ export function SettingsPage() {
           <div className="paired-channel">
             <span className="paired-channel-icon"><CheckCircle2 size={21} /></span>
             <div className="paired-channel-copy"><Badge tone="positive">Paired</Badge><h3>Telegram user {redactNumericIdentifier(telegram.pairing.telegram_user_id)}</h3><p>Chat {redactNumericIdentifier(telegram.pairing.telegram_chat_id)} · confirmed {formatInstant(telegram.pairing.confirmed_at)}</p></div>
-            <dl className="paired-channel-meta"><div><dt>Pairing</dt><dd>{shortId(telegram.pairing.pairing_id)}</dd></div><div><dt>Confirmed by</dt><dd>{shortId(telegram.pairing.confirmed_by_owner_id)}</dd></div></dl>
+            <dl className="paired-channel-meta">
+              <div><dt>Pairing</dt><dd><CopyableTelegramAuthorityId label="Telegram pairing" id={telegram.pairing.pairing_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} /></dd></div>
+              <div><dt>Candidate</dt><dd><CopyableTelegramAuthorityId label="Telegram candidate" id={telegram.pairing.candidate_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} /></dd></div>
+              <div><dt>Confirmed by</dt><dd>{shortId(telegram.pairing.confirmed_by_owner_id)}</dd></div>
+            </dl>
             <Button disabled={!canMutate} onClick={() => setRevokeOpen(true)} tone="danger"><Unlink size={15} /> Revoke pairing</Button>
           </div>
         ) : null}
@@ -332,5 +356,28 @@ export function SettingsPage() {
         <div className="modal-actions"><Button onClick={() => setRevokeOpen(false)}>Cancel</Button><Button disabled={!canMutate} loading={revoking} onClick={() => void revokePairing()} tone="danger">Revoke pairing</Button></div>
       </Modal>
     </div>
+  );
+}
+
+function CopyableTelegramAuthorityId({
+  id,
+  label,
+  onCopy,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly onCopy: (label: string, id: string) => void;
+}) {
+  return (
+    <button
+      aria-label={`Copy ${label} ID ${id}`}
+      className="ledger-id-copy"
+      onClick={() => onCopy(label, id)}
+      title={id}
+      type="button"
+    >
+      <code>{shortId(id)}</code>
+      <Copy aria-hidden="true" size={12} />
+    </button>
   );
 }
