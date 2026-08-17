@@ -67,7 +67,7 @@ export function ProvidersPage() {
     });
   }, [report, selectedRouteId]);
 
-  const activeRoutes = report?.routes.filter((route) => route.health.state === "healthy").length ?? 0;
+  const activeRoutes = report?.routes.filter((route) => isOwnerUsableRoute(route) && route.health.state === "healthy").length ?? 0;
   const externalRoutes = report?.routes.filter((route) => route.external_disclosure).length ?? 0;
   const eligibility = report === null ? [] : providerEligibility(report.routes);
 
@@ -86,7 +86,7 @@ export function ProvidersPage() {
       {report === null ? null : (
         <>
           <section className="provider-summary" aria-label="Provider route summary">
-            <div><span className="summary-icon positive"><CheckCircle2 size={18} /></span><strong>{activeRoutes}</strong><small>healthy routes</small></div>
+            <div><span className="summary-icon positive"><CheckCircle2 size={18} /></span><strong>{activeRoutes}</strong><small>owner-usable routes</small></div>
             <div><span className="summary-icon"><Cpu size={18} /></span><strong>{report.routes.length}</strong><small>configured routes</small></div>
             <div><span className={`summary-icon ${externalRoutes > 0 ? "warning" : "positive"}`}><Network size={18} /></span><strong>{externalRoutes}</strong><small>external routes</small></div>
             <div className="provider-summary-note"><ShieldCheck size={17} /><span><strong>Routing does not grant authority</strong><small>Models propose. Deterministic controls authorize.</small></span></div>
@@ -153,7 +153,7 @@ type ProviderEligibilityGroup = {
 };
 
 function providerEligibility(routes: readonly ModelRouteStatus[]): readonly ProviderEligibilityGroup[] {
-  const healthy = routes.filter((route) => route.health.state === "healthy");
+  const healthy = routes.filter((route) => isOwnerUsableRoute(route) && route.health.state === "healthy");
   const deviceOnly = healthy.filter((route) => (
     route.processing_location === "device"
     && !route.external_disclosure
@@ -191,9 +191,13 @@ function providerEligibility(routes: readonly ModelRouteStatus[]): readonly Prov
 
 function routeCountLabel(count: number): string {
   if (count === 0) {
-    return "No healthy routes";
+    return "No owner-usable route";
   }
   return `${count} healthy ${count === 1 ? "route" : "routes"}`;
+}
+
+function isOwnerUsableRoute(route: ModelRouteStatus): boolean {
+  return route.route_kind !== "synthetic";
 }
 
 function ProviderCard({

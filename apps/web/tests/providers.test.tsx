@@ -117,9 +117,10 @@ describe("ProvidersPage", () => {
     expect(eligibility.getByText("Personal no-disclosure")).toBeInTheDocument();
     expect(eligibility.getByText("External disclosure")).toBeInTheDocument();
     expect(eligibility.getAllByText("1 healthy route")).toHaveLength(2);
-    expect(eligibility.getByText("2 healthy routes")).toBeInTheDocument();
+    expect(eligibility.getByText("No owner-usable route")).toBeInTheDocument();
     expect(eligibility.getByText("Local Qwen through Ollama")).toBeInTheDocument();
     expect(eligibility.getByText("Codex subscription route")).toBeInTheDocument();
+    expect(eligibility.queryByText("Deterministic synthetic fixture")).not.toBeInTheDocument();
   });
 
   it("highlights a provider route from a route query", async () => {
