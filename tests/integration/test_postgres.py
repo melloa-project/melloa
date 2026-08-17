@@ -407,6 +407,64 @@ def test_atomic_event_audit_append_is_idempotent(connection, event, audit_conten
     assert inventory.status_reason == "retention.inventory.audit_event_store"
 
 
+def test_postgres_event_audit_store_lists_owner_scoped_events_before_limit(
+    connection,
+    event,
+    audit_content,
+) -> None:
+    store = PostgresEventAuditStore(connection)
+    owner_subject = event.subject_ids[0]
+    owner_events = (
+        event.model_copy(
+            update={
+                "event_id": record_id("event", 101),
+                "occurred_at": event.occurred_at + timedelta(minutes=1),
+                "recorded_at": event.recorded_at + timedelta(minutes=1),
+            }
+        ),
+        event.model_copy(
+            update={
+                "event_id": record_id("event", 102),
+                "occurred_at": event.occurred_at + timedelta(minutes=2),
+                "recorded_at": event.recorded_at + timedelta(minutes=2),
+            }
+        ),
+    )
+    foreign_events = tuple(
+        event.model_copy(
+            update={
+                "event_id": record_id("event", number),
+                "occurred_at": event.occurred_at + timedelta(minutes=number),
+                "recorded_at": event.recorded_at + timedelta(minutes=number),
+                "subject_ids": (record_id("subject", 2),),
+            }
+        )
+        for number in range(103, 108)
+    )
+    for index, next_event in enumerate((*owner_events, *foreign_events), start=101):
+        assert store.append_event(
+            next_event,
+            audit_content.model_copy(
+                update={
+                    "audit_id": record_id("audit", index),
+                    "object_ids": (next_event.event_id,),
+                    "occurred_at": next_event.occurred_at,
+                }
+            ),
+        ) is not None
+
+    result = store.list_events(
+        event_types=(event.event_type,),
+        subject_id=owner_subject,
+        occurred_from=event.occurred_at,
+        occurred_before=event.occurred_at + timedelta(minutes=200),
+        limit=1,
+    )
+
+    assert result.matching_events == 2
+    assert result.events == (owner_events[1],)
+
+
 def test_immutable_event_id_cannot_change_content(connection, event, audit_content) -> None:
     store = PostgresEventAuditStore(connection)
     store.append_event(event, audit_content)

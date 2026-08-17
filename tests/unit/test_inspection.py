@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from melloa.adapters.fakes.auth import InMemoryOwnerSessionManager
 from melloa.adapters.fakes.conversation import InMemoryConversationStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.application.inspection import (
     InspectionOwnershipError,
     InspectionWindowError,
@@ -17,8 +18,9 @@ from melloa.application.inspection import (
     _processing_summary,
 )
 from melloa.apps.core import create_app
+from melloa.domain.audit import AuditContent
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import sha256_digest
+from melloa.domain.base import canonical_json_bytes, sha256_digest
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import (
     ConversationMessage,
@@ -31,6 +33,7 @@ from melloa.domain.conversation import (
     MessagePart,
 )
 from melloa.domain.delivery import DeliveryWorkState, DeliveryWorkStatus
+from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.inspection import (
     ModelDisclosureInspection,
@@ -358,6 +361,100 @@ def test_owner_timeline_aggregates_canonical_records_without_content(fixed_time)
     assert limited.truncated is True
     assert "timeline.limit.newest-events-only" in limited.limitations
     assert len(limited.entries) == 3
+
+
+def test_owner_timeline_includes_redacted_export_audit_events(fixed_time) -> None:
+    store, thread = _populated_store(fixed_time)
+    audit_store = InMemoryEventAuditStore()
+    payload = {
+        "export_id": record_id("export", 1),
+        "format_id": "melloa.canonical-owner-export",
+        "format_version": "1.0.0",
+        "encrypted": False,
+        "includes_sql_snapshot": False,
+        "includes_blobs": False,
+        "file_count": 12,
+        "data_file_count": 8,
+        "exported_record_count": 21,
+        "limitation_count": 4,
+        "limitation_ids": ("export.preview-unencrypted",),
+        "archive_path": "server-workspace/melloa-owner-export/owner-export.zip",
+        "content_hash": "sha256:" + "a" * 64,
+        "message_text": "Synthetic prompt",
+        "result": "generated",
+    }
+    event = EventEnvelope(
+        event_id=record_id("event", 1),
+        event_type="export.owner-preview-generated.v1",
+        schema_version="1.0.0",
+        occurred_at=fixed_time + timedelta(hours=2, minutes=30),
+        recorded_at=fixed_time + timedelta(hours=2, minutes=30),
+        subject_ids=(thread.owner_id, record_id("export", 1)),
+        source=EventSource(
+            capability_id="export.owner-preview",
+            execution_id=record_id("event", 1),
+        ),
+        producer=EventProducer(component="export.private-core", version="0.1.0"),
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        sensitivity=Sensitivity.INTERNAL,
+        trust=TrustLabel.TRUSTED_SYSTEM,
+        retention_policy="retention.audit-ledger",
+        payload=payload,
+        integrity=EventIntegrity(payload_hash=sha256_digest(canonical_json_bytes(payload))),
+    )
+    audit_store.append_event(
+        event,
+        AuditContent(
+            audit_id=record_id("audit", 1),
+            event_type="audit.event-appended.v1",
+            occurred_at=event.occurred_at,
+            actor_id=thread.owner_id,
+            action="export.owner-preview.generate",
+            object_ids=(event.event_id, record_id("export", 1)),
+            metadata={"event_id": event.event_id, "result": "generated"},
+        ),
+    )
+    service = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        event_audit_store=audit_store,
+        clock=lambda: fixed_time + timedelta(hours=3),
+    )
+
+    report = service.timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+    )
+
+    assert "timeline.coverage.owner-export-audit-projection" in report.coverage
+    assert "timeline.limit.no-audit-event-store-configured" not in report.limitations
+    audit_event = next(
+        entry
+        for entry in report.entries
+        if entry.kind == "timeline.audit.owner-export-preview-generated"
+    )
+    assert audit_event.source == "timeline.source.audit-ledger"
+    assert audit_event.status == "audit.owner-export-preview.generated"
+    assert audit_event.references == (record_id("export", 1), record_id("event", 1))
+    assert audit_event.metadata == {
+        "export_id": record_id("export", 1),
+        "source_event_id": record_id("event", 1),
+        "format_id": "melloa.canonical-owner-export",
+        "format_version": "1.0.0",
+        "file_count": 12,
+        "data_file_count": 8,
+        "exported_record_count": 21,
+        "limitation_count": 4,
+        "encrypted": False,
+        "includes_sql_snapshot": False,
+        "includes_blobs": False,
+    }
+    encoded = report.model_dump_json()
+    assert "Synthetic prompt" not in encoded
+    assert "owner-export.zip" not in encoded
+    assert "sha256:" + "a" * 64 not in encoded
+    assert "export.preview-unencrypted" not in encoded
 
 
 def test_owner_timeline_includes_delivery_when_configured(fixed_time) -> None:

@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import psycopg
 from psycopg.types.json import Jsonb
 
 from melloa.domain.audit import AuditContent, AuditRecord, audit_record_hash
-from melloa.domain.base import QualifiedName
+from melloa.domain.base import QualifiedName, RecordId
 from melloa.domain.events import EventEnvelope
 from melloa.domain.retention import (
     RetentionInventoryCoverage,
     RetentionInventoryStatus,
 )
-from melloa.ports.store import EventConflictError
+from melloa.ports.store import EventAuditQueryResult, EventConflictError
 
 _AUDIT_LOCK_ID = 5_281_102_019_001
 
@@ -130,4 +131,47 @@ class PostgresEventAuditStore:
             deletion_receipts=0,
             oldest_retained_at=oldest_retained_at,
             status_reason="retention.inventory.audit_event_store",
+        )
+
+    def list_events(
+        self,
+        *,
+        event_types: tuple[QualifiedName, ...],
+        subject_id: RecordId,
+        occurred_from: datetime,
+        occurred_before: datetime,
+        limit: int,
+    ) -> EventAuditQueryResult:
+        if not event_types:
+            return EventAuditQueryResult(events=(), matching_events=0)
+        count_row = self._connection.execute(
+            """
+            SELECT count(*)::bigint
+              FROM melloa.canonical_events
+             WHERE event_type = ANY(%s)
+               AND document->'subject_ids' ? %s
+               AND occurred_at >= %s
+               AND occurred_at < %s
+            """,
+            (list(event_types), subject_id, occurred_from, occurred_before),
+        ).fetchone()
+        matching_events = 0 if count_row is None else int(count_row[0])
+        if limit <= 0:
+            return EventAuditQueryResult(events=(), matching_events=matching_events)
+        rows = self._connection.execute(
+            """
+            SELECT document
+              FROM melloa.canonical_events
+             WHERE event_type = ANY(%s)
+               AND document->'subject_ids' ? %s
+               AND occurred_at >= %s
+               AND occurred_at < %s
+             ORDER BY occurred_at DESC, event_id DESC
+             LIMIT %s
+            """,
+            (list(event_types), subject_id, occurred_from, occurred_before, limit),
+        ).fetchall()
+        return EventAuditQueryResult(
+            events=tuple(EventEnvelope.model_validate(row[0]) for row in rows),
+            matching_events=matching_events,
         )

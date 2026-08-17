@@ -463,6 +463,31 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     )
     assert all("No external model" not in document for document in export_audit_documents)
     assert all("manifest.json" not in document for document in export_audit_documents)
+    timeline_after_export = client.get(
+        "/api/v1/inspection/timeline",
+        params={
+            "from": (fixed_time - timedelta(minutes=1)).isoformat(),
+            "to": (fixed_time + timedelta(minutes=1)).isoformat(),
+            "limit": 20,
+        },
+    )
+    assert timeline_after_export.status_code == 200
+    assert (
+        "timeline.coverage.owner-export-audit-projection"
+        in timeline_after_export.json()["coverage"]
+    )
+    export_timeline = next(
+        entry
+        for entry in timeline_after_export.json()["entries"]
+        if entry["kind"] == "timeline.audit.owner-export-preview-generated"
+    )
+    assert export_timeline["status"] == "audit.owner-export-preview.generated"
+    assert export_timeline["metadata"]["export_id"].startswith("export_")
+    assert export_timeline["metadata"]["source_event_id"] == export_audit_event.event_id
+    assert export_audit_event.event_id in export_timeline["references"]
+    assert "Please use my reading preference." not in timeline_after_export.text
+    assert "No external model" not in timeline_after_export.text
+    assert "manifest.json" not in timeline_after_export.text
 
     correction = client.post(
         f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",

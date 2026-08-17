@@ -21,22 +21,50 @@ const report: OwnerTimelineReport = {
   window_start: "2026-08-10T12:00:00Z",
   window_end: "2026-08-17T12:00:00Z",
   generated_at: "2026-08-17T12:00:00Z",
-  total_events: 4,
+  total_events: 5,
   matching_events: 9,
   truncated: true,
   coverage: [
     "timeline.coverage.canonical-conversation",
     "timeline.coverage.model-activity",
     "timeline.coverage.outbound-delivery",
+    "timeline.coverage.owner-export-audit-projection",
     "timeline.coverage.reply-processing",
   ],
   limitations: [
     "timeline.limit.current-mvp-canonical-records",
     "timeline.limit.newest-events-only",
+    "timeline.limit.no-auth-security-events",
     "timeline.limit.no-message-or-model-text",
-    "timeline.limit.no-process-local-auth-events",
   ],
   entries: [
+    {
+      event_id: "timeline_00000000000000000000000000000005",
+      kind: "timeline.audit.owner-export-preview-generated",
+      occurred_at: "2026-08-17T11:05:00Z",
+      source: "timeline.source.audit-ledger",
+      summary: "Owner export preview generated and audited.",
+      status: "audit.owner-export-preview.generated",
+      references: [
+        "export_000000000000000000000000000001",
+        "event_000000000000000000000000000001",
+      ],
+      metadata: {
+        export_id: "export_000000000000000000000000000001",
+        source_event_id: "event_000000000000000000000000000001",
+        format_id: "melloa.canonical-owner-export",
+        format_version: "1.0.0",
+        file_count: 12,
+        data_file_count: 8,
+        exported_record_count: 21,
+        limitation_count: 4,
+        encrypted: false,
+        includes_sql_snapshot: false,
+        includes_blobs: false,
+        message_text: "Synthetic prompt",
+        archive_path: "/tmp/melloa-owner-export/owner-export.zip",
+      },
+    },
     {
       event_id: "timeline_00000000000000000000000000000004",
       kind: "timeline.model-route.completed",
@@ -132,14 +160,17 @@ describe("TimelinePage", () => {
     );
 
     expect(await screen.findByText("Model route completed with external disclosure evidence.")).toBeInTheDocument();
+    expect(screen.getByText("Owner export preview generated and audited.")).toBeInTheDocument();
     expect(screen.getByText("Outbound delivery completed under exact authorization.")).toBeInTheDocument();
     expect(screen.getByText("Owner message accepted into canonical conversation.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All 4" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("4 newest shown")).toBeInTheDocument();
-    expect(screen.getByText("4 newest of 9")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All 5" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("5 newest shown")).toBeInTheDocument();
+    expect(screen.getByText("5 newest of 9")).toBeInTheDocument();
     expect(screen.queryByText("Synthetic prompt")).not.toBeInTheDocument();
+    expect(screen.queryByText("owner-export.zip")).not.toBeInTheDocument();
     expect(screen.getByText("Current Mvp Canonical Records")).toBeInTheDocument();
     expect(screen.getByText("Newest Events Only")).toBeInTheDocument();
+    expect(screen.getByText("Owner Export Audit Projection")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Model 1" }));
 
@@ -147,10 +178,22 @@ describe("TimelinePage", () => {
     expect(screen.getByText("provider.openai-codex-subscription")).toBeInTheDocument();
     expect(screen.queryByText("Outbound delivery completed under exact authorization.")).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Audit 1" }));
+
+    expect(screen.getByText("Owner export preview generated and audited.")).toBeInTheDocument();
+    expect(screen.getAllByText("export_00…000001")).toHaveLength(2);
+    expect(screen.getByText("Event event_000…000001")).toBeInTheDocument();
+    expect(screen.getByText("event_000…000001")).toBeInTheDocument();
+    expect(screen.getByText("12 files")).toBeInTheDocument();
+    expect(screen.getByText("21 records")).toBeInTheDocument();
+    expect(screen.getByText("Plaintext preview")).toBeInTheDocument();
+    expect(screen.queryByText("model.codex.subscription")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Model 1" }));
     fireEvent.click(screen.getByRole("button", {
-      name: `Open conversation ${report.entries[0]?.thread_id}`,
+      name: `Open conversation ${report.entries[1]?.thread_id}`,
     }));
-    expect(screen.getByText(`conversation-search=?turn=${report.entries[0]?.turn_id}`)).toBeInTheDocument();
+    expect(screen.getByText(`conversation-search=?turn=${report.entries[1]?.turn_id}`)).toBeInTheDocument();
   });
 
   it("opens referenced memory assertions from timeline evidence", async () => {
@@ -167,7 +210,7 @@ describe("TimelinePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Model 1" }));
     fireEvent.click(screen.getByRole("button", { name: "assertion…000001" }));
 
-    expect(screen.getByText(`memory-search=?assertion=${report.entries[0]?.references[1]}`)).toBeInTheDocument();
+    expect(screen.getByText(`memory-search=?assertion=${report.entries[1]?.references[1]}`)).toBeInTheDocument();
   });
 
   it("reloads timeline when the selected window changes", async () => {

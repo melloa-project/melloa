@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from melloa.domain.audit import AuditContent, AuditRecord, audit_record_hash
-from melloa.domain.base import JsonObject, QualifiedName, canonical_json_bytes
+from melloa.domain.base import JsonObject, QualifiedName, RecordId, canonical_json_bytes
 from melloa.domain.events import EventEnvelope
 from melloa.domain.retention import (
     RetentionInventoryCoverage,
     RetentionInventoryStatus,
 )
-from melloa.ports.store import EventConflictError
+from melloa.ports.store import EventAuditQueryResult, EventConflictError
 
 
 class InMemoryEventAuditStore:
@@ -72,4 +74,30 @@ class InMemoryEventAuditStore:
                 else min(record.content.occurred_at for record in self._audit_records)
             ),
             status_reason="retention.inventory.audit_event_store",
+        )
+
+    def list_events(
+        self,
+        *,
+        event_types: tuple[QualifiedName, ...],
+        subject_id: RecordId,
+        occurred_from: datetime,
+        occurred_before: datetime,
+        limit: int,
+    ) -> EventAuditQueryResult:
+        if not event_types:
+            return EventAuditQueryResult(events=(), matching_events=0)
+        selected = [
+            event
+            for event in self._events
+            if event.event_type in event_types
+            and subject_id in event.subject_ids
+            and occurred_from <= event.occurred_at < occurred_before
+        ]
+        selected.sort(key=lambda event: (event.occurred_at, event.event_id), reverse=True)
+        if limit <= 0:
+            return EventAuditQueryResult(events=(), matching_events=len(selected))
+        return EventAuditQueryResult(
+            events=tuple(selected[:limit]),
+            matching_events=len(selected),
         )

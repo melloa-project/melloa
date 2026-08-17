@@ -28,6 +28,7 @@ from melloa.domain.inspection import (
     OwnerTimelineReport,
 )
 from melloa.ports.conversation import CompletedConversationTurn, ConversationStore
+from melloa.ports.store import EventAuditStore
 
 _DEFAULT_WINDOW = timedelta(days=7)
 _MAXIMUM_WINDOW = timedelta(days=366)
@@ -50,11 +51,13 @@ class OwnerInspectionService:
         owner_id: RecordId,
         conversation_store: ConversationStore,
         delivery: DeliveryService | None = None,
+        event_audit_store: EventAuditStore | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._owner_id = owner_id
         self._conversation_store = conversation_store
         self._delivery = delivery
+        self._event_audit_store = event_audit_store
         self._clock = clock
 
     def model_activity(
@@ -107,9 +110,17 @@ class OwnerInspectionService:
         start = window_start or end - _DEFAULT_WINDOW
         self._validate_window(start, end)
         entries = list(self._timeline_entries(principal, start, end))
+        audit_entries: tuple[OwnerTimelineEvent, ...] = ()
+        audit_matching_events = 0
+        if self._event_audit_store is not None:
+            audit_entries, audit_matching_events = self._audit_timeline_entries(
+                window_start=start,
+                window_end=end,
+            )
+            entries.extend(audit_entries)
         entries.sort(key=lambda entry: (entry.occurred_at, entry.event_id), reverse=True)
         bounded = tuple(entries[:limit])
-        matching_events = len(entries)
+        matching_events = len(entries) + max(audit_matching_events - len(audit_entries), 0)
         truncated = matching_events > len(bounded)
         coverage: list[QualifiedName] = [
             "timeline.coverage.canonical-conversation",
@@ -118,11 +129,15 @@ class OwnerInspectionService:
         ]
         if self._delivery is not None:
             coverage.append("timeline.coverage.outbound-delivery")
+        if self._event_audit_store is not None:
+            coverage.append("timeline.coverage.owner-export-audit-projection")
         limitations: list[QualifiedName] = [
             "timeline.limit.current-mvp-canonical-records",
             "timeline.limit.no-message-or-model-text",
-            "timeline.limit.no-process-local-auth-events",
+            "timeline.limit.no-auth-security-events",
         ]
+        if self._event_audit_store is None:
+            limitations.append("timeline.limit.no-audit-event-store-configured")
         if self._delivery is None:
             limitations.append("timeline.limit.no-outbound-delivery-store-configured")
         if truncated:
@@ -408,6 +423,70 @@ class OwnerInspectionService:
             )
         return tuple(events)
 
+    def _audit_timeline_entries(
+        self,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> tuple[tuple[OwnerTimelineEvent, ...], int]:
+        if self._event_audit_store is None:
+            return (), 0
+        export_result = self._event_audit_store.list_events(
+            event_types=("export.owner-preview-generated.v1",),
+            subject_id=self._owner_id,
+            occurred_from=window_start,
+            occurred_before=window_end,
+            limit=_MAXIMUM_TIMELINE_LIMIT,
+        )
+        events: list[OwnerTimelineEvent] = []
+        for event in export_result.events:
+            export_id = _payload_text(event.payload, "export_id")
+            if export_id is None:
+                continue
+            events.append(
+                self._timeline_event(
+                    "timeline.audit.owner-export-preview-generated",
+                    record_id=event.event_id,
+                    occurred_at=event.occurred_at,
+                    source="timeline.source.audit-ledger",
+                    summary="Owner export preview generated and audited.",
+                    status="audit.owner-export-preview.generated",
+                    references=(export_id, event.event_id),
+                    metadata={
+                        "export_id": export_id,
+                        "source_event_id": event.event_id,
+                        "format_id": _payload_text(event.payload, "format_id"),
+                        "format_version": _payload_text(
+                            event.payload,
+                            "format_version",
+                        ),
+                        "file_count": _payload_int(event.payload, "file_count"),
+                        "data_file_count": _payload_int(
+                            event.payload,
+                            "data_file_count",
+                        ),
+                        "exported_record_count": _payload_int(
+                            event.payload,
+                            "exported_record_count",
+                        ),
+                        "limitation_count": _payload_int(
+                            event.payload,
+                            "limitation_count",
+                        ),
+                        "encrypted": _payload_bool(event.payload, "encrypted"),
+                        "includes_sql_snapshot": _payload_bool(
+                            event.payload,
+                            "includes_sql_snapshot",
+                        ),
+                        "includes_blobs": _payload_bool(
+                            event.payload,
+                            "includes_blobs",
+                        ),
+                    },
+                )
+            )
+        return tuple(events), export_result.matching_events
+
     def _timeline_event(
         self,
         kind: QualifiedName,
@@ -488,3 +567,18 @@ def _delivery_summary(state: DeliveryWorkState) -> str:
     if state is DeliveryWorkState.CANCELLED:
         return "Outbound delivery was cancelled."
     return "Outbound delivery is queued or waiting."
+
+
+def _payload_text(payload: JsonObject, key: str) -> str | None:
+    value = payload.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _payload_int(payload: JsonObject, key: str) -> int | None:
+    value = payload.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _payload_bool(payload: JsonObject, key: str) -> bool | None:
+    value = payload.get(key)
+    return value if isinstance(value, bool) else None

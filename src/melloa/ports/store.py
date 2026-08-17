@@ -1,15 +1,23 @@
 """Durable append ports for events and audit."""
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from melloa.domain.audit import AuditContent, AuditRecord
-from melloa.domain.base import QualifiedName
+from melloa.domain.base import QualifiedName, RecordId
 from melloa.domain.events import EventEnvelope
 from melloa.domain.retention import RetentionInventoryStatus
 
 
 class EventConflictError(RuntimeError):
     """An immutable event ID was reused with different content."""
+
+
+@dataclass(frozen=True)
+class EventAuditQueryResult:
+    events: tuple[EventEnvelope, ...]
+    matching_events: int
 
 
 class EventAuditStore(Protocol):
@@ -22,3 +30,14 @@ class EventAuditStore(Protocol):
         policy_id: QualifiedName = "retention.audit-ledger",
     ) -> RetentionInventoryStatus:
         """Return aggregate audit-ledger retention counts without exposing records."""
+
+    def list_events(
+        self,
+        *,
+        event_types: tuple[QualifiedName, ...],
+        subject_id: RecordId,
+        occurred_from: datetime,
+        occurred_before: datetime,
+        limit: int,
+    ) -> EventAuditQueryResult:
+        """Return owner-scoped canonical events and total matches for redacted projections."""

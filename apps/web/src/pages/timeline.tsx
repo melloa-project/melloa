@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Archive,
   ArrowUpRight,
   Bot,
   Boxes,
@@ -20,7 +21,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Metric, Sect
 import { formatCount, formatGbp, formatInstant, shortId, titleCase } from "../lib/format";
 
 type WindowOption = "24h" | "7d" | "30d";
-type TimelineFilter = "all" | "conversation" | "processing" | "delivery" | "model";
+type TimelineFilter = "all" | "conversation" | "processing" | "delivery" | "model" | "audit";
 
 const windows: ReadonlyArray<{ readonly value: WindowOption; readonly label: string; readonly hours: number }> = [
   { value: "24h", label: "24 hours", hours: 24 },
@@ -34,6 +35,7 @@ const filters: ReadonlyArray<{ readonly value: TimelineFilter; readonly label: s
   { value: "processing", label: "Processing" },
   { value: "delivery", label: "Delivery" },
   { value: "model", label: "Model" },
+  { value: "audit", label: "Audit" },
 ];
 
 export function TimelinePage() {
@@ -204,6 +206,11 @@ function TimelineRow({
   const costGbp = readNumber(entry.metadata, "cost_gbp");
   const externalDisclosure = readBoolean(entry.metadata, "external_disclosure");
   const adapter = readString(entry.metadata, "client_adapter");
+  const exportId = readString(entry.metadata, "export_id");
+  const sourceEventId = readString(entry.metadata, "source_event_id");
+  const fileCount = readNumber(entry.metadata, "file_count");
+  const exportedRecordCount = readNumber(entry.metadata, "exported_record_count");
+  const encrypted = readBoolean(entry.metadata, "encrypted");
 
   return (
     <article className={`timeline-row timeline-row-${group}`}>
@@ -230,6 +237,13 @@ function TimelineRow({
             <span>{externalDisclosure ? "External disclosure" : "Local/private route"}</span>
           )}
           {adapter === null ? null : <span><Send size={13} /> {adapter}</span>}
+          {exportId === null ? null : <span><Archive size={13} /> {shortId(exportId)}</span>}
+          {sourceEventId === null ? null : <span><FileText size={13} /> Event {shortId(sourceEventId)}</span>}
+          {fileCount === null ? null : <span>{fileCount.toLocaleString()} files</span>}
+          {exportedRecordCount === null ? null : <span>{exportedRecordCount.toLocaleString()} records</span>}
+          {encrypted === null ? null : (
+            <span>{encrypted ? "Encrypted package" : "Plaintext preview"}</span>
+          )}
         </div>
       </div>
       <div className="timeline-actions">
@@ -304,6 +318,9 @@ function eventGroup(entry: OwnerTimelineEvent): TimelineFilter {
   if (entry.kind.startsWith("timeline.model-route.")) {
     return "model";
   }
+  if (entry.kind.startsWith("timeline.audit.")) {
+    return "audit";
+  }
   return "conversation";
 }
 
@@ -325,6 +342,9 @@ function iconForEvent(entry: OwnerTimelineEvent) {
   if (group === "delivery") {
     return Send;
   }
+  if (group === "audit") {
+    return ShieldCheck;
+  }
   if (entry.kind === "timeline.conversation.thread-created") {
     return FileText;
   }
@@ -343,6 +363,9 @@ function toneForEvent(entry: OwnerTimelineEvent): "neutral" | "positive" | "warn
   }
   if (eventGroup(entry) === "model") {
     return "violet";
+  }
+  if (eventGroup(entry) === "audit") {
+    return "neutral";
   }
   return "info";
 }
