@@ -269,6 +269,9 @@ describe("OperationsPage retention view", () => {
     expect(within(retention).getAllByText("Deletion receipts")).toHaveLength(2);
     expect(within(retention).getByText("Owner Request")).toBeInTheDocument();
     expect(within(retention).getAllByText("Oldest retained")).toHaveLength(2);
+    fireEvent.click(within(retention).getByRole("button", { name: "Copy retention policy ID retention.owner-memory" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("retention.owner-memory"));
+    expect(mocks.notify).toHaveBeenCalledWith("Retention policy ID copied.", "success");
     expect(screen.getByText("Content-free audit ledger")).toBeInTheDocument();
     expect(screen.getByText("Audit records")).toBeInTheDocument();
     expect(screen.getByText("Security events are exposed here only as aggregate counts; credentials, cookies, tokens, prompts, and raw model output are not shown.")).toBeInTheDocument();

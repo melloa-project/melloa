@@ -28,11 +28,11 @@ d6f80be21c85b97fcf22b96fd1f71ce0b5c254eb2a69f89b489cc6d9009b282c  ./apps/web/src
 cb2904f6a5a4544af2f92a7f8390f0cf0dd75f9aff1e0101688c2ee8cf035c01  ./apps/web/src/pages/conversation.tsx
 43a0807292b01c143547ff56bb4718ef06f21b1d2ab418f05e375ec021c41b0b  ./apps/web/src/pages/login.tsx
 c0365fb5a50215241758d7cafe806a301e12b30d1e84616009cad3a702c3ec02  ./apps/web/src/pages/memory.tsx
-edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src/pages/operations.tsx
+9479d4e6a042eb5d194d170836212b46384cca21852c76ea96874d85517d9b3a  ./apps/web/src/pages/operations.tsx
 7c00c409b9ce89e257c1a54f620e580f4d79295f1f1b5e6de0dafd5d820f52f7  ./apps/web/src/pages/providers.tsx
 6e9bc31054099571d2fdb700cf342a009ea335eed0eb8c98846ad9f48a764893  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
-c0fd0bf08bf07c682d0444de0260ea1a744dd88991a7954cf943896dc4e73e0b  ./apps/web/src/styles.css
+e45157d379531195a0ab56a95c4f1839c3bfcd6567bb67d0ece8893b13d95eda  ./apps/web/src/styles.css
 55d282e48d557fc1483a2a46fdbdc00206df98395c069a504222a8500060c70f  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
@@ -41,7 +41,7 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
 89837ff5211508d1917a26bcb5a2d14c5bc4aaa85c1f236bf1cc5ada21496a81  ./apps/web/tests/login.test.tsx
 f7ddb45f51c311dea6a502334cf136768f860d80af24704a44445d1a73fc69bf  ./apps/web/tests/memory.test.tsx
-0a18d03ce451081e7edc4eea1cfb286f2c85cc99dfebda599ff4001ce75d3762  ./apps/web/tests/operations.test.tsx
+51e101fbcb36effc880797f888df93817315690c56c0027a159aa25e9f18ec1f  ./apps/web/tests/operations.test.tsx
 9bf5084cee1630e10b2f9fb3a47987124ba4c997da564cb3d26af6dc0cca5202  ./apps/web/tests/providers.test.tsx
 5c455056819d1581f07dae71710f5751743bfb95178c98a7c08f0353fae9e75a  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts

@@ -58,7 +58,7 @@ const emptySnapshot: OperationsSnapshot = {
 };
 
 export function OperationsPage() {
-  const { api } = useMelloa();
+  const { api, notify } = useMelloa();
   const [tab, setTab] = useState<OperationsTab>("health");
   const [snapshot, setSnapshot] = useState<OperationsSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
@@ -109,6 +109,17 @@ export function OperationsPage() {
       }
     });
   };
+  const copyRetentionPolicyId = async (policyId: string) => {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(policyId);
+      notify("Retention policy ID copied.", "success");
+    } catch {
+      notify("Retention policy ID copy failed.", "error");
+    }
+  };
 
   return (
     <div className="standard-page operations-page">
@@ -140,7 +151,7 @@ export function OperationsPage() {
 
       {tab === "health" ? <HealthView report={snapshot.health} /> : null}
       {tab === "media" ? <MediaView report={snapshot.media} /> : null}
-      {tab === "retention" ? <RetentionView report={snapshot.retention} /> : null}
+      {tab === "retention" ? <RetentionView onCopyPolicyId={(policyId) => void copyRetentionPolicyId(policyId)} report={snapshot.retention} /> : null}
       {tab === "export" ? <ExportView report={snapshot.exportReadiness} /> : null}
     </div>
   );
@@ -388,7 +399,13 @@ function MediaView({ report }: { readonly report: OwnerMediaCatalog | null }) {
   );
 }
 
-function RetentionView({ report }: { readonly report: OwnerRetentionReport | null }) {
+function RetentionView({
+  onCopyPolicyId,
+  report,
+}: {
+  readonly onCopyPolicyId: (policyId: string) => void;
+  readonly report: OwnerRetentionReport | null;
+}) {
   if (report === null) {
     return <Card><EmptyState icon={TimerReset} title="Retention report unavailable" description="The private core did not return policy coverage." /></Card>;
   }
@@ -424,7 +441,22 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
           const inventory = report.inventory.find((item) => item.policy_id === policy.policy_id);
           return (
             <Card className="retention-card" key={policy.policy_id}>
-              <div className="retention-card-header"><div><p className="eyebrow">{titleCase(policy.data_category)}</p><h2>{policy.summary}</h2></div><Badge tone={policy.automatic_expiry ? "positive" : "warning"}>{titleCase(policy.mode)}</Badge></div>
+              <div className="retention-card-header">
+                <div><p className="eyebrow">{titleCase(policy.data_category)}</p><h2>{policy.summary}</h2></div>
+                <div className="retention-card-actions">
+                  <button
+                    aria-label={`Copy retention policy ID ${policy.policy_id}`}
+                    className="retention-policy-copy"
+                    onClick={() => onCopyPolicyId(policy.policy_id)}
+                    title="Copy retention policy ID"
+                    type="button"
+                  >
+                    <code>{policy.policy_id}</code>
+                    <Copy aria-hidden="true" size={13} />
+                  </button>
+                  <Badge tone={policy.automatic_expiry ? "positive" : "warning"}>{titleCase(policy.mode)}</Badge>
+                </div>
+              </div>
               <dl className="detail-list">
                 <div><dt>Coverage</dt><dd>{titleCase(inventory?.coverage ?? "unknown")}</dd></div>
                 <div><dt>Retained</dt><dd>{formatInventoryObjects(inventory?.retained_objects)}</dd></div>
