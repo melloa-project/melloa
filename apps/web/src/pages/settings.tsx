@@ -81,6 +81,10 @@ export function SettingsPage() {
   }, [loadSessions, loadTelegram]);
 
   async function revokeOtherSessions() {
+    if (!canMutate) {
+      notify("Unlock owner changes before signing out other sessions.", "error");
+      return;
+    }
     setRevokingSessions(true);
     try {
       const result = await api.revokeOtherSessions();
@@ -98,6 +102,10 @@ export function SettingsPage() {
   async function confirmPairing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedCandidate === null) {
+      return;
+    }
+    if (!canMutate) {
+      notify("Unlock owner changes before confirming Telegram pairing.", "error");
       return;
     }
     const input = event.currentTarget.elements.namedItem("confirmation-code");
@@ -121,6 +129,10 @@ export function SettingsPage() {
 
   async function revokePairing() {
     if (telegram?.pairing === null || telegram?.pairing === undefined) {
+      return;
+    }
+    if (!canMutate) {
+      notify("Unlock owner changes before revoking Telegram pairing.", "error");
       return;
     }
     setRevoking(true);
@@ -268,7 +280,7 @@ export function SettingsPage() {
         title={`Sign out ${otherSessions.length} other ${otherSessions.length === 1 ? "session" : "sessions"}?`}
       >
         <div className="destructive-confirmation danger"><LockKeyhole size={19} /><p>Other browsers lose access immediately. This action requires recent owner authentication and cannot reveal or recover their opaque tokens.</p></div>
-        <div className="modal-actions"><Button onClick={() => setRevokeSessionsOpen(false)}>Cancel</Button><Button loading={revokingSessions} onClick={() => void revokeOtherSessions()} tone="danger">Sign out other sessions</Button></div>
+        <div className="modal-actions"><Button onClick={() => setRevokeSessionsOpen(false)}>Cancel</Button><Button disabled={!canMutate} loading={revokingSessions} onClick={() => void revokeOtherSessions()} tone="danger">Sign out other sessions</Button></div>
       </Modal>
 
       <Modal
@@ -281,7 +293,7 @@ export function SettingsPage() {
           <div className="pairing-target"><Smartphone size={18} /><span><strong>User {selectedCandidate === null ? "Unknown" : redactNumericIdentifier(selectedCandidate.telegram_user_id)}</strong><small>Chat {selectedCandidate === null ? "Unknown" : redactNumericIdentifier(selectedCandidate.telegram_chat_id)}</small></span></div>
           <label className="field-label" htmlFor="confirmation-code">Confirmation code</label>
           <input autoCapitalize="none" autoComplete="one-time-code" autoFocus className="text-input code-input" id="confirmation-code" inputMode="text" maxLength={128} minLength={20} name="confirmation-code" pattern="[A-Za-z0-9_-]{20,128}" required spellCheck={false} />
-          <div className="modal-actions"><Button onClick={() => setSelectedCandidate(null)} type="button">Cancel</Button><Button loading={confirming} tone="primary" type="submit">Confirm pairing</Button></div>
+          <div className="modal-actions"><Button onClick={() => setSelectedCandidate(null)} type="button">Cancel</Button><Button disabled={!canMutate} loading={confirming} tone="primary" type="submit">Confirm pairing</Button></div>
         </form>
       </Modal>
 
@@ -292,7 +304,7 @@ export function SettingsPage() {
         title="Revoke Telegram pairing?"
       >
         <div className="destructive-confirmation danger"><Unlink size={19} /><p>This preserves the audit record but removes the active owner-channel binding.</p></div>
-        <div className="modal-actions"><Button onClick={() => setRevokeOpen(false)}>Cancel</Button><Button loading={revoking} onClick={() => void revokePairing()} tone="danger">Revoke pairing</Button></div>
+        <div className="modal-actions"><Button onClick={() => setRevokeOpen(false)}>Cancel</Button><Button disabled={!canMutate} loading={revoking} onClick={() => void revokePairing()} tone="danger">Revoke pairing</Button></div>
       </Modal>
     </div>
   );

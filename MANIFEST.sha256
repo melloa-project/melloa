@@ -30,7 +30,7 @@ fe5acd1e584f66388dd3d95f2471a8067621d8895f78ef563a2b507a9d5a9d2d  ./apps/web/src
 cd4b0e25e5583fa0f10893e58c4f25de85c294eb849493ab4e3426f37d07832a  ./apps/web/src/pages/memory.tsx
 6673ce55e9e45ed9c9265f0bf9d3f4a8dadf895ab6f655f0429db2581e7a6c06  ./apps/web/src/pages/operations.tsx
 18f5144fd827be68237a2dc301e285bf7abcb548f08416472fe39d1b2813688e  ./apps/web/src/pages/providers.tsx
-ebf6b9c1362676da34b011d745f4429e8d7e8b0acc4cfd7733846859b97167f6  ./apps/web/src/pages/settings.tsx
+4f3c21b4e62fce2793a475b663335070bbaf8511fcc44fe704cae2f553816e57  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
 5abcc14fb5a6caeebec74afe46477e6de0cfa901b4a27a4775fbe223db191bad  ./apps/web/src/styles.css
 d477bd2ec0467e9e2c7889cbe227cfbce50a1c716c8cdb10224fe812be86c5f6  ./apps/web/tests/activity.test.tsx
@@ -41,7 +41,7 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 21f4383b3e39e1802e28555743e9d414d98c6f4d4fba28e0ccb2952d938c8393  ./apps/web/tests/memory.test.tsx
 8e2b56f5cb8808562e5acdf115e1c7a16c7a36becf7e8aad4073c544f0a5437f  ./apps/web/tests/operations.test.tsx
 2396a3e4df0a450b066375d689e0bf30a1ea067b89ded88bce1dab04fdd26b61  ./apps/web/tests/providers.test.tsx
-46915bab06bc981a863da2ad4ca9fe6da1518473040e45329c15fc46f451b23b  ./apps/web/tests/settings.test.tsx
+5e78a8594c696f7eee6d61bdfd525c26f82672b5d68590ea0cd3d6b741d1b01e  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
 b1627cab5c749f6abd12543b03808129a85e8ecafde6fd78e56a9fd405efa3d7  ./apps/web/tests/visual/current-mvp.mjs
@@ -121,7 +121,7 @@ ceceedca56a9accccdcc2753b4777c1459b0346a7b65786d961c1ae517b2aaad  ./docs/index.m
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
 2d1ef864609cb2fc96bf33e5aefe8cfebd25f2a8ccb2cc051331530f93a34d9f  ./docs/research/method-and-limitations.md
 fd9dd415102bb9d3335e0e2c430a1d1a24dd6bed0bc61fac591676296f5ee942  ./docs/research/primary-sources.md
-ae04259c01d76b10c4977fa2c5f8b8e5d2147ad77038fa9b53845b2832522471  ./docs/run-current-mvp.md
+851ccf04eaf6096a4780aa3aee33931d3c1d519a1481ca1a2a735a87f4fb5366  ./docs/run-current-mvp.md
 16abfa728e0566f3e89793756a6ae71cd8fc9ffc6d888e2c1ac5902cfe59d64d  ./infra/postgres/init/001_roles.sql
 b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f  ./migrations/0001_m0_foundation.sql
 90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2  ./migrations/0002_m1_conversation_retrieval.sql

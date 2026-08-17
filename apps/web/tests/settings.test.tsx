@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   confirmTelegramPairing: vi.fn(),
   revokeTelegramPairing: vi.fn(),
   notify: vi.fn(),
+  canMutate: true,
 }));
 
 vi.mock("../src/app", () => ({
@@ -44,16 +45,26 @@ vi.mock("../src/app", () => ({
       external_actions_enabled: true,
       public_ingress: false,
     },
-    canMutate: true,
+    canMutate: mocks.canMutate,
     notify: mocks.notify,
   }),
 }));
 
 describe("SettingsPage Telegram inspection", () => {
   beforeEach(() => {
-    for (const mock of Object.values(mocks)) {
+    for (const mock of [
+      mocks.activeSessions,
+      mocks.revokeOtherSessions,
+      mocks.inspectTelegramPairing,
+      mocks.inspectTelegramStatus,
+      mocks.listTelegramPairingCandidates,
+      mocks.confirmTelegramPairing,
+      mocks.revokeTelegramPairing,
+      mocks.notify,
+    ]) {
       mock.mockReset();
     }
+    mocks.canMutate = true;
     mocks.inspectTelegramStatus.mockResolvedValue({
       configured: true,
       adapter_id: "client.telegram.bot-api",
@@ -188,5 +199,74 @@ describe("SettingsPage Telegram inspection", () => {
     await waitFor(() => expect(mocks.revokeOtherSessions).toHaveBeenCalledOnce());
     expect(mocks.notify).toHaveBeenCalledWith("1 other session signed out.", "success");
     await waitFor(() => expect(screen.queryByText(/^Other browser · /i)).not.toBeInTheDocument());
+  });
+
+  it("disables modal mutations when recent owner authentication lapses", async () => {
+    const rendered = render(<SettingsPage />);
+
+    expect(await screen.findByText(/Bot API · Healthy/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm/i }));
+    expect(screen.getByRole("heading", { name: "Confirm Telegram owner" })).toBeInTheDocument();
+
+    mocks.canMutate = false;
+    rendered.rerender(<SettingsPage />);
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Confirm pairing" })).toBeDisabled();
+    fireEvent.submit(within(dialog).getByLabelText("Confirmation code").closest("form") as HTMLFormElement);
+
+    expect(mocks.confirmTelegramPairing).not.toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "Unlock owner changes before confirming Telegram pairing.",
+      "error",
+    );
+  });
+
+  it("keeps session revocation disabled when recent owner authentication lapses", async () => {
+    const rendered = render(<SettingsPage />);
+
+    expect(await screen.findByText("This browser")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out other sessions" }));
+    expect(screen.getByRole("heading", { name: "Sign out 1 other session?" })).toBeInTheDocument();
+
+    mocks.canMutate = false;
+    rendered.rerender(<SettingsPage />);
+
+    const dialog = screen.getByRole("dialog");
+    const revokeButton = within(dialog).getByRole("button", { name: "Sign out other sessions" });
+    expect(revokeButton).toBeDisabled();
+    fireEvent.click(revokeButton);
+
+    expect(mocks.revokeOtherSessions).not.toHaveBeenCalled();
+  });
+
+  it("keeps Telegram revocation disabled when recent owner authentication lapses", async () => {
+    mocks.inspectTelegramPairing.mockResolvedValue({
+      contract_version: "1.0.0",
+      pairing_id: "tgpairing_01",
+      candidate_id: "tgcandidate_01",
+      owner_id: "owner_01",
+      telegram_user_id: 123456789,
+      telegram_chat_id: 123456789,
+      confirmed_by_owner_id: "owner_01",
+      confirmed_at: "2026-08-16T12:02:00Z",
+      revoked_at: null,
+    });
+    mocks.listTelegramPairingCandidates.mockResolvedValue([]);
+    const rendered = render(<SettingsPage />);
+
+    expect(await screen.findByText("Paired")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke pairing" }));
+    expect(screen.getByRole("heading", { name: "Revoke Telegram pairing?" })).toBeInTheDocument();
+
+    mocks.canMutate = false;
+    rendered.rerender(<SettingsPage />);
+
+    const dialog = screen.getByRole("dialog");
+    const revokeButton = within(dialog).getByRole("button", { name: "Revoke pairing" });
+    expect(revokeButton).toBeDisabled();
+    fireEvent.click(revokeButton);
+
+    expect(mocks.revokeTelegramPairing).not.toHaveBeenCalled();
   });
 });
