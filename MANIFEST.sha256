@@ -20,7 +20,7 @@ b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/pac
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
 449dde05cc23c25373ca84911d27b9dbbabdf0af5b14600f3b801cb6190178c8  ./apps/web/src/api.ts
 48b9e58718fa6afacd92d5d8a400c0a9a46e5c17e6accd1087b1e2dff8123085  ./apps/web/src/app.tsx
-3d7c05c9c702aa3dbb5466943fe8135db8de85e050a2dd93c0c50c618a586bf1  ./apps/web/src/components/layout.tsx
+114aee3d587f5f37e8d06bb0c004dd2f57b748710b56a079710636c84133dcb9  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
@@ -38,6 +38,7 @@ b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tes
 a570169cf196c7b278d12049b072378cb1f47064203adf4e4d78413479fce6d6  ./apps/web/tests/app.test.ts
 e3fecab1ddb2ed5bbfa06013b5c04628a62cb7bcbd6ad16ff278feda8efc5fb6  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
+d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
 86ccb01e06f688517a28b54b714205a8c70b5f8e73ef526c49cfbdc241e8e1a2  ./apps/web/tests/login.test.tsx
 d76639bbc67c918cf11134780fdeffd84260e7b0e4647e50afefdea0626ed00c  ./apps/web/tests/memory.test.tsx
 0a18d03ce451081e7edc4eea1cfb286f2c85cc99dfebda599ff4001ce75d3762  ./apps/web/tests/operations.test.tsx

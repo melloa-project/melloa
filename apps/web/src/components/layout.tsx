@@ -19,7 +19,7 @@ import {
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { errorMessage, useMelloa } from "../app";
-import { formatRelative, shortId, titleCase } from "../lib/format";
+import { formatRelative, titleCase } from "../lib/format";
 import { Badge, Button, IconButton, Modal } from "./ui";
 
 const navigation = [
@@ -51,9 +51,14 @@ export function AppLayout() {
   const pageShellClassName = page?.to === "/conversation"
     ? "page-shell page-shell-conversation"
     : "page-shell page-shell-standard";
+  const recentAuthRelative = formatRelative(principal.reauthenticated_until);
+  const sessionExpiryRelative = formatRelative(principal.expires_at);
+  const mutationState = canMutate ? "changes unlocked" : "read only";
 
   useEffect(() => {
-    pageShellRef.current?.scrollTo({ left: 0, top: 0 });
+    if (typeof pageShellRef.current?.scrollTo === "function") {
+      pageShellRef.current.scrollTo({ left: 0, top: 0 });
+    }
   }, [location.pathname]);
 
   async function reauthenticate(event: FormEvent<HTMLFormElement>) {
@@ -107,9 +112,15 @@ export function AppLayout() {
           </div>
         </div>
 
-        <button className="owner-chip" type="button" onClick={() => setReauthOpen(true)}>
+        <button
+          aria-label={`Owner session: ${mutationState}; recent authentication ${recentAuthRelative}; session expires ${sessionExpiryRelative}`}
+          className="owner-chip"
+          title={`Owner ${principal.owner_id}`}
+          type="button"
+          onClick={() => setReauthOpen(true)}
+        >
           <CircleUserRound aria-hidden="true" size={20} />
-          <span><strong>Owner</strong><small>{shortId(principal.owner_id)}</small></span>
+          <span><strong>Owner</strong><small>Recent auth {recentAuthRelative}</small></span>
           <Badge tone={canMutate ? "positive" : "warning"}>
             {canMutate ? "Unlocked" : "Read only"}
           </Badge>
@@ -207,7 +218,7 @@ export function AppLayout() {
       </Modal>
 
       <div className="sr-only" aria-live="polite">
-        Session expires {formatRelative(principal.expires_at)}.
+        Recent authentication {recentAuthRelative}. Session expires {sessionExpiryRelative}.
       </div>
     </div>
   );
