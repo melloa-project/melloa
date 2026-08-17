@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   createObjectUrl: vi.fn(),
   revokeObjectUrl: vi.fn(),
   anchorClick: vi.fn(),
+  canMutate: true,
 }));
 
 vi.mock("../src/app", () => ({
@@ -25,16 +26,27 @@ vi.mock("../src/app", () => ({
       exportReadiness: mocks.exportReadiness,
       downloadExportPreview: mocks.downloadExportPreview,
     },
-    canMutate: true,
+    canMutate: mocks.canMutate,
     notify: mocks.notify,
   }),
 }));
 
 describe("OperationsPage retention view", () => {
   beforeEach(() => {
-    for (const mock of Object.values(mocks)) {
+    for (const mock of [
+      mocks.healthDetail,
+      mocks.mediaCatalog,
+      mocks.retentionReport,
+      mocks.exportReadiness,
+      mocks.downloadExportPreview,
+      mocks.notify,
+      mocks.createObjectUrl,
+      mocks.revokeObjectUrl,
+      mocks.anchorClick,
+    ]) {
       mock.mockReset();
     }
+    mocks.canMutate = true;
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: {
@@ -408,5 +420,21 @@ describe("OperationsPage retention view", () => {
       "Validated unencrypted export downloaded.",
       "success",
     );
+  });
+
+  it("does not start a live export download when recent owner authentication lapses", async () => {
+    const rendered = render(<OperationsPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
+    expect(screen.getByRole("button", { name: "Download current ZIP" })).toBeEnabled();
+
+    mocks.canMutate = false;
+    rendered.rerender(<OperationsPage />);
+
+    const downloadButton = screen.getByRole("button", { name: "Download current ZIP" });
+    expect(downloadButton).toBeDisabled();
+    fireEvent.click(downloadButton);
+
+    expect(mocks.downloadExportPreview).not.toHaveBeenCalled();
   });
 });

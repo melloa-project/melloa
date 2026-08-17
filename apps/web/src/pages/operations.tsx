@@ -468,6 +468,10 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
     }
   };
   const downloadCurrentExport = async () => {
+    if (!canMutate) {
+      notify("Unlock owner changes before downloading the current export.", "error");
+      return;
+    }
     setDownloading(true);
     try {
       const archive = await api.downloadExportPreview();
