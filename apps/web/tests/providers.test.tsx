@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -135,4 +135,63 @@ describe("ProvidersPage", () => {
     expect(selectedCard).toHaveAttribute("aria-current", "true");
     expect(within(selectedCard as HTMLElement).getByText("model.codex.subscription")).toBeInTheDocument();
   });
+
+  it("keeps the latest provider refresh when an older request resolves last", async () => {
+    const stale = deferred<OwnerModelRouteReport>();
+    const latest = deferred<OwnerModelRouteReport>();
+    const localRoute = report.routes[0];
+    const codexRoute = report.routes[1];
+    if (localRoute === undefined || codexRoute === undefined) {
+      throw new Error("Provider refresh race test requires local and Codex routes.");
+    }
+    mocks.modelRoutes.mockReset();
+    mocks.modelRoutes.mockReturnValueOnce(stale.promise).mockReturnValueOnce(latest.promise);
+
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh health/i }));
+
+    await act(async () => {
+      latest.resolve({
+        ...report,
+        routes: [codexRoute],
+      });
+      await latest.promise;
+    });
+
+    expect(await screen.findAllByText("Codex subscription route")).not.toHaveLength(0);
+
+    await act(async () => {
+      stale.resolve({
+        ...report,
+        routes: [localRoute],
+      });
+      await stale.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Local Qwen through Ollama")).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Codex subscription route")).not.toHaveLength(0);
+  });
 });
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}

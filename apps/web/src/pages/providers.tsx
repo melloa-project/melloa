@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bot,
   CheckCircle2,
@@ -28,17 +28,29 @@ export function ProvidersPage() {
   const [report, setReport] = useState<OwnerModelRouteReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadRequestRef = useRef(0);
   const selectedRouteId = searchParams.get("route");
 
   const load = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     setLoading(true);
     try {
-      setReport(await api.modelRoutes());
+      const nextReport = await api.modelRoutes();
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
+      setReport(nextReport);
       setError(null);
     } catch (caught) {
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
       setError(errorMessage(caught));
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [api]);
 

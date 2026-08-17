@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -199,7 +199,69 @@ describe("ActivityPage", () => {
     const [start, end] = mocks.modelActivity.mock.calls[1] as [Date, Date];
     expect((end.getTime() - start.getTime()) / (60 * 60 * 1_000)).toBe(24);
   });
+
+  it("keeps the latest activity refresh when an older request resolves last", async () => {
+    const stale = deferred<ModelActivityReport>();
+    const latest = deferred<ModelActivityReport>();
+    mocks.modelActivity.mockReset();
+    mocks.modelActivity.mockReturnValueOnce(stale.promise).mockReturnValueOnce(latest.promise);
+
+    render(
+      <MemoryRouter>
+        <ActivityPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+
+    await act(async () => {
+      latest.resolve({
+        ...report,
+        total_runs: 1,
+        external_disclosure_runs: 1,
+        total_input_tokens: externalEntry.input_tokens,
+        total_output_tokens: externalEntry.output_tokens,
+        entries: [externalEntry],
+      });
+      await latest.promise;
+    });
+
+    expect(await screen.findByText("gpt-5.3-codex")).toBeInTheDocument();
+
+    await act(async () => {
+      stale.resolve({
+        ...report,
+        total_runs: 1,
+        external_disclosure_runs: 0,
+        total_input_tokens: localEntry.input_tokens,
+        total_output_tokens: localEntry.output_tokens,
+        entries: [localEntry],
+      });
+      await stale.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("qwen3:8b")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
+  });
 });
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
 
 function MemoryLocation() {
   const location = useLocation();

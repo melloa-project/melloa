@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   Bot,
@@ -43,19 +43,31 @@ export function ActivityPage() {
   const [report, setReport] = useState<ModelActivityReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     const selectedHours = windowOption === "24h" ? 24 : windowOption === "30d" ? 24 * 30 : 24 * 7;
     setLoading(true);
     try {
       const end = new Date();
       const start = new Date(end.getTime() - selectedHours * 60 * 60 * 1_000);
-      setReport(await api.modelActivity(start, end));
+      const nextReport = await api.modelActivity(start, end);
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
+      setReport(nextReport);
       setError(null);
     } catch (caught) {
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
       setError(errorMessage(caught));
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [api, windowOption]);
 
