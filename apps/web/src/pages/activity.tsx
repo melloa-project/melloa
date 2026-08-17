@@ -200,6 +200,7 @@ function ActivityRow({
   const started = Date.parse(entry.started_at);
   const completed = Date.parse(entry.completed_at);
   const latency = Number.isFinite(started) && Number.isFinite(completed) ? completed - started : 0;
+  const synthetic = isSyntheticActivityEntry(entry);
 
   return (
     <article className="activity-row">
@@ -216,8 +217,8 @@ function ActivityRow({
         <span><Coins size={14} /> {formatGbp(entry.cost_gbp)}</span>
         <span><Timer size={14} /> {formatDurationMs(latency)}</span>
       </div>
-      <Badge tone={entry.external_disclosure ? "warning" : "positive"}>
-        {entry.external_disclosure ? "External" : "Local"}
+      <Badge tone={entry.external_disclosure ? "warning" : synthetic ? "violet" : "positive"}>
+        {entry.external_disclosure ? "External" : synthetic ? "Synthetic fixture" : "Local"}
       </Badge>
       <div className="activity-time">
         <strong>{formatInstant(entry.completed_at)}</strong>
@@ -244,6 +245,10 @@ function ActivityRow({
       <ActivityDisclosure entry={entry} onInspectMemory={onInspectMemory} />
     </article>
   );
+}
+
+function isSyntheticActivityEntry(entry: ModelActivityEntry): boolean {
+  return entry.provider_id === "provider.synthetic" || entry.route_id.startsWith("model.fake.");
 }
 
 function ActivityDisclosure({

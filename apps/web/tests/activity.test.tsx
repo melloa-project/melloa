@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -74,6 +74,22 @@ const externalEntry: ModelActivityEntry = {
       },
     ],
   },
+};
+
+const syntheticEntry: ModelActivityEntry = {
+  turn_id: "turn_synthetic_0000000000000000000001",
+  thread_id: "thread_synthetic_01",
+  result_id: "result_synthetic_000000000000000001",
+  request_id: "request_synthetic_000000000000000001",
+  route_id: "model.fake.deterministic",
+  provider_id: "provider.synthetic",
+  model_id: "deterministic-fixture-v1",
+  input_tokens: 64,
+  output_tokens: 24,
+  cost_gbp: 0,
+  started_at: "2026-08-16T12:07:00Z",
+  completed_at: "2026-08-16T12:07:00.050Z",
+  external_disclosure: false,
 };
 
 const report: ModelActivityReport = {
@@ -183,6 +199,30 @@ describe("ActivityPage", () => {
     expect(screen.queryByText("gpt-5.3-codex")).not.toBeInTheDocument();
     expect(screen.queryByText("assertion…000001")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Local 1" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("labels deterministic synthetic activity as a fixture instead of real local model work", async () => {
+    mocks.modelActivity.mockResolvedValue({
+      ...report,
+      total_runs: 1,
+      external_disclosure_runs: 0,
+      total_input_tokens: syntheticEntry.input_tokens,
+      total_output_tokens: syntheticEntry.output_tokens,
+      entries: [syntheticEntry],
+    });
+
+    render(
+      <MemoryRouter>
+        <ActivityPage />
+      </MemoryRouter>,
+    );
+
+    const model = await screen.findByText("deterministic-fixture-v1");
+    const row = model.closest(".activity-row");
+    expect(row).toBeInstanceOf(HTMLElement);
+    expect(within(row as HTMLElement).getByText("Synthetic fixture")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("Local")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Local 1" })).toBeInTheDocument();
   });
 
   it("reloads activity when the selected window changes", async () => {
