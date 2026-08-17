@@ -701,7 +701,12 @@ export function ConversationPage() {
             />
           ) : null}
           {!inspectionLoading && selectedProcessing !== null ? (
-            <ProcessingInspector canMutate={canMutate} status={selectedProcessing} onResume={() => void resumeMessage(selectedProcessing)} />
+            <ProcessingInspector
+              canMutate={canMutate}
+              onCopyProcessingId={(label, id) => void copyTurnLedgerId(label, id)}
+              onResume={() => void resumeMessage(selectedProcessing)}
+              status={selectedProcessing}
+            />
           ) : null}
           {!inspectionLoading && selectedDelivery !== null ? (
             <DeliveryInspector
@@ -1090,10 +1095,12 @@ function deliveryAttemptReceiptSummary(adapterReceipt: unknown, executionReceipt
 
 function ProcessingInspector({
   canMutate,
+  onCopyProcessingId,
   status,
   onResume,
 }: {
   readonly canMutate: boolean;
+  readonly onCopyProcessingId: (label: string, id: string) => void;
   readonly status: ConversationProcessingStatus;
   readonly onResume: () => void;
 }) {
@@ -1106,7 +1113,8 @@ function ProcessingInspector({
       <section className="inspector-section">
         <h3>Recovery state</h3>
         <dl className="detail-list">
-          <div><dt>Work</dt><dd>{shortId(status.work_id)}</dd></div>
+          <div><dt>Work</dt><dd><CopyableProcessingId id={status.work_id} label="Processing work" onCopy={onCopyProcessingId} /></dd></div>
+          <div><dt>Message</dt><dd><CopyableProcessingId id={status.message_id} label="Processing message" onCopy={onCopyProcessingId} /></dd></div>
           <div><dt>Last error</dt><dd>{status.last_error_code ?? "None"}</dd></div>
           <div><dt>Available</dt><dd>{formatInstant(status.available_at)}</dd></div>
           <div><dt>Resumptions</dt><dd>{status.resumptions.length}</dd></div>
@@ -1118,11 +1126,71 @@ function ProcessingInspector({
         {status.attempts.length === 0 ? <p className="muted-copy">No attempt has started yet.</p> : status.attempts.map((attempt) => (
           <div className="attempt-row" key={attempt.attempt_id}>
             <Clock3 size={15} />
-            <span><strong>Attempt {attempt.attempt}</strong><small>{titleCase(attempt.outcome)} · {attempt.error_code ?? "no error"}</small></span>
+            <span>
+              <strong>Attempt {attempt.attempt}</strong>
+              <small>{titleCase(attempt.outcome)} · {attempt.error_code ?? "no error"}</small>
+              <ProcessingAttemptCopyList attempt={attempt} onCopy={onCopyProcessingId} />
+            </span>
           </div>
         ))}
       </section>
       <details className="raw-details"><summary>Raw redacted status</summary><pre>{safeJson(status)}</pre></details>
     </div>
+  );
+}
+
+function CopyableProcessingId({
+  id,
+  label,
+  onCopy,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly onCopy: (label: string, id: string) => void;
+}) {
+  return (
+    <button
+      aria-label={`Copy ${label} ID ${id}`}
+      className="ledger-id-copy"
+      onClick={() => onCopy(label, id)}
+      title={id}
+      type="button"
+    >
+      <code>{shortId(id)}</code>
+      <Copy aria-hidden="true" size={12} />
+    </button>
+  );
+}
+
+function ProcessingAttemptCopyList({
+  attempt,
+  onCopy,
+}: {
+  readonly attempt: ConversationProcessingStatus["attempts"][number];
+  readonly onCopy: (label: string, id: string) => void;
+}) {
+  const routeIds = asObjectArray(attempt.model_route_attempts)
+    .map((routeAttempt) => routeAttempt.route_id)
+    .filter((routeId): routeId is string => typeof routeId === "string" && routeId.length > 0);
+  const values = [
+    { label: "Processing attempt", id: attempt.attempt_id },
+    { label: "Processing attempt work", id: attempt.work_id },
+    { label: "Processing attempt message", id: attempt.message_id },
+    attempt.request_id === null || attempt.request_id === undefined ? null : { label: "Model request", id: attempt.request_id },
+    attempt.retrieval_manifest_id === null || attempt.retrieval_manifest_id === undefined ? null : { label: "Retrieval manifest", id: attempt.retrieval_manifest_id },
+    ...routeIds.map((routeId, index) => ({ label: `Route attempt ${index + 1}`, id: routeId })),
+  ].filter((item): item is { readonly label: string; readonly id: string } => item !== null);
+
+  return (
+    <span className="attempt-id-list">
+      {values.map((item) => (
+        <CopyableProcessingId
+          id={item.id}
+          key={`${item.label}-${item.id}`}
+          label={item.label}
+          onCopy={onCopy}
+        />
+      ))}
+    </span>
   );
 }

@@ -1598,6 +1598,7 @@ pre {
   flex: 0 0 auto;
 }
 
+.attempt-id-list,
 .delivery-attempt-id-list {
   display: flex;
   flex-wrap: wrap;

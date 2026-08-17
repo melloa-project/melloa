@@ -150,11 +150,13 @@ const deadProcessing: ConversationProcessingStatus = {
       work_id: processing.work_id,
       message_id: ownerMessage.message_id,
       attempt: 3,
+      request_id: "request_dead_000000000000000000000001",
       outcome: "dead",
       error_code: "model.route.exhausted",
       started_at: "2026-08-16T12:00:01Z",
       completed_at: "2026-08-16T12:00:02Z",
-      model_route_attempts: [],
+      retrieval_manifest_id: "retrieval_manifest_dead_000000000001",
+      model_route_attempts: [{ route_id: "model.local.qwen", outcome: "failed", processing_location: "device" }],
       disclosed_memory_ids: [],
       external_disclosure: false,
     },
@@ -614,6 +616,47 @@ describe("ConversationPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear turn link" }));
     await waitFor(() => expect(screen.queryByText("Requested turn is not in this thread")).not.toBeInTheDocument());
     expect(screen.getByText("conversation-search=")).toBeInTheDocument();
+  });
+
+  it("copies exact processing recovery ids before bounded reply resumption", async () => {
+    mocks.listProcessing.mockResolvedValue([deadProcessing]);
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const ownerPrompt = await screen.findByText("What should I focus on?");
+    fireEvent.click(ownerPrompt.closest("button") as HTMLButtonElement);
+
+    expect(await screen.findByRole("heading", { name: "Processing" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Copy Processing work ID ${deadProcessing.work_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(deadProcessing.work_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Processing work ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy Processing message ID ${deadProcessing.message_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(deadProcessing.message_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Processing message ID copied.", "success");
+
+    const attempt = deadProcessing.attempts[0];
+    if (attempt === undefined) {
+      throw new Error("deadProcessing fixture must include an attempt");
+    }
+    fireEvent.click(screen.getByRole("button", { name: `Copy Processing attempt ID ${attempt.attempt_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(attempt.attempt_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Processing attempt ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy Model request ID ${attempt.request_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(attempt.request_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Model request ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy Retrieval manifest ID ${attempt.retrieval_manifest_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(attempt.retrieval_manifest_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Retrieval manifest ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Route attempt 1 ID model.local.qwen" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("model.local.qwen"));
+    expect(mocks.notify).toHaveBeenCalledWith("Route attempt 1 ID copied.", "success");
   });
 
   it("shows outbound delivery authority and resumes dead delivery work", async () => {
