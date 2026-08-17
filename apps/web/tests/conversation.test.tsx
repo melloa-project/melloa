@@ -88,9 +88,9 @@ const turn: ConversationTurn = {
   triggering_message_ids: [ownerMessage.message_id],
   evidence_ids: ["citation_01"],
   model_run_ids: ["result_01"],
-  policy_decision_ids: [],
-  proposed_action_ids: [],
-  executed_action_ids: [],
+  policy_decision_ids: ["decision_01"],
+  proposed_action_ids: ["proposal_01"],
+  executed_action_ids: ["action_01"],
   output_message_ids: [outputMessage.message_id],
   decision_record: {
     summary: "Responded without proposing an external action.",
@@ -246,6 +246,15 @@ describe("ConversationPage", () => {
     expect(screen.getByText("No external disclosure")).toBeInTheDocument();
     expect(screen.getByText("assertion_01")).toBeInTheDocument();
     expect(screen.getByText("£0.00")).toBeInTheDocument();
+    expect(screen.getByText("Turn ledger")).toBeInTheDocument();
+    expect(screen.getByText("Triggering messages")).toBeInTheDocument();
+    expect(screen.getByText(ownerMessage.message_id)).toBeInTheDocument();
+    expect(screen.getByText("Policy decisions")).toBeInTheDocument();
+    expect(screen.getByText("decision_01")).toBeInTheDocument();
+    expect(screen.getByText("Proposed actions")).toBeInTheDocument();
+    expect(screen.getByText("proposal_01")).toBeInTheDocument();
+    expect(screen.getByText("Executed actions")).toBeInTheDocument();
+    expect(screen.getByText("action_01")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Plan the next step." } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));

@@ -588,6 +588,24 @@ function DeliveryPill({
   );
 }
 
+type TurnLedgerRow = {
+  readonly label: string;
+  readonly ids: readonly string[];
+};
+
+function turnLedgerRows(turn: ConversationTurn): readonly TurnLedgerRow[] {
+  return [
+    { label: "Turn", ids: [turn.turn_id] },
+    { label: "Triggering messages", ids: turn.triggering_message_ids },
+    { label: "Model runs", ids: turn.model_run_ids },
+    { label: "Evidence records", ids: turn.evidence_ids },
+    { label: "Policy decisions", ids: turn.policy_decision_ids },
+    { label: "Proposed actions", ids: turn.proposed_action_ids },
+    { label: "Executed actions", ids: turn.executed_action_ids },
+    { label: "Output messages", ids: turn.output_message_ids },
+  ];
+}
+
 export function TurnInspector({
   inspection,
   onInspectMemory,
@@ -598,6 +616,8 @@ export function TurnInspector({
   const metadata = turnMetadata(inspection);
   const citations = asObjectArray(inspection.retrieval_manifest.citations);
   const decision = inspection.turn.decision_record;
+  const ledgerRows = turnLedgerRows(inspection.turn);
+  const ledgerCount = ledgerRows.reduce((total, row) => total + row.ids.length, 0);
   const synthetic = metadata.providerId === "provider.synthetic";
   const codexCli = metadata.providerId === "provider.openai-codex-subscription";
   return (
@@ -625,6 +645,20 @@ export function TurnInspector({
         <div><Zap size={15} /><span>Tokens</span><strong>{codexCli ? "Unreported" : metadata.inputTokens + metadata.outputTokens}</strong></div>
       </section>
       {codexCli ? <p className="usage-metadata-note">Codex CLI does not report per-call token usage here. Subscription fees are not represented as per-call cost.</p> : null}
+
+      <section className="inspector-section">
+        <div className="inspector-section-title"><h3>Turn ledger</h3><Badge tone={ledgerCount > 0 ? "violet" : "neutral"}>{ledgerCount} IDs</Badge></div>
+        <div className="turn-ledger-list">
+          {ledgerRows.map((row) => (
+            <div className="turn-ledger-row" key={row.label}>
+              <span><strong>{row.label}</strong><small>{row.ids.length} recorded</small></span>
+              <div>
+                {row.ids.length === 0 ? <em>None recorded</em> : row.ids.map((id) => <code key={id}>{shortId(id)}</code>)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="inspector-section">
         <div className="inspector-section-title"><h3>Evidence</h3><Badge tone={citations.length > 0 ? "violet" : "neutral"}>{citations.length} retrieved</Badge></div>
