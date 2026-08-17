@@ -30,6 +30,7 @@ from melloa.domain.telegram import (
     TelegramInboundMessage,
     TelegramInboundUpdate,
 )
+from melloa.ports.memory import AssertionContentDeletionWrite
 
 _BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
 
@@ -90,6 +91,76 @@ def test_mvp_runtime_exposes_partial_durable_store_boundaries(fixed_time) -> Non
     assert components["storage.postgresql-canonical"]["state"] == "healthy"
     assert components["storage.process-local-control-state"]["state"] == "degraded"
     assert components["backup.not-configured"]["state"] == "disabled"
+
+
+def test_mvp_runtime_preserves_deleted_durable_seed_inspection(fixed_time) -> None:
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.durable-deletion-preview",
+        ),
+        receipt_hash="sha256:" + "1" * 64,
+    )
+    assertion = synthetic_seed_assertion(fixed_time)
+    memory_store = InMemoryMemoryRepository((assertion,))
+    deletion = memory_store.delete_assertion_content(
+        AssertionContentDeletionWrite(
+            assertion_id=assertion.assertion_id,
+            owner_id=assertion.subject_id,
+            tombstone_id="deletion_00000000000000000000000000000001",
+            rebuild_work_id="work_00000000000000000000000000000001",
+            deleted_by_record_id=assertion.subject_id,
+            deleted_at=fixed_time,
+            reason_code="memory.assertion-content-owner-deleted",
+        )
+    )
+    stores = DurableRuntimeStores(
+        seeded_at=fixed_time,
+        conversation_store=InMemoryConversationStore(),
+        memory_store=memory_store,
+        delivery_store=InMemoryDeliveryStore(),
+        database_health_reader=lambda: ComponentHealth(
+            component_id="database.postgresql-mvp",
+            category=HealthCategory.DATABASE,
+            state=HealthState.HEALTHY,
+            required=True,
+            observed_at=fixed_time,
+            summary="Private PostgreSQL is healthy.",
+            version="18.0",
+        ),
+        status=RuntimePersistenceStatus(
+            mode="postgresql-partial-preview",
+            durable_state=("memory assertions",),
+            ephemeral_state=("authentication sessions",),
+        ),
+    )
+
+    runtime = build_mvp_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        durable_stores=stores,
+        clock=lambda: fixed_time,
+    )
+
+    with TestClient(runtime.app, base_url="https://testserver") as client:
+        login = client.post(
+            "/api/v1/auth/session",
+            json={"credential": _BOOTSTRAP_TOKEN},
+        )
+        assert login.status_code == 200
+        response = client.get(f"/api/v1/memory/{assertion.assertion_id}")
+
+    assert response.status_code == 200
+    inspection = response.json()
+    assert inspection["content_state"] == "deleted"
+    assert inspection["assertion"]["assertion_id"] == assertion.assertion_id
+    assert "value" not in inspection["assertion"]
+    assert inspection["deletion_tombstone"]["tombstone_id"] == (
+        deletion.tombstone.tombstone_id
+    )
 
 
 def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(

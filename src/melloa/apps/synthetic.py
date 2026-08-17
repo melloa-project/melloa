@@ -56,7 +56,7 @@ from melloa.apps.core import create_app
 from melloa.domain.base import JsonObject, QualifiedName, RecordId, new_record_id, utc_now
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import ConversationThread
-from melloa.domain.memory import Assertion, AssertionStatus
+from melloa.domain.memory import Assertion, AssertionMetadata, AssertionStatus
 from melloa.domain.models import (
     ModelRouteKind,
     ModelRouteRequest,
@@ -85,7 +85,7 @@ from melloa.ports.client import ClientAdapter
 from melloa.ports.conversation import ConversationNotFoundError, ConversationStore
 from melloa.ports.delivery import DeliveryStore
 from melloa.ports.guardian import GuardianStatusReader
-from melloa.ports.memory import MemoryStore
+from melloa.ports.memory import MemoryNotFoundError, MemoryStore
 from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import (
     TelegramPairingChallengePublisher,
@@ -218,8 +218,7 @@ def build_synthetic_runtime(
         conversation_store = durable_stores.conversation_store
         delivery_store = durable_stores.delivery_store
         persistence = durable_stores.status
-        if memory_store.get_assertion(assertion.assertion_id) != assertion:
-            raise ValueError("durable runtime seed assertion conflicts with canonical data")
+        _ensure_runtime_seed_assertion(memory_store, assertion)
     _ensure_runtime_thread(
         conversation_store,
         ConversationThread(
@@ -614,6 +613,34 @@ def _ensure_runtime_thread(
         return
     if existing.model_copy(update={"updated_at": expected.updated_at}) != expected:
         raise ValueError("runtime Telegram thread conflicts with canonical data")
+
+
+def _ensure_runtime_seed_assertion(
+    memory_store: MemoryStore,
+    expected: Assertion,
+) -> None:
+    conflict_message = "durable runtime seed assertion conflicts with canonical data"
+    expected_metadata = AssertionMetadata.model_validate(
+        expected.model_dump(mode="python", exclude={"value"})
+    )
+    try:
+        persisted_metadata = memory_store.get_assertion_metadata(expected.assertion_id)
+    except MemoryNotFoundError as error:
+        raise ValueError(conflict_message) from error
+    if persisted_metadata != expected_metadata:
+        raise ValueError(conflict_message)
+    try:
+        deletion = memory_store.get_assertion_content_deletion(expected.assertion_id)
+    except MemoryNotFoundError as error:
+        raise ValueError(conflict_message) from error
+    if deletion is not None:
+        return
+    try:
+        persisted = memory_store.get_assertion(expected.assertion_id)
+    except MemoryNotFoundError as error:
+        raise ValueError(conflict_message) from error
+    if persisted != expected:
+        raise ValueError(conflict_message)
 
 
 def _runtime_persistence_components(

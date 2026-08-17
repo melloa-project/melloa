@@ -221,7 +221,7 @@ f6fb42e0905a5a8664e7fbb57e95307dd03b9c2042ac439e4a15c59c78608de9  ./src/melloa/a
 88d5c75abd5433c33ac871778efacb5b0cd72c6633b891fa36262ea59fef1ca1  ./src/melloa/apps/core.py
 f69f77cb917da49f776e671d1b57fd4396e07cd59b8a6e84bd6fe96fc70d70b1  ./src/melloa/apps/mvp.py
 2e2e2da9e10ce4da7650220e3a357e8bea69cb1c1cbebb3a8098d40c004178b1  ./src/melloa/apps/postgres_mvp.py
-864384aced8cfe3c80cae0ca0e55aa133c35c32194b99d1e0b00cd45686566bd  ./src/melloa/apps/synthetic.py
+4b87b2b723c742f408af0d2a276adf0e001047bc59a635ab93cb08892a43f314  ./src/melloa/apps/synthetic.py
 79db23448138546ff5c1edfbcd3c9fd3458b69c2a0fff2f498a590b23466c8ef  ./src/melloa/domain/__init__.py
 694eac11a7ee2ddad1fb059c1d237f2575d4793a4a52bdb97d0463c63bfdbefb  ./src/melloa/domain/audit.py
 751c6a6eafcc1228f98d221d903b27a593944af868db9c614d47915ce02a0d62  ./src/melloa/domain/auth.py
@@ -284,7 +284,7 @@ e3c6307e8f7187b22cde9116cd723cd439e3e21733d9cc7903c4dda108b92e65  ./tests/unit/t
 0117b58bb8114cb0fdaac96543f6e7d7e3909b2096428955aeab68fbb3046a48  ./tests/unit/test_retention_inspection.py
 df9f042f5f1ab73857823f5b72b46742b4e649e486625f4982bc0f8bb5f61085  ./tests/unit/test_retrieval.py
 d968b63148413b91f3637a0bfb102e5dad76dfbb0df201cd5ea8b21dbd0dd04c  ./tests/unit/test_schemas.py
-8b3e61affcfbd5ece81e503351636e64692ea76c7ebb5ef1cd2727a3a8918032  ./tests/unit/test_synthetic_runtime.py
+8d2ccf770833ac2259fc7f0e8db279e2f0db2bb7b9329cc70269928f0ca5aeb2  ./tests/unit/test_synthetic_runtime.py
 4c90f83989da76ba43fcaecb34172c3a2c0cf5145820d58472ac55d6d63897cb  ./tests/unit/test_telegram.py
 a399dc1858557bdcb494e4ce77f4b068b93ecffaf9492184744af80ff600f404  ./tests/unit/test_telegram_attachments.py
 b00c84a5013ec594b6c390c4a4cadc8baadb69cff720f39f6df800592816305a  ./tests/unit/test_telegram_bot_api.py
