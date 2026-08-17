@@ -416,7 +416,12 @@ export function ConversationPage() {
         </div>
         <div className="inspector-body">
           {inspectionLoading ? <LoadingState label="Loading turn evidence" /> : null}
-          {!inspectionLoading && inspection !== null ? <TurnInspector inspection={inspection} /> : null}
+          {!inspectionLoading && inspection !== null ? (
+            <TurnInspector
+              inspection={inspection}
+              onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
+            />
+          ) : null}
           {!inspectionLoading && selectedProcessing !== null ? (
             <ProcessingInspector status={selectedProcessing} onResume={() => void resumeMessage(selectedProcessing)} />
           ) : null}
@@ -468,7 +473,13 @@ function ProcessingPill({
   return <span className="processing-pill"><LoaderCircle className="spin" size={13} /> {titleCase(status.state)}</span>;
 }
 
-export function TurnInspector({ inspection }: { readonly inspection: ConversationTurnInspection }) {
+export function TurnInspector({
+  inspection,
+  onInspectMemory,
+}: {
+  readonly inspection: ConversationTurnInspection;
+  readonly onInspectMemory: (assertionId: string) => void;
+}) {
   const metadata = turnMetadata(inspection);
   const citations = asObjectArray(inspection.retrieval_manifest.citations);
   const decision = inspection.turn.decision_record;
@@ -504,12 +515,22 @@ export function TurnInspector({ inspection }: { readonly inspection: Conversatio
         <div className="inspector-section-title"><h3>Evidence</h3><Badge tone={citations.length > 0 ? "violet" : "neutral"}>{citations.length} retrieved</Badge></div>
         {citations.length === 0 ? <p className="muted-copy">No memory citations were supplied for this turn.</p> : (
           <div className="evidence-list">
-            {citations.map((citation) => (
-              <div className="evidence-item" key={readString(citation, "citation_id")}>
-                <BookOpenCheck size={15} />
-                <span><strong>{shortId(readString(citation, "assertion_id"))}</strong><small>{titleCase(readString(citation, "epistemic_status"))}</small></span>
-              </div>
-            ))}
+            {citations.map((citation) => {
+              const assertionId = readString(citation, "assertion_id");
+              return (
+                <button
+                  aria-label={`Inspect memory assertion ${assertionId}`}
+                  className="evidence-item"
+                  key={readString(citation, "citation_id")}
+                  onClick={() => onInspectMemory(assertionId)}
+                  type="button"
+                >
+                  <BookOpenCheck size={15} />
+                  <span><strong>{shortId(assertionId)}</strong><small>{titleCase(readString(citation, "epistemic_status"))}</small></span>
+                  <ExternalLink aria-hidden="true" className="evidence-open-icon" size={13} />
+                </button>
+              );
+            })}
           </div>
         )}
       </section>

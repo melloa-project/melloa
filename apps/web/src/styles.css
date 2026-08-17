@@ -1318,6 +1318,26 @@ pre {
   padding: 7px 2px;
 }
 
+.evidence-item {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.evidence-item:hover {
+  background: var(--surface-soft);
+}
+
+.evidence-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .evidence-item > svg,
 .attempt-row > svg {
   color: var(--accent);
@@ -1341,6 +1361,10 @@ pre {
   color: var(--muted);
   font-size: 0.61rem;
   margin-top: 2px;
+}
+
+.evidence-open-icon {
+  margin-left: auto;
 }
 
 .decision-summary {

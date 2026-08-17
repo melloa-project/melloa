@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -147,7 +147,10 @@ describe("ConversationPage", () => {
   it("supports send and exposes route, cost, disclosure, and provenance", async () => {
     render(
       <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+        <Routes>
+          <Route path="/conversation/:threadId" element={<ConversationPage />} />
+          <Route path="/memory" element={<MemoryLocation />} />
+        </Routes>
       </MemoryRouter>,
     );
 
@@ -169,6 +172,9 @@ describe("ConversationPage", () => {
       "Plan the next step.",
       expect.any(String),
     ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect memory assertion assertion_01" }));
+    expect(screen.getByText("memory-search=?assertion=assertion_01")).toBeInTheDocument();
   });
 
   it("labels Codex CLI token and subscription cost metadata as unreported", async () => {
@@ -200,3 +206,8 @@ describe("ConversationPage", () => {
     expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
   });
 });
+
+function MemoryLocation() {
+  const location = useLocation();
+  return <div>{`memory-search=${location.search}`}</div>;
+}
