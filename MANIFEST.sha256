@@ -42,7 +42,7 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 c5374018f1199ee833d607730850f88e19894e62539a415b5670704704f10a90  ./apps/web/tests/providers.test.tsx
 46915bab06bc981a863da2ad4ca9fe6da1518473040e45329c15fc46f451b23b  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
-5b4c9b3278cb7e98fc9330a3f6239e485c163e001dbbb372d5b8c60b6a04fd9f  ./apps/web/tests/visual/current-mvp.mjs
+69e2aa1e71a2b84eb1e6311421b55b0534687364fd79532e6bbe2f9c284a0ac5  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml

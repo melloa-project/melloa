@@ -58,7 +58,7 @@ try {
 
   await page.getByRole("link", { name: "Providers" }).click();
   await page.getByRole("heading", { name: "Providers" }).waitFor();
-  await page.getByText("Deterministic synthetic fixture", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Deterministic synthetic fixture", exact: true }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/providers-desktop.png`,
     fullPage: true,
@@ -101,12 +101,12 @@ try {
     path: `${outputDirectory}/providers-mobile.png`,
   });
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const providerFootnoteBox = await page.locator(".page-footnote").boundingBox();
+  const providerGuidanceBox = await page.locator(".provider-guidance").boundingBox();
   const mobileNavBox = await page.locator(".mobile-nav").boundingBox();
   if (
-    providerFootnoteBox === null ||
+    providerGuidanceBox === null ||
     mobileNavBox === null ||
-    providerFootnoteBox.y + providerFootnoteBox.height > mobileNavBox.y - 8
+    providerGuidanceBox.y + providerGuidanceBox.height > mobileNavBox.y - 8
   ) {
     throw new Error("Provider mobile content does not clear the bottom navigation");
   }
