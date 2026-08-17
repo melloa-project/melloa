@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OwnerModelRouteReport } from "../src/api";
@@ -151,6 +151,23 @@ describe("ProvidersPage", () => {
     expect(within(selectedCard as HTMLElement).getByText("model.codex.subscription")).toBeInTheDocument();
   });
 
+  it("opens recent activity for an exact provider route", async () => {
+    render(
+      <MemoryRouter initialEntries={["/providers"]}>
+        <Routes>
+          <Route path="/providers" element={<ProvidersPage />} />
+          <Route path="/activity" element={<ActivityLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findAllByText("Local Qwen through Ollama");
+
+    fireEvent.click(screen.getByRole("button", { name: "View recent activity for model.local.qwen" }));
+
+    expect(screen.getByText("activity-search=?route=model.local.qwen")).toBeInTheDocument();
+  });
+
   it("surfaces stale provider route provenance links", async () => {
     render(
       <MemoryRouter initialEntries={["/providers?route=model.retired.local"]}>
@@ -244,6 +261,11 @@ describe("ProvidersPage", () => {
     expect(screen.getAllByText("Codex subscription route")).not.toHaveLength(0);
   });
 });
+
+function ActivityLocation() {
+  const location = useLocation();
+  return <div>{`activity-search=${location.search}`}</div>;
+}
 
 type Deferred<T> = {
   readonly promise: Promise<T>;

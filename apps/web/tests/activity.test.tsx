@@ -176,6 +176,38 @@ describe("ActivityPage", () => {
     expect(screen.getByText(`providers-search=?route=${encodeURIComponent(externalEntry.route_id)}`)).toBeInTheDocument();
   });
 
+  it("shows route-scoped activity totals from a route query", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/activity?route=${encodeURIComponent(externalEntry.route_id)}`]}>
+        <Routes>
+          <Route path="/activity" element={<ActivityWithLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("gpt-5.3-codex")).toBeInTheDocument();
+    expect(screen.queryByText("qwen3:8b")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Route activity focus")).toHaveTextContent(externalEntry.route_id);
+    expect(screen.getByLabelText("Route activity focus")).toHaveTextContent("1 run in the selected window.");
+
+    const summary = within(screen.getByLabelText("Model activity summary"));
+    expect(summary.getByText("Model runs")).toBeInTheDocument();
+    expect(summary.getByText("1")).toBeInTheDocument();
+    expect(summary.getByText("1 externally disclosed")).toBeInTheDocument();
+    expect(summary.getByText("1,280")).toBeInTheDocument();
+    expect(summary.getByText("1,024 in · 256 out")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "External 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Private 0" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear route" }));
+
+    expect(screen.getByText("activity-search=")).toBeInTheDocument();
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All 2" })).toBeInTheDocument();
+  });
+
   it("copies exact result ids from the activity run ledger", async () => {
     render(
       <MemoryRouter>
@@ -404,4 +436,18 @@ function ConversationLocation() {
 function ProviderLocation() {
   const location = useLocation();
   return <div>{`providers-search=${location.search}`}</div>;
+}
+
+function ActivityWithLocation() {
+  return (
+    <>
+      <ActivityPage />
+      <ActivityLocation />
+    </>
+  );
+}
+
+function ActivityLocation() {
+  const location = useLocation();
+  return <div>{`activity-search=${location.search}`}</div>;
 }

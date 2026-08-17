@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BarChart3,
   Bot,
   CheckCircle2,
   CircleAlert,
@@ -16,7 +17,7 @@ import {
   SquareTerminal,
   WifiOff,
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import type { ModelRouteStatus, OwnerModelRouteReport } from "../api";
 import { errorMessage, useMelloa } from "../app";
@@ -25,6 +26,7 @@ import { formatDurationMs, formatGbp, formatInstant, titleCase } from "../lib/fo
 
 export function ProvidersPage() {
   const { api, notify } = useMelloa();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [report, setReport] = useState<OwnerModelRouteReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,6 +142,12 @@ export function ProvidersPage() {
                 onClick={() => void copyRouteId(selectedRouteId)}
                 tone="ghost"
               />
+              <IconButton
+                icon={BarChart3}
+                label={`View recent activity for missing route ${selectedRouteId}`}
+                onClick={() => navigate(`/activity?route=${encodeURIComponent(selectedRouteId)}`)}
+                tone="ghost"
+              />
             </Card>
           ) : null}
 
@@ -152,6 +160,7 @@ export function ProvidersPage() {
               {report.routes.map((route) => (
                 <ProviderCard
                   key={route.route_id}
+                  onOpenActivity={(routeId) => navigate(`/activity?route=${encodeURIComponent(routeId)}`)}
                   onCopyRouteId={(routeId) => void copyRouteId(routeId)}
                   route={route}
                   selected={route.route_id === selectedRouteId}
@@ -235,10 +244,12 @@ function isOwnerUsableRoute(route: ModelRouteStatus): boolean {
 }
 
 function ProviderCard({
+  onOpenActivity,
   onCopyRouteId,
   route,
   selected,
 }: {
+  readonly onOpenActivity: (routeId: string) => void;
   readonly onCopyRouteId: (routeId: string) => void;
   readonly route: ModelRouteStatus;
   readonly selected: boolean;
@@ -271,6 +282,16 @@ function ProviderCard({
         {selected ? <Badge tone="violet">Selected route</Badge> : null}
         <Badge tone={synthetic ? "violet" : cliAgent ? "warning" : "info"}>{routeKindLabel}</Badge>
         <Badge tone={route.external_disclosure ? "warning" : "positive"}>{route.external_disclosure ? "External disclosure" : "No external disclosure"}</Badge>
+      </div>
+      <div className="provider-card-actions">
+        <Button
+          aria-label={`View recent activity for ${route.route_id}`}
+          onClick={() => onOpenActivity(route.route_id)}
+          size="sm"
+          tone="secondary"
+        >
+          <BarChart3 size={14} /> Recent activity
+        </Button>
       </div>
       {synthetic ? <p className="synthetic-callout">Deterministic test response only. This is not a real intelligence route.</p> : null}
       {cliAgent ? (

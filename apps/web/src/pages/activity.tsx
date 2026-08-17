@@ -11,10 +11,11 @@ import {
   Network,
   RefreshCw,
   ShieldCheck,
+  X,
   Timer,
   Zap,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import type { ModelActivityEntry, ModelActivityReport } from "../api";
 import { errorMessage, useMelloa } from "../app";
@@ -39,6 +40,7 @@ const disclosureFilters: ReadonlyArray<{ readonly value: DisclosureFilter; reado
 export function ActivityPage() {
   const { api, notify } = useMelloa();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [windowOption, setWindowOption] = useState<WindowOption>("7d");
   const [disclosureFilter, setDisclosureFilter] = useState<DisclosureFilter>("all");
   const [report, setReport] = useState<ModelActivityReport | null>(null);
@@ -76,15 +78,28 @@ export function ActivityPage() {
     void load();
   }, [load]);
 
-  const totalTokens = (report?.total_input_tokens ?? 0) + (report?.total_output_tokens ?? 0);
+  const selectedRouteId = searchParams.get("route");
   const entries = report?.entries ?? [];
-  const externalEntries = entries.filter((entry) => entry.external_disclosure);
-  const localEntries = entries.filter((entry) => !entry.external_disclosure);
+  const routeEntries = selectedRouteId === null
+    ? entries
+    : entries.filter((entry) => entry.route_id === selectedRouteId);
+  const externalEntries = routeEntries.filter((entry) => entry.external_disclosure);
+  const localEntries = routeEntries.filter((entry) => !entry.external_disclosure);
   const visibleEntries = disclosureFilter === "external"
     ? externalEntries
     : disclosureFilter === "local"
       ? localEntries
-      : entries;
+      : routeEntries;
+  const totalRuns = selectedRouteId === null ? report?.total_runs ?? 0 : routeEntries.length;
+  const externalDisclosureRuns = selectedRouteId === null ? report?.external_disclosure_runs ?? 0 : externalEntries.length;
+  const totalInputTokens = selectedRouteId === null ? report?.total_input_tokens ?? 0 : sumActivity(entry => entry.input_tokens, routeEntries);
+  const totalOutputTokens = selectedRouteId === null ? report?.total_output_tokens ?? 0 : sumActivity(entry => entry.output_tokens, routeEntries);
+  const totalCostGbp = selectedRouteId === null ? report?.total_cost_gbp ?? 0 : sumActivity(entry => entry.cost_gbp, routeEntries);
+  const externalCostGbp = selectedRouteId === null ? report?.external_cost_gbp ?? 0 : sumActivity(
+    entry => entry.external_disclosure ? entry.cost_gbp : 0,
+    routeEntries,
+  );
+  const totalTokens = totalInputTokens + totalOutputTokens;
 
   const countForFilter = (filter: DisclosureFilter): number => {
     if (filter === "external") {
@@ -93,7 +108,13 @@ export function ActivityPage() {
     if (filter === "local") {
       return localEntries.length;
     }
-    return entries.length;
+    return routeEntries.length;
+  };
+
+  const clearRouteFocus = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("route");
+    setSearchParams(next, { replace: true });
   };
 
   async function copyActivityId(label: string, id: string) {
@@ -133,18 +154,30 @@ export function ActivityPage() {
       {report === null ? null : (
         <>
           <section className="metric-grid" aria-label="Model activity summary">
-            <Metric label="Model runs" value={report.total_runs} detail={`${report.external_disclosure_runs} externally disclosed`} />
-            <Metric label="Tokens" value={totalTokens.toLocaleString()} detail={`${report.total_input_tokens.toLocaleString()} in · ${report.total_output_tokens.toLocaleString()} out`} />
-            <Metric label="Recorded cost" value={formatGbp(report.total_cost_gbp)} detail={`${formatGbp(report.external_cost_gbp)} external`} />
+            <Metric label="Model runs" value={totalRuns} detail={`${externalDisclosureRuns} externally disclosed`} />
+            <Metric label="Tokens" value={totalTokens.toLocaleString()} detail={`${totalInputTokens.toLocaleString()} in · ${totalOutputTokens.toLocaleString()} out`} />
+            <Metric label="Recorded cost" value={formatGbp(totalCostGbp)} detail={`${formatGbp(externalCostGbp)} external`} />
             <Metric label="Window" value={windows.find((item) => item.value === windowOption)?.label ?? "7 days"} detail={`Updated ${formatInstant(report.generated_at)}`} />
           </section>
+
+          {selectedRouteId === null ? null : (
+            <Card className="activity-route-focus" aria-label="Route activity focus" role="status">
+              <Network size={17} />
+              <span>
+                <strong>Showing activity for route</strong>
+                <small>{routeEntries.length} run{routeEntries.length === 1 ? "" : "s"} in the selected window.</small>
+              </span>
+              <code title={selectedRouteId}>{selectedRouteId}</code>
+              <Button onClick={clearRouteFocus} size="sm" tone="ghost"><X size={14} /> Clear route</Button>
+            </Card>
+          )}
 
           <Card className="data-card">
             <div className="card-heading-row">
               <div><h2>Run ledger</h2><p>Provider-neutral execution records tied back to canonical turns.</p></div>
-              <Badge tone={report.external_disclosure_runs > 0 ? "warning" : "positive"}>
-                {report.external_disclosure_runs > 0 ? <Eye size={13} /> : <ShieldCheck size={13} />}
-                {report.external_disclosure_runs > 0 ? `${report.external_disclosure_runs} external` : "No external disclosure"}
+              <Badge tone={externalDisclosureRuns > 0 ? "warning" : "positive"}>
+                {externalDisclosureRuns > 0 ? <Eye size={13} /> : <ShieldCheck size={13} />}
+                {externalDisclosureRuns > 0 ? `${externalDisclosureRuns} external` : "No external disclosure"}
               </Badge>
             </div>
 
@@ -154,6 +187,13 @@ export function ActivityPage() {
                 title="No model runs in this window"
                 description="Send Melli a message or choose a wider activity window."
                 action={<Button onClick={() => navigate("/conversation")} tone="primary">Open conversation</Button>}
+              />
+            ) : routeEntries.length === 0 ? (
+              <EmptyState
+                icon={Network}
+                title="No runs for this route in this window"
+                description="Clear the route focus or choose a wider activity window."
+                action={<Button onClick={clearRouteFocus}>Clear route</Button>}
               />
             ) : visibleEntries.length === 0 ? (
               <>
@@ -274,6 +314,13 @@ function ActivityRow({
 
 function isSyntheticActivityEntry(entry: ModelActivityEntry): boolean {
   return entry.provider_id === "provider.synthetic" || entry.route_id.startsWith("model.fake.");
+}
+
+function sumActivity(
+  readValue: (entry: ModelActivityEntry) => number,
+  entries: readonly ModelActivityEntry[],
+): number {
+  return entries.reduce((sum, entry) => sum + readValue(entry), 0);
 }
 
 function ActivityDisclosure({
