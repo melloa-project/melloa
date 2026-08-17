@@ -1751,6 +1751,99 @@ pre {
   margin-top: 2px;
 }
 
+.provider-eligibility {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 15px;
+}
+
+.provider-eligibility-card {
+  border-color: #dce7e1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 126px;
+  padding: 13px;
+}
+
+.provider-eligibility-card.private {
+  border-color: #d4e2da;
+}
+
+.provider-eligibility-card.local {
+  border-color: #d7e1ed;
+}
+
+.provider-eligibility-card.external {
+  border-color: #ead6b7;
+}
+
+.provider-eligibility-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 9px;
+}
+
+.provider-eligibility-icon {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  color: var(--accent);
+  display: flex;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.provider-eligibility-card.local .provider-eligibility-icon {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.provider-eligibility-card.external .provider-eligibility-icon {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.provider-eligibility-heading h2 {
+  font-size: 0.8rem;
+}
+
+.provider-eligibility-heading p {
+  color: var(--muted);
+  font-size: 0.66rem;
+  margin-top: 2px;
+}
+
+.provider-eligibility-routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.provider-route-chip {
+  background: #eef4f1;
+  border: 1px solid #dce8e2;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 0.62rem;
+  font-weight: 650;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-route-chip.muted {
+  background: var(--surface-soft);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
 .provider-grid {
   display: grid;
   gap: 14px;
@@ -3209,6 +3302,10 @@ pre {
   .provider-summary-note {
     grid-column: 1 / -1;
   }
+
+  .provider-eligibility {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1040px) {
@@ -3230,6 +3327,7 @@ pre {
   }
 
   .provider-grid,
+  .provider-eligibility,
   .memory-inspection-grid,
   .settings-grid {
     grid-template-columns: 1fr;
@@ -3586,6 +3684,10 @@ pre {
   }
 
   .activity-page .page-footnote {
+    display: none;
+  }
+
+  .providers-page .page-footnote {
     display: none;
   }
 

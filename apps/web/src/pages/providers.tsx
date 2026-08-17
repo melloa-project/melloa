@@ -8,6 +8,7 @@ import {
   Cpu,
   HardDrive,
   KeyRound,
+  LockKeyhole,
   Network,
   RefreshCw,
   ShieldCheck,
@@ -44,6 +45,7 @@ export function ProvidersPage() {
 
   const activeRoutes = report?.routes.filter((route) => route.health.state === "healthy").length ?? 0;
   const externalRoutes = report?.routes.filter((route) => route.external_disclosure).length ?? 0;
+  const eligibility = report === null ? [] : providerEligibility(report.routes);
 
   return (
     <div className="standard-page providers-page">
@@ -64,6 +66,24 @@ export function ProvidersPage() {
             <div><span className="summary-icon"><Cpu size={18} /></span><strong>{report.routes.length}</strong><small>configured routes</small></div>
             <div><span className={`summary-icon ${externalRoutes > 0 ? "warning" : "positive"}`}><Network size={18} /></span><strong>{externalRoutes}</strong><small>external routes</small></div>
             <div className="provider-summary-note"><ShieldCheck size={17} /><span><strong>Routing does not grant authority</strong><small>Models propose. Deterministic controls authorize.</small></span></div>
+          </section>
+
+          <section className="provider-eligibility" aria-label="Route privacy eligibility">
+            {eligibility.map((group) => (
+              <Card className={`provider-eligibility-card ${group.tone}`} key={group.label}>
+                <div className="provider-eligibility-heading">
+                  <span className="provider-eligibility-icon"><group.icon size={17} /></span>
+                  <div><h2>{group.label}</h2><p>{group.summary}</p></div>
+                </div>
+                <div className="provider-eligibility-routes">
+                  {group.routes.length === 0 ? (
+                    <span className="provider-route-chip muted">No healthy route</span>
+                  ) : group.routes.map((route) => (
+                    <span className="provider-route-chip" key={route.route_id}>{route.display_name}</span>
+                  ))}
+                </div>
+              </Card>
+            ))}
           </section>
 
           {report.routes.length === 0 ? (
@@ -92,6 +112,58 @@ export function ProvidersPage() {
       )}
     </div>
   );
+}
+
+type ProviderEligibilityGroup = {
+  readonly label: string;
+  readonly summary: string;
+  readonly icon: typeof LockKeyhole;
+  readonly tone: "private" | "local" | "external";
+  readonly routes: readonly ModelRouteStatus[];
+};
+
+function providerEligibility(routes: readonly ModelRouteStatus[]): readonly ProviderEligibilityGroup[] {
+  const healthy = routes.filter((route) => route.health.state === "healthy");
+  const deviceOnly = healthy.filter((route) => (
+    route.processing_location === "device"
+    && !route.external_disclosure
+    && route.allowed_sensitivities.includes("device_only")
+  ));
+  const personalNoDisclosure = healthy.filter((route) => (
+    !route.external_disclosure
+    && route.allowed_sensitivities.includes("personal")
+  ));
+  const external = healthy.filter((route) => route.external_disclosure);
+  return [
+    {
+      label: "Device-only work",
+      summary: routeCountLabel(deviceOnly.length),
+      icon: LockKeyhole,
+      tone: "private",
+      routes: deviceOnly,
+    },
+    {
+      label: "Personal no-disclosure",
+      summary: routeCountLabel(personalNoDisclosure.length),
+      icon: HardDrive,
+      tone: "local",
+      routes: personalNoDisclosure,
+    },
+    {
+      label: "External disclosure",
+      summary: routeCountLabel(external.length),
+      icon: Network,
+      tone: "external",
+      routes: external,
+    },
+  ];
+}
+
+function routeCountLabel(count: number): string {
+  if (count === 0) {
+    return "No healthy routes";
+  }
+  return `${count} healthy ${count === 1 ? "route" : "routes"}`;
 }
 
 function ProviderCard({ route }: { readonly route: ModelRouteStatus }) {

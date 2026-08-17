@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OwnerModelRouteReport } from "../src/api";
@@ -88,13 +88,13 @@ describe("ProvidersPage", () => {
   it("shows real route metadata and visibly labels synthetic fallback", async () => {
     render(<ProvidersPage />);
 
-    expect(await screen.findByText("Local Qwen through Ollama")).toBeInTheDocument();
+    expect(await screen.findAllByText("Local Qwen through Ollama")).not.toHaveLength(0);
     expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
     expect(screen.getAllByText("No external disclosure")).not.toHaveLength(0);
     expect(screen.getAllByText("Synthetic fixture")).not.toHaveLength(0);
     expect(screen.getByText(/not a real intelligence route/i)).toBeInTheDocument();
     expect(screen.getByText("Experimental Codex CLI")).toBeInTheDocument();
-    expect(screen.getByText("External disclosure")).toBeInTheDocument();
+    expect(screen.getAllByText("External disclosure")).not.toHaveLength(0);
     expect(screen.getByText("Candidate response only")).toBeInTheDocument();
     expect(screen.getByText("Read-only sandbox")).toBeInTheDocument();
     expect(screen.getByText("Ephemeral session")).toBeInTheDocument();
@@ -106,5 +106,14 @@ describe("ProvidersPage", () => {
     expect(screen.getAllByText("Public · Internal · Personal")).not.toHaveLength(0);
     expect(screen.getByText("8,192 in · 2,048 out")).toBeInTheDocument();
     expect(screen.getByText("99%")).toBeInTheDocument();
+
+    const eligibility = within(screen.getByLabelText("Route privacy eligibility"));
+    expect(eligibility.getByText("Device-only work")).toBeInTheDocument();
+    expect(eligibility.getByText("Personal no-disclosure")).toBeInTheDocument();
+    expect(eligibility.getByText("External disclosure")).toBeInTheDocument();
+    expect(eligibility.getAllByText("1 healthy route")).toHaveLength(2);
+    expect(eligibility.getByText("2 healthy routes")).toBeInTheDocument();
+    expect(eligibility.getByText("Local Qwen through Ollama")).toBeInTheDocument();
+    expect(eligibility.getByText("Codex subscription route")).toBeInTheDocument();
   });
 });
