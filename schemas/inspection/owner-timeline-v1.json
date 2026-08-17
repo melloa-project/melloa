@@ -166,8 +166,8 @@
   "additionalProperties": false,
   "properties": {
     "contract_version": {
-      "const": "1.0.0",
-      "default": "1.0.0",
+      "const": "1.1.0",
+      "default": "1.1.0",
       "title": "Contract Version",
       "type": "string"
     },
@@ -204,6 +204,11 @@
       "title": "Limitations",
       "type": "array"
     },
+    "matching_events": {
+      "minimum": 0,
+      "title": "Matching Events",
+      "type": "integer"
+    },
     "owner_id": {
       "maxLength": 65,
       "minLength": 35,
@@ -215,6 +220,10 @@
       "minimum": 0,
       "title": "Total Events",
       "type": "integer"
+    },
+    "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
     },
     "window_end": {
       "format": "date-time",
@@ -233,6 +242,8 @@
     "window_end",
     "generated_at",
     "total_events",
+    "matching_events",
+    "truncated",
     "coverage",
     "limitations",
     "entries"

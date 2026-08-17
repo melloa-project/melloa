@@ -18,7 +18,7 @@ c11f07d2cbc30c5bfc73f5d8b9fbfa48aaf239d4f57a4afd1712c577e8a49af6  ./README.md
 a6d6c1d19d09c0ae8f496e56d6343445aacd16177893758cb22f1c2fd177ce63  ./apps/web/package-lock.json
 b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/package.json
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
-4b999c1ad39255a74db5e314f295f7a8ebacd5d4f759bf67ebf26a8ffb435de3  ./apps/web/src/api.ts
+55b30e1f7637c2ca2e955340d7d9e413a55069566ac66a9fd20dbfef4fda39b4  ./apps/web/src/api.ts
 dac5c70dc428d046375e99711fb6c16b630110b878fe35a0948864893c01dfb1  ./apps/web/src/app.tsx
 3d7c05c9c702aa3dbb5466943fe8135db8de85e050a2dd93c0c50c618a586bf1  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
@@ -31,7 +31,7 @@ cd4b0e25e5583fa0f10893e58c4f25de85c294eb849493ab4e3426f37d07832a  ./apps/web/src
 922746df2345a259eac75f2a45272b54a6718e5fc4d6ffe3b0c97977d17dba65  ./apps/web/src/pages/operations.tsx
 18f5144fd827be68237a2dc301e285bf7abcb548f08416472fe39d1b2813688e  ./apps/web/src/pages/providers.tsx
 ebf6b9c1362676da34b011d745f4429e8d7e8b0acc4cfd7733846859b97167f6  ./apps/web/src/pages/settings.tsx
-51faf9c886f8cf75fc027c707fbc730d228fe31b2883f7e576cb5cce3582dbfd  ./apps/web/src/pages/timeline.tsx
+fe9a2bc9dacc5cbc30d3b5a437dffd2c1b92969f01b8d2cb57d6e10f4a9d3d7a  ./apps/web/src/pages/timeline.tsx
 98c2240c84d36e571cec74d0a1f1514d8237fcf857415ba066ed200f76deb428  ./apps/web/src/styles.css
 d477bd2ec0467e9e2c7889cbe227cfbce50a1c716c8cdb10224fe812be86c5f6  ./apps/web/tests/activity.test.tsx
 640edaa925f13870f1d6a38ca83882ba8c6ae317c624153ad07c4af84117c5db  ./apps/web/tests/api.test.ts
@@ -43,7 +43,7 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 2396a3e4df0a450b066375d689e0bf30a1ea067b89ded88bce1dab04fdd26b61  ./apps/web/tests/providers.test.tsx
 46915bab06bc981a863da2ad4ca9fe6da1518473040e45329c15fc46f451b23b  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
-98116799a432b178484f33b12620ae348f61f5d7a693b67d182f84ea8a86ea8e  ./apps/web/tests/timeline.test.tsx
+69f8d5055ca7fb82c872caf2c65b59634664408973eb9c46c58def3ba99db9dc  ./apps/web/tests/timeline.test.tsx
 c5a7ba4c686d92b94a96755d18c3e30255d7f4e56fd4555f420853499fabc151  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
@@ -107,7 +107,7 @@ ceceedca56a9accccdcc2753b4777c1459b0346a7b65786d961c1ae517b2aaad  ./docs/index.m
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
 2d1ef864609cb2fc96bf33e5aefe8cfebd25f2a8ccb2cc051331530f93a34d9f  ./docs/research/method-and-limitations.md
 fd9dd415102bb9d3335e0e2c430a1d1a24dd6bed0bc61fac591676296f5ee942  ./docs/research/primary-sources.md
-642b8c1a2581830b10fe269841b1d933bc3e64135519fc9e1a4c727dcb68532f  ./docs/run-current-mvp.md
+c14cf4de07752152da97acaec476ead6e2b83f628a3f23ca6e1af9c8818b4e8b  ./docs/run-current-mvp.md
 16abfa728e0566f3e89793756a6ae71cd8fc9ffc6d888e2c1ac5902cfe59d64d  ./infra/postgres/init/001_roles.sql
 b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f  ./migrations/0001_m0_foundation.sql
 90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2  ./migrations/0002_m1_conversation_retrieval.sql
@@ -150,7 +150,7 @@ f5417116c88ca28ddff9a65a4202595af3a138f45dc061eee3d7eb6d1ff7a09d  ./schemas/iden
 32df120a1aec1f95406bdd376d937d0fee573e0172300a33fe1745b20f86e502  ./schemas/inspection/owner-health-v1.json
 2f322b87859020caa8ef241498f1750a5782ba87a2b55d34714c4246c5cd0de2  ./schemas/inspection/owner-media-catalog-v1.json
 f18d86ae3399cd45ee2f44f13f98be25e964a77b00ee13877ad82de928544b23  ./schemas/inspection/owner-model-activity-v1.json
-0919ba77a1ecf84259fe3e650a0980aec8fd3cbc616256c7ac1f163d0449a274  ./schemas/inspection/owner-timeline-v1.json
+660018f3da045a21a54035b020c73ab3593cfc3892f234a6319914af76987291  ./schemas/inspection/owner-timeline-v1.json
 7aa0967b2da3054ede1a90a3358a3c0b24b459e63053e1a6e17e3f08c3c47616  ./schemas/memory/assertion-content-deletion-result-v1.json
 7af4d5059927da0b094e387691983537e004ee6ed3b52dcc30ac48cb8e7b53fa  ./schemas/memory/assertion-content-deletion-tombstone-v1.json
 4e00041a0295de65473510f319f203207a56d6450f8ac42454e9ecf304a5d9ef  ./schemas/memory/assertion-correction-result-v1.json
@@ -216,7 +216,7 @@ b67650fefe22965449bb9f702ed2e23a705a32faf203a8fd8f329b552af4bb5f  ./src/melloa/a
 8f8030d952401fc42780a31223555b7cba45f0d04ddeb54e535ccf59e33a5706  ./src/melloa/application/conversation.py
 8d21da96a3bb3a682f8377060d8f1851a885bccffc415cdf50da406d20810c70  ./src/melloa/application/delivery.py
 0231564437e2335f579bb58e79ddf3870193f9876800221ad7f39c1077a1067a  ./src/melloa/application/exports.py
-525cd993c8e08043986a698b87960f66f20a59e9287238e82d7676387a6b47ef  ./src/melloa/application/inspection.py
+76e4749a2921ed7057a4b9b4c18a160396ece3925eec2823d2721b133b8b53f2  ./src/melloa/application/inspection.py
 55d92b75723a225da5f426f396b38718334733b8bbc38a6dbd3786106eef5fac  ./src/melloa/application/memory.py
 ba0a2cd98fee9698b65bea447c87226fe105237efa4c39191402e0c47aa80da9  ./src/melloa/application/operations.py
 a3d9dd1f3b61cedbf94bc94440a8c7b706f818bd17b9b09ced9d358f029ebdc6  ./src/melloa/application/retention.py
@@ -241,7 +241,7 @@ ece27faf10efbe4b59987cff3d528e13f0664df9a95a4547ff0a730f2872c317  ./src/melloa/d
 e795696885c0cab9cae12fff5af950110b9ccf426c31eecce99c198cac42e122  ./src/melloa/domain/exports.py
 8ca192f66493110f1a5a72e43ccf03aecdcf0648b48bcb62a529f86586b929e7  ./src/melloa/domain/guardian.py
 94c758638e9a03d32431bb8f19d6e80d0d37dd3b8971786eac4f4db35d88177f  ./src/melloa/domain/identity.py
-0f14ebcc0e483fcc9b7160b69b65e6fa7adcf9365e873d49384cc43deed6142b  ./src/melloa/domain/inspection.py
+3d58d095d57975646bbd0a5c36bcc2ed4196983e6b6018de11d98082d75fe247  ./src/melloa/domain/inspection.py
 4274168ed1f337faff6a5e33b77d39d3edb7d199e26e2479e337b97b69f47155  ./src/melloa/domain/memory.py
 a474acbe93b360aa9ce514109f01e713069d36605f977796021266401cfd2355  ./src/melloa/domain/models.py
 792071415e49e79925c5f335e5e26c9299a20f54cdf9161c2ea61a934f93834d  ./src/melloa/domain/operations.py
@@ -278,7 +278,7 @@ c98373dc5d30d956f9f73da55877469facc1cc6810eb9d9a654858f6d7a1b24e  ./tests/unit/t
 4e9bbfafda7a226efd9c2538c22cfb4630b22b9030a0fb1f21f17fedf631cffe  ./tests/unit/test_exports.py
 93845cb511c46b278aea9388f068a1bf2c61316307dfef99df6cbf5b363e0c94  ./tests/unit/test_fakes_and_api.py
 db70da99f1576a292c6a0ee6a5e41baaa12173ccf4d2c614f7ae62e3701d3647  ./tests/unit/test_guardian_adapter.py
-45904b028cc9b8f97c75ad31ba36be90f4d188402f430a0023af723b219c9d30  ./tests/unit/test_inspection.py
+03c4d5d1eb5d505b719e7ecc11d570f6bde7f761c50f2a3c99d893151dbf709c  ./tests/unit/test_inspection.py
 d5355204c7c50cbf350ad115db4cdfe9236b8a364a4cf0da27b9ce0ff3a039c9  ./tests/unit/test_memory.py
 e573996d9011a88a4ad86735df16677f9c7941cdd11883a8cbd3441c18e8c725  ./tests/unit/test_memory_api.py
 de02d65c601cd52a9ed0c0e991f9f26eaaa3b4b54d92276a8a718924e8618078  ./tests/unit/test_migrations.py

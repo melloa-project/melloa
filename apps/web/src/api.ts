@@ -291,12 +291,14 @@ export type OwnerTimelineEvent = {
 };
 
 export type OwnerTimelineReport = {
-  readonly contract_version: "1.0.0";
+  readonly contract_version: "1.1.0";
   readonly owner_id: string;
   readonly window_start: string;
   readonly window_end: string;
   readonly generated_at: string;
   readonly total_events: number;
+  readonly matching_events: number;
+  readonly truncated: boolean;
   readonly coverage: readonly string[];
   readonly limitations: readonly string[];
   readonly entries: readonly OwnerTimelineEvent[];

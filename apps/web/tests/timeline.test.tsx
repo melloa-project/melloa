@@ -16,12 +16,14 @@ vi.mock("../src/app", () => {
 });
 
 const report: OwnerTimelineReport = {
-  contract_version: "1.0.0",
+  contract_version: "1.1.0",
   owner_id: "owner_00000000000000000000000000000001",
   window_start: "2026-08-10T12:00:00Z",
   window_end: "2026-08-17T12:00:00Z",
   generated_at: "2026-08-17T12:00:00Z",
   total_events: 4,
+  matching_events: 9,
+  truncated: true,
   coverage: [
     "timeline.coverage.canonical-conversation",
     "timeline.coverage.model-activity",
@@ -30,6 +32,7 @@ const report: OwnerTimelineReport = {
   ],
   limitations: [
     "timeline.limit.current-mvp-canonical-records",
+    "timeline.limit.newest-events-only",
     "timeline.limit.no-message-or-model-text",
     "timeline.limit.no-process-local-auth-events",
   ],
@@ -132,8 +135,11 @@ describe("TimelinePage", () => {
     expect(screen.getByText("Outbound delivery completed under exact authorization.")).toBeInTheDocument();
     expect(screen.getByText("Owner message accepted into canonical conversation.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "All 4" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("4 newest shown")).toBeInTheDocument();
+    expect(screen.getByText("4 newest of 9")).toBeInTheDocument();
     expect(screen.queryByText("Synthetic prompt")).not.toBeInTheDocument();
     expect(screen.getByText("Current Mvp Canonical Records")).toBeInTheDocument();
+    expect(screen.getByText("Newest Events Only")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Model 1" }));
 

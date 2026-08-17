@@ -310,6 +310,9 @@ def test_owner_timeline_aggregates_canonical_records_without_content(fixed_time)
     )
     assert "timeline.limit.no-message-or-model-text" in report.limitations
     assert "timeline.limit.no-outbound-delivery-store-configured" in report.limitations
+    assert "timeline.limit.newest-events-only" not in report.limitations
+    assert report.matching_events == report.total_events
+    assert report.truncated is False
     assert report.entries == tuple(
         sorted(
             report.entries,
@@ -351,6 +354,9 @@ def test_owner_timeline_aggregates_canonical_records_without_content(fixed_time)
         limit=3,
     )
     assert limited.total_events == 3
+    assert limited.matching_events == report.total_events
+    assert limited.truncated is True
+    assert "timeline.limit.newest-events-only" in limited.limitations
     assert len(limited.entries) == 3
 
 
@@ -480,6 +486,10 @@ def test_timeline_rejects_bad_owner_window_limit_and_contract_shape(fixed_time) 
     )
     with pytest.raises(ValidationError, match="total"):
         OwnerTimelineReport.model_validate({**report.model_dump(), "total_events": 99})
+    with pytest.raises(ValidationError, match="matching total"):
+        OwnerTimelineReport.model_validate({**report.model_dump(), "matching_events": 0})
+    with pytest.raises(ValidationError, match="truncation state"):
+        OwnerTimelineReport.model_validate({**report.model_dump(), "truncated": True})
     with pytest.raises(ValidationError, match="newest-first"):
         OwnerTimelineReport.model_validate(
             {**report.model_dump(), "entries": tuple(reversed(report.entries))}

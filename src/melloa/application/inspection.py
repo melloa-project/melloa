@@ -109,6 +109,8 @@ class OwnerInspectionService:
         entries = list(self._timeline_entries(principal, start, end))
         entries.sort(key=lambda entry: (entry.occurred_at, entry.event_id), reverse=True)
         bounded = tuple(entries[:limit])
+        matching_events = len(entries)
+        truncated = matching_events > len(bounded)
         coverage: list[QualifiedName] = [
             "timeline.coverage.canonical-conversation",
             "timeline.coverage.model-activity",
@@ -123,12 +125,16 @@ class OwnerInspectionService:
         ]
         if self._delivery is None:
             limitations.append("timeline.limit.no-outbound-delivery-store-configured")
+        if truncated:
+            limitations.append("timeline.limit.newest-events-only")
         return OwnerTimelineReport(
             owner_id=self._owner_id,
             window_start=start,
             window_end=end,
             generated_at=generated_at,
             total_events=len(bounded),
+            matching_events=matching_events,
+            truncated=truncated,
             coverage=tuple(sorted(coverage)),
             limitations=tuple(sorted(limitations)),
             entries=bounded,

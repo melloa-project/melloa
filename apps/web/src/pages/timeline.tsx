@@ -84,7 +84,7 @@ export function TimelinePage() {
                 {windows.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
-            <Button onClick={() => void load()} size="sm"><RefreshCw size={15} /> Refresh</Button>
+            <Button loading={loading} onClick={() => void load()} size="sm"><RefreshCw size={15} /> Refresh</Button>
           </div>
         )}
       />
@@ -95,7 +95,11 @@ export function TimelinePage() {
       {report === null ? null : (
         <>
           <section className="metric-grid" aria-label="Timeline summary">
-            <Metric label="Timeline items" value={formatCount(report.total_events)} detail={`${visibleEntries.length} shown`} />
+            <Metric
+              label="Timeline items"
+              value={formatCount(report.matching_events)}
+              detail={report.truncated ? `${report.total_events} newest shown` : `${report.total_events} shown`}
+            />
             <Metric label="Model records" value={formatCount(modelEvents.length)} detail={`${externalEvents.length} external`} />
             <Metric label="Delivery records" value={formatCount(deliveryEvents.length)} detail="Exact-authority work only" />
             <Metric label="Window" value={windows.find((item) => item.value === windowOption)?.label ?? "7 days"} detail={`Updated ${formatInstant(report.generated_at)}`} />
@@ -107,10 +111,13 @@ export function TimelinePage() {
                 <h2>Canonical timeline</h2>
                 <p>Newest records first, scoped to current owner-visible stores.</p>
               </div>
-              <Badge tone={externalEvents.length > 0 ? "warning" : "positive"}>
-                {externalEvents.length > 0 ? <Eye size={13} /> : <ShieldCheck size={13} />}
-                {externalEvents.length > 0 ? `${externalEvents.length} external model` : "No external model"}
-              </Badge>
+              <div className="header-actions">
+                {report.truncated ? <Badge tone="warning">{report.total_events} newest of {report.matching_events}</Badge> : null}
+                <Badge tone={externalEvents.length > 0 ? "warning" : "positive"}>
+                  {externalEvents.length > 0 ? <Eye size={13} /> : <ShieldCheck size={13} />}
+                  {externalEvents.length > 0 ? `${externalEvents.length} external model` : "No external model"}
+                </Badge>
+              </div>
             </div>
 
             <TimelineFilterBar

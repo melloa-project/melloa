@@ -149,12 +149,14 @@ class OwnerTimelineEvent(ContractModel):
 
 
 class OwnerTimelineReport(ContractModel):
-    contract_version: Literal["1.0.0"] = "1.0.0"
+    contract_version: Literal["1.1.0"] = "1.1.0"
     owner_id: RecordId
     window_start: AwareDatetime
     window_end: AwareDatetime
     generated_at: AwareDatetime
     total_events: Annotated[int, Field(ge=0)]
+    matching_events: Annotated[int, Field(ge=0)]
+    truncated: bool
     coverage: tuple[QualifiedName, ...] = Field(min_length=1)
     limitations: tuple[QualifiedName, ...]
     entries: tuple[OwnerTimelineEvent, ...]
@@ -165,6 +167,10 @@ class OwnerTimelineReport(ContractModel):
             raise ValueError("timeline window must end after it starts")
         if self.total_events != len(self.entries):
             raise ValueError("timeline total does not match its entries")
+        if self.matching_events < self.total_events:
+            raise ValueError("timeline matching total cannot be below returned entries")
+        if self.truncated != (self.matching_events > self.total_events):
+            raise ValueError("timeline truncation state does not match event totals")
         event_ids = tuple(entry.event_id for entry in self.entries)
         if len(set(event_ids)) != len(event_ids):
             raise ValueError("timeline event IDs must be unique")
