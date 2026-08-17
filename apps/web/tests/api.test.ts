@@ -168,6 +168,46 @@ describe("MelloaApi", () => {
     expect(api.hasMutationProof).toBe(false);
   });
 
+  it("clears stale proof when recent owner authentication is rejected", async () => {
+    let requests = 0;
+    const api = new MelloaApi(async () => {
+      requests += 1;
+      return requests === 1
+        ? jsonResponse({ principal, csrf_token: "csrf-proof" })
+        : jsonResponse({
+          code: "recent_authentication_required",
+          message: "Recent owner authentication is required.",
+        }, 403);
+    });
+
+    await api.login("owner-credential");
+    await expect(api.revokeOtherSessions()).rejects.toMatchObject({
+      code: "recent_authentication_required",
+      status: 403,
+    });
+    expect(api.hasMutationProof).toBe(false);
+  });
+
+  it("clears stale proof when CSRF validation fails", async () => {
+    let requests = 0;
+    const api = new MelloaApi(async () => {
+      requests += 1;
+      return requests === 1
+        ? jsonResponse({ principal, csrf_token: "csrf-proof" })
+        : jsonResponse({
+          code: "csrf_validation_failed",
+          message: "Browser action failed CSRF validation.",
+        }, 403);
+    });
+
+    await api.login("owner-credential");
+    await expect(api.deleteMemoryContent("assertion_01")).rejects.toMatchObject({
+      code: "csrf_validation_failed",
+      status: 403,
+    });
+    expect(api.hasMutationProof).toBe(false);
+  });
+
   it("uses explicit inspection routes and encoded activity windows", async () => {
     const requested: string[] = [];
     const api = new MelloaApi(async (input) => {

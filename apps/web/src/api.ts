@@ -945,15 +945,15 @@ export class MelloaApi {
       redirect: "error",
     });
     if (!response.ok) {
-      if (response.status === 401) {
-        this.#csrfToken = null;
-      }
       const contentType = response.headers.get("content-type") ?? "";
       const payload: unknown = contentType.includes("application/json")
         ? await response.json()
         : null;
       const error = isObject(payload) ? payload : {};
       const code = typeof error.code === "string" ? error.code : `http_${response.status}`;
+      if (response.status === 401 || code === "recent_authentication_required" || code === "csrf_validation_failed") {
+        this.#csrfToken = null;
+      }
       const detail = typeof error.detail === "string" ? error.detail : undefined;
       const message = typeof error.message === "string" ? error.message : detail;
       throw new ApiError(response.status, code, message ?? "Melloa API request failed.");
