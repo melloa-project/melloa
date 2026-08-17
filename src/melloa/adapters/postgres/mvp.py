@@ -36,7 +36,7 @@ from melloa.domain.identity import (
     OwnerIdentity,
     PersistentIntelligenceIdentity,
 )
-from melloa.domain.memory import Assertion
+from melloa.domain.memory import Assertion, AssertionMetadata
 from melloa.domain.operations import ComponentHealth, HealthCategory, HealthState
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.delivery import DeliveryStore
@@ -396,7 +396,7 @@ def _ensure_assertion(
     assertion = assertion_factory(seeded_at)
     repository = PostgresMemoryRepository(connection)
     try:
-        persisted = repository.get_assertion(assertion.assertion_id)
+        persisted_metadata = repository.get_assertion_metadata(assertion.assertion_id)
     except MemoryNotFoundError:
         connection.execute(
             """
@@ -413,6 +413,14 @@ def _ensure_assertion(
             },
         )
         return
+    expected_metadata = AssertionMetadata.model_validate(
+        assertion.model_dump(mode="python", exclude={"value"})
+    )
+    if persisted_metadata != expected_metadata:
+        raise PostgresMvpBootstrapError("canonical MVP seed assertion conflicts")
+    if repository.get_assertion_content_deletion(assertion.assertion_id) is not None:
+        return
+    persisted = repository.get_assertion(assertion.assertion_id)
     if persisted != assertion:
         raise PostgresMvpBootstrapError("canonical MVP seed assertion conflicts")
 

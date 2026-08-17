@@ -1106,7 +1106,14 @@ def test_postgres_memory_content_deletion_is_durable_and_role_bounded(
         (original.assertion_id,),
     ).fetchone()[0]
     deleted_at = fixed_time + timedelta(minutes=2)
-    ids = iter((record_id("deletion", 1), record_id("work", 1)))
+    ids = iter(
+        (
+            record_id("deletion", 1),
+            record_id("work", 1),
+            record_id("deletion", 2),
+            record_id("work", 2),
+        )
+    )
     guardian = FakeGuardianStatusReader.from_payload(
         GuardianStatusPayload(
             instance_id="synthetic-guardian",

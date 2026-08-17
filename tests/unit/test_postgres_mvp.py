@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import pytest
 
+from melloa.adapters.postgres import mvp
 from melloa.adapters.postgres.mvp import _parse_document, validate_private_database_dsn
 from melloa.adapters.postgres.telegram import (
     PostgresTelegramPairingStateStore,
@@ -17,6 +18,7 @@ from melloa.apps.synthetic import (
     synthetic_seed_assertion,
 )
 from melloa.domain.identity import OwnerIdentity
+from melloa.domain.memory import AssertionMetadata
 from melloa.domain.telegram import (
     TelegramChatType,
     TelegramInboundMessage,
@@ -192,3 +194,37 @@ def test_postgres_mvp_jsonb_documents_round_trip_through_strict_contracts(
     assert PostgresTelegramPollStateStore._parse_state(
         state.model_dump(mode="json")
     ) == state
+
+
+def test_postgres_mvp_bootstrap_preserves_intentionally_deleted_seed_content(
+    monkeypatch,
+    fixed_time,
+) -> None:
+    assertion = synthetic_seed_assertion(fixed_time)
+    metadata = AssertionMetadata.model_validate(
+        assertion.model_dump(mode="python", exclude={"value"})
+    )
+
+    class DeletedSeedRepository:
+        def __init__(self, connection) -> None:
+            assert connection is sentinel_connection
+
+        def get_assertion_metadata(self, assertion_id):
+            assert assertion_id == assertion.assertion_id
+            return metadata
+
+        def get_assertion_content_deletion(self, assertion_id):
+            assert assertion_id == assertion.assertion_id
+            return object()
+
+        def get_assertion(self, assertion_id):
+            raise AssertionError(f"deleted assertion content was re-read: {assertion_id}")
+
+    sentinel_connection = object()
+    monkeypatch.setattr(mvp, "PostgresMemoryRepository", DeletedSeedRepository)
+
+    mvp._ensure_assertion(
+        sentinel_connection,
+        assertion_factory=synthetic_seed_assertion,
+        seeded_at=fixed_time,
+    )

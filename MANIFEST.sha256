@@ -199,7 +199,7 @@ d244a1bda0085425ac135094ae60b98c6cd6a5c681940249d1a029f80189a0b9  ./src/melloa/a
 f42c546730dabf04176f2d2f26a8d81e4b2174dd2c391c39ebebd39bc46ff70e  ./src/melloa/adapters/postgres/delivery.py
 a8393be30f96a935d2189eae402ee1bfc756b277108f009e0f2eee4165cab4c9  ./src/melloa/adapters/postgres/memory.py
 857c2586d5ff4e74700cc45a12e490839f1a2a3ff5ea5d14af12691d06aec0b9  ./src/melloa/adapters/postgres/migrations.py
-1660cea8352415a76a6a83bb21e617a840663b89f5102b469d58ccc9fd5d624a  ./src/melloa/adapters/postgres/mvp.py
+5aa7179442900610b006bdd4170c49af2dd16d3bf453609ab62088eb905710ed  ./src/melloa/adapters/postgres/mvp.py
 86c5ae32b3989935d0e550eed0dc62734ed1afc8ad7d87af0a8afa7a50f769fd  ./src/melloa/adapters/postgres/store.py
 72fe4b2695da6c0e966055bc3154e8b8545909c91ef8a7f86c48086722f3946a  ./src/melloa/adapters/postgres/telegram.py
 2601ef6aa7777ca1a658e18ef240f6c9fa3488367482ea963158d7813444b801  ./src/melloa/adapters/telegram/__init__.py
@@ -255,7 +255,7 @@ d09893c73320b26221bcdd7115064f7c29b73a805f0f6cd16b642cc824a02c0e  ./src/melloa/p
 a2ca70e17b5eb6216948fd0aae1a746e5c761b595ddb39add81621ea67c02692  ./src/melloa/ports/telegram.py
 c0616f5ffa0e452d22cbc5533f7c44439ba9e1e1249df03a9c1d41c6700da1c0  ./tests/__init__.py
 a9e88751254da2d9145f89c984c05d8c8bb8bc478d5e3195d1dbdc3e70583f17  ./tests/conftest.py
-3895b64c4db7dac08044cded57959e407415fe807804b781bb5d76bd5a45b94e  ./tests/integration/test_postgres.py
+51de8648d4abbb039b89689eed9e20d92389db5c50579b9fff8b2cf5aca91435  ./tests/integration/test_postgres.py
 58ebd0681800e0939c4f0557b2c8f55ecb5c526bc0c44289baf3e664539dc33c  ./tests/unit/test_auth.py
 624d4e1056bb1edbba28d0c93f9f7c66630bfc8ed36b43be4066b15f03d86b22  ./tests/unit/test_cli.py
 207ce1630d846d6f4d70bb574c35f5523be4c73fa13920f43632e08efec202af  ./tests/unit/test_codex_cli_model.py
@@ -279,7 +279,7 @@ de02d65c601cd52a9ed0c0e991f9f26eaaa3b4b54d92276a8a718924e8618078  ./tests/unit/t
 7cae5a16cdf3abcff08062afa1f211282a5008ab2117d14d866e0d2dbde8c8f0  ./tests/unit/test_openai_compatible_model.py
 6548639f993978c8f0464d70cfdf6253e0410eb01ce095da8c1fa545de1328c5  ./tests/unit/test_operations.py
 e3c6307e8f7187b22cde9116cd723cd439e3e21733d9cc7903c4dda108b92e65  ./tests/unit/test_policy.py
-e5b3206dc887c6eebca58d5e7acd6f3f11ad299b267a195b94f7ea23b3d5c689  ./tests/unit/test_postgres_mvp.py
+1c5b1491745102b684072d81d727ac6de72ee91fe49c9b72e87d6b64d3b220ba  ./tests/unit/test_postgres_mvp.py
 5b72222adcd219e0ed7d3f03b959c65d95ee398f010556bdcc11c9ba97cc0bc5  ./tests/unit/test_retention.py
 0117b58bb8114cb0fdaac96543f6e7d7e3909b2096428955aeab68fbb3046a48  ./tests/unit/test_retention_inspection.py
 df9f042f5f1ab73857823f5b72b46742b4e649e486625f4982bc0f8bb5f61085  ./tests/unit/test_retrieval.py
