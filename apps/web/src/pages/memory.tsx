@@ -229,11 +229,19 @@ export function MemoryPage() {
                 </div>
                 <div>
                   <span>Tombstone</span>
-                  <code>{shortId(readString(deletionTombstone, "tombstone_id"))}</code>
+                  <MemoryEvidenceId
+                    id={readString(deletionTombstone, "tombstone_id")}
+                    label="Deletion tombstone"
+                    onCopy={copyMemoryIdentifier}
+                  />
                 </div>
                 <div>
                   <span>Rebuild work</span>
-                  <code>{shortId(readString(deletionTombstone, "rebuild_work_id"))}</code>
+                  <MemoryEvidenceId
+                    id={readString(deletionTombstone, "rebuild_work_id")}
+                    label="Rebuild work"
+                    onCopy={copyMemoryIdentifier}
+                  />
                 </div>
                 <div>
                   <span>Backup expiry</span>
@@ -268,10 +276,13 @@ export function MemoryPage() {
               {inspection.state_changes.length === 0 ? (
                 <div className="history-empty"><CheckCircle2 size={17} /><span>No correction-state changes recorded.</span></div>
               ) : inspection.state_changes.map((change, index) => (
-                <details className="record-details" key={`${readString(change, "change_id")}-${index}`}>
-                  <summary><span>{stateChangeLabel(change)}</span><code>v{readNumber(change, "version")}</code></summary>
-                  <pre>{safeJson(change)}</pre>
-                </details>
+                <MemoryStateChangeDetails
+                  change={change}
+                  index={index}
+                  key={`${readString(change, "change_id")}-${index}`}
+                  onCopyIdentifier={(label, value) => void copyMemoryIdentifier(label, value)}
+                  onInspectAssertion={inspectRelatedAssertion}
+                />
               ))}
             </Card>
           </div>
@@ -375,6 +386,73 @@ export function normalizeAssertionLookup(input: string): string {
 function stateChangeLabel(change: JsonObject): string {
   const explicitType = readString(change, "change_type");
   return titleCase(explicitType === "unknown" ? readString(change, "reason") : explicitType);
+}
+
+function MemoryEvidenceId({
+  id,
+  label,
+  onCopy,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly onCopy: (label: string, value: string) => void;
+}) {
+  return (
+    <span className="memory-evidence-id">
+      <code title={id}>{shortId(id)}</code>
+      {id === "unknown" ? null : (
+        <Button
+          aria-label={`Copy ${label} ID ${id}`}
+          onClick={() => onCopy(label, id)}
+          size="icon"
+          tone="ghost"
+          type="button"
+        >
+          <Copy aria-hidden="true" size={13} />
+        </Button>
+      )}
+    </span>
+  );
+}
+
+function MemoryStateChangeDetails({
+  change,
+  index,
+  onCopyIdentifier,
+  onInspectAssertion,
+}: {
+  readonly change: JsonObject;
+  readonly index: number;
+  readonly onCopyIdentifier: (label: string, value: string) => void;
+  readonly onInspectAssertion: (assertionId: string) => void;
+}) {
+  const changeId = readString(change, "change_id");
+  const changedById = readString(change, "changed_by_record_id");
+  const preferredAssertionId = readString(change, "preferred_assertion_id");
+  return (
+    <details className="record-details" key={`${changeId}-${index}`}>
+      <summary><span>{stateChangeLabel(change)}</span><code>v{readNumber(change, "version")}</code></summary>
+      <div className="memory-state-id-list">
+        <MemoryEvidenceId id={changeId} label="State change" onCopy={onCopyIdentifier} />
+        <MemoryEvidenceId id={changedById} label="Changed by record" onCopy={onCopyIdentifier} />
+        {preferredAssertionId === "unknown" ? null : (
+          <span className="memory-state-related">
+            <button
+              aria-label={`Inspect preferred memory assertion ${preferredAssertionId}`}
+              onClick={() => onInspectAssertion(preferredAssertionId)}
+              title={preferredAssertionId}
+              type="button"
+            >
+              <ExternalLink aria-hidden="true" size={13} />
+              <span>{shortId(preferredAssertionId)}</span>
+            </button>
+            <MemoryEvidenceId id={preferredAssertionId} label="Preferred assertion" onCopy={onCopyIdentifier} />
+          </span>
+        )}
+      </div>
+      <pre>{safeJson(change)}</pre>
+    </details>
+  );
 }
 
 function ProvenanceEdgeDetails({

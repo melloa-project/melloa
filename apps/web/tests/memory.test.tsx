@@ -53,8 +53,13 @@ const retainedInspection: MemoryInspection = {
   state_changes: [
     {
       change_id: "state_change_00000000000000000000000000000001",
+      assertion_id: "assertion_00000000000000000000000000000001",
+      changed_by_record_id: "owner_00000000000000000000000000000001",
+      changed_at: "2026-08-16T12:00:00Z",
       reason: "assertion.initialized",
+      previous_status: null,
       new_status: "confirmed",
+      preferred_assertion_id: "assertion_00000000000000000000000000000001",
       version: 1,
     },
   ],
@@ -163,6 +168,21 @@ describe("MemoryPage", () => {
     expect(screen.getByText("Unknown")).toBeInTheDocument();
     expect(screen.getByText("Assertion Initialized")).toBeInTheDocument();
     expect(screen.getAllByText("v1").length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Deletion tombstone ID ${deletedInspection.deletion_tombstone?.tombstone_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      deletedInspection.deletion_tombstone?.tombstone_id,
+    ));
+    expect(mocks.notify).toHaveBeenCalledWith("Deletion tombstone ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Rebuild work ID ${deletedInspection.deletion_tombstone?.rebuild_work_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      deletedInspection.deletion_tombstone?.rebuild_work_id,
+    ));
+    expect(mocks.notify).toHaveBeenCalledWith("Rebuild work ID copied.", "success");
     expect(screen.getByRole("button", { name: "Correct" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Dispute" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete content" })).toBeDisabled();
@@ -214,6 +234,39 @@ describe("MemoryPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy assertion ID" }));
 
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Assertion ID copy failed.", "error"));
+  });
+
+  it("copies exact state-history accountability ids", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("reading")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Assertion Initialized"));
+
+    const stateChange = retainedInspection.state_changes[0];
+    if (stateChange === undefined) {
+      throw new Error("retainedInspection fixture must include a state change");
+    }
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy State change ID ${stateChange.change_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(stateChange.change_id));
+    expect(mocks.notify).toHaveBeenCalledWith("State change ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Changed by record ID ${stateChange.changed_by_record_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(stateChange.changed_by_record_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Changed by record ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Preferred assertion ID ${stateChange.preferred_assertion_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(stateChange.preferred_assertion_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Preferred assertion ID copied.", "success");
   });
 
   it("keeps memory modal mutations disabled when recent owner authentication lapses", async () => {
