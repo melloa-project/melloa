@@ -59,6 +59,21 @@ import {
 
 const TERMINAL_PROCESSING_STATES = new Set(["completed", "dead", "cancelled"]);
 
+const starterPrompts = [
+  {
+    label: "Readiness check",
+    text: "Give me a concise local readiness check for this Melloa preview.",
+  },
+  {
+    label: "Use memory evidence",
+    text: "What can you answer from the current seed memory, and what evidence will you cite?",
+  },
+  {
+    label: "Inspect boundaries",
+    text: "Help me inspect what is private, durable, and still preview-only right now.",
+  },
+] as const;
+
 export function ConversationPage() {
   const { api, principal, canMutate, notify } = useMelloa();
   const navigate = useNavigate();
@@ -84,6 +99,7 @@ export function ConversationPage() {
   const [inspection, setInspection] = useState<ConversationTurnInspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
   const listEnd = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const selectedThread = threads.find((thread) => thread.thread_id === threadId) ?? null;
   const processingByMessage = useMemo(
@@ -365,6 +381,12 @@ export function ConversationPage() {
     setSelectedDeliveryWorkId(delivery.work_id);
   }
 
+  function selectStarterPrompt(prompt: string) {
+    setDraft(prompt);
+    setSubmissionKey(null);
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
   const inspectorOpen = selectedTurnId !== null || selectedMessageId !== null || selectedDeliveryWorkId !== null;
 
   return (
@@ -430,6 +452,21 @@ export function ConversationPage() {
                   title="Start with what matters now"
                 />
               ) : null}
+              {!loadingConversation && error === null && messages.length === 0 ? (
+                <div className="starter-prompt-grid" aria-label="Starter prompts">
+                  {starterPrompts.map((prompt) => (
+                    <button
+                      className="starter-prompt"
+                      key={prompt.label}
+                      onClick={() => selectStarterPrompt(prompt.text)}
+                      type="button"
+                    >
+                      <Sparkles aria-hidden="true" size={15} />
+                      <span><strong>{prompt.label}</strong><small>{prompt.text}</small></span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="message-list">
                 {messages.map((message) => {
                   const isOwner = message.author_principal_id === principal.owner_id;
@@ -484,6 +521,7 @@ export function ConversationPage() {
                   }
                 }}
                 placeholder="Message Melli…"
+                ref={composerRef}
                 rows={1}
                 value={draft}
               />

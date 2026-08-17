@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -295,6 +295,34 @@ describe("ConversationPage", () => {
     expect(await screen.findByText("codex-subscription-model")).toBeInTheDocument();
     expect(screen.getAllByText("Unreported")).toHaveLength(2);
     expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
+  });
+
+  it("offers privacy-safe starter prompts without auto-sending", async () => {
+    mocks.listMessages.mockResolvedValue([]);
+    mocks.listTurns.mockResolvedValue([]);
+    mocks.listProcessing.mockResolvedValue([]);
+    mocks.listDeliveries.mockResolvedValue([]);
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Start with what matters now" })).toBeInTheDocument();
+    const starters = screen.getByLabelText("Starter prompts");
+    fireEvent.click(within(starters).getByRole("button", { name: /Use memory evidence/i }));
+
+    expect(screen.getByLabelText("Message Melli")).toHaveValue(
+      "What can you answer from the current seed memory, and what evidence will you cite?",
+    );
+    expect(mocks.postMessage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
+      thread.thread_id,
+      "What can you answer from the current seed memory, and what evidence will you cite?",
+      expect.any(String),
+    ));
   });
 
   it("opens the exact turn inspector from a route query", async () => {

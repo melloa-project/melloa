@@ -71,6 +71,22 @@ try {
   await page.getByLabel("Title").fill("Local MVP readiness");
   await page.getByRole("button", { name: "Create conversation" }).click();
   await page.getByRole("heading", { name: "Local MVP readiness" }).waitFor();
+  await page.getByRole("heading", { name: "Start with what matters now" }).waitFor();
+  await page.getByText("Use memory evidence", { exact: true }).waitFor();
+  await page.getByText("Conversation created.", { exact: true }).waitFor({
+    state: "hidden",
+    timeout: 7_000,
+  });
+  await page.screenshot({
+    path: `${outputDirectory}/conversation-starters-desktop.png`,
+    fullPage: true,
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: `${outputDirectory}/conversation-starters-mobile.png`,
+  });
+  await page.setViewportSize({ width: 1440, height: 960 });
 
   await page.getByLabel("Message Melli").fill("Give me a concise local readiness check.");
   await page.getByRole("button", { name: "Send message" }).click();

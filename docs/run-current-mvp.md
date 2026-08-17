@@ -597,6 +597,8 @@ These checked-in references are generated from the same loopback MVP and contain
 | State | Reference | Verify |
 |---|---|---|
 | Desktop login | [login desktop](assets/current-mvp/login-desktop.png) | calm private-access screen, application-authentication copy, independent Guardian boundary |
+| Desktop conversation starters | [conversation starters desktop](assets/current-mvp/conversation-starters-desktop.png) | empty canonical thread offers privacy-safe starter prompts that fill the composer without sending automatically |
+| Mobile conversation starters | [conversation starters mobile](assets/current-mvp/conversation-starters-mobile.png) | starter prompts remain reachable in a narrow empty thread without covering the composer or bottom navigation |
 | Desktop conversation | [conversation desktop](assets/current-mvp/conversation-desktop.png) | conversation-first layout, compact authority bar, route/provenance inspector, visible synthetic fallback when Ollama is absent |
 | Desktop activity | [activity desktop](assets/current-mvp/activity-desktop.png) | owner-readable model ledger with run totals, local/external filters, no-disclosure local route state, and route/turn actions |
 | Mobile activity | [activity mobile](assets/current-mvp/activity-mobile.png) | readable model-run ledger, disclosure filter state, run identifiers, and footer boundary without bottom-navigation overlap |
