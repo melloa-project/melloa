@@ -71,6 +71,9 @@ export function ProvidersPage() {
   const activeRoutes = report?.routes.filter((route) => isOwnerUsableRoute(route) && route.health.state === "healthy").length ?? 0;
   const externalRoutes = report?.routes.filter((route) => route.external_disclosure).length ?? 0;
   const eligibility = report === null ? [] : providerEligibility(report.routes);
+  const selectedRouteMissing = report !== null
+    && selectedRouteId !== null
+    && !report.routes.some((route) => route.route_id === selectedRouteId);
 
   async function copyRouteId(routeId: string) {
     try {
@@ -122,6 +125,23 @@ export function ProvidersPage() {
               </Card>
             ))}
           </section>
+
+          {selectedRouteMissing ? (
+            <Card className="provider-missing-route" role="status">
+              <CircleAlert size={18} />
+              <span>
+                <strong>Requested route is not configured</strong>
+                <small>Activity or export provenance linked to this route ID, but it is not present in the current route report.</small>
+              </span>
+              <code title={selectedRouteId}>{selectedRouteId}</code>
+              <IconButton
+                icon={Copy}
+                label={`Copy missing route ID ${selectedRouteId}`}
+                onClick={() => void copyRouteId(selectedRouteId)}
+                tone="ghost"
+              />
+            </Card>
+          ) : null}
 
           {report.routes.length === 0 ? (
             <Card>

@@ -2179,6 +2179,45 @@ pre {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.provider-missing-route {
+  align-items: center;
+  border-color: #edd6b8;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(160px, auto) auto;
+}
+
+.provider-missing-route > svg {
+  color: var(--warning);
+}
+
+.provider-missing-route > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.provider-missing-route strong {
+  font-size: 0.78rem;
+}
+
+.provider-missing-route small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  margin-top: 3px;
+}
+
+.provider-missing-route code {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.66rem;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+}
+
 .provider-card {
   padding: 18px;
 }
@@ -4218,6 +4257,25 @@ pre {
   .provider-details,
   .settings-details {
     grid-template-columns: 1fr;
+  }
+
+  .provider-missing-route {
+    align-items: flex-start;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+
+  .provider-missing-route > span {
+    grid-column: 2 / -1;
+  }
+
+  .provider-missing-route code {
+    grid-column: 2;
+    width: 100%;
+  }
+
+  .provider-missing-route > .button-icon {
+    grid-column: 3;
+    grid-row: 2;
   }
 
   .memory-search {

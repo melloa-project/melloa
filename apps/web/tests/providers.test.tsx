@@ -151,6 +151,22 @@ describe("ProvidersPage", () => {
     expect(within(selectedCard as HTMLElement).getByText("model.codex.subscription")).toBeInTheDocument();
   });
 
+  it("surfaces stale provider route provenance links", async () => {
+    render(
+      <MemoryRouter initialEntries={["/providers?route=model.retired.local"]}>
+        <ProvidersPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Requested route is not configured")).toBeInTheDocument();
+    expect(screen.getByText("model.retired.local")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy missing route ID model.retired.local" }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("model.retired.local"));
+    expect(mocks.notify).toHaveBeenCalledWith("Route ID copied.", "success");
+  });
+
   it("copies exact provider route ids from route cards", async () => {
     render(
       <MemoryRouter>
