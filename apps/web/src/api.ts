@@ -265,6 +265,32 @@ export type ModelActivityReport = {
   readonly entries: readonly ModelActivityEntry[];
 };
 
+export type DisclosedMemoryReference = {
+  readonly citation_id: string;
+  readonly assertion_id: string;
+  readonly sensitivity: string;
+};
+
+export type ModelRouteAttempt = {
+  readonly route_id: string;
+  readonly provider_id: string;
+  readonly model_id: string;
+  readonly processing_location: "device" | "private_network" | "approved_provider";
+  readonly outcome: "succeeded" | "failed";
+  readonly started_at: string;
+  readonly completed_at: string;
+  readonly external_disclosure: boolean;
+  readonly error_code?: string | null;
+};
+
+export type ModelDisclosureInspection = {
+  readonly retrieval_manifest_id: string;
+  readonly purpose: string;
+  readonly triggering_message_ids: readonly string[];
+  readonly memory_references: readonly DisclosedMemoryReference[];
+  readonly external_attempts: readonly ModelRouteAttempt[];
+};
+
 export type ModelActivityEntry = {
   readonly turn_id: string;
   readonly thread_id: string;
@@ -279,7 +305,7 @@ export type ModelActivityEntry = {
   readonly started_at: string;
   readonly completed_at: string;
   readonly external_disclosure: boolean;
-  readonly disclosure?: JsonObject | null;
+  readonly disclosure?: ModelDisclosureInspection | null;
 };
 
 export type ModelGatewayHealth = {

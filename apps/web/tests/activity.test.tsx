@@ -45,6 +45,35 @@ const externalEntry: ModelActivityEntry = {
   started_at: "2026-08-16T12:04:00Z",
   completed_at: "2026-08-16T12:04:03Z",
   external_disclosure: true,
+  disclosure: {
+    retrieval_manifest_id: "retrieval_manifest_000000000000000000000001",
+    purpose: "conversation.reply",
+    triggering_message_ids: ["message_000000000000000000000000000001"],
+    memory_references: [
+      {
+        citation_id: "citation_000000000000000000000000000001",
+        assertion_id: "assertion_000000000000000000000000000001",
+        sensitivity: "personal",
+      },
+      {
+        citation_id: "citation_000000000000000000000000000002",
+        assertion_id: "assertion_000000000000000000000000000002",
+        sensitivity: "internal",
+      },
+    ],
+    external_attempts: [
+      {
+        route_id: "model.codex.subscription",
+        provider_id: "provider.openai-codex-subscription",
+        model_id: "gpt-5.3-codex",
+        processing_location: "approved_provider",
+        outcome: "succeeded",
+        started_at: "2026-08-16T12:04:00Z",
+        completed_at: "2026-08-16T12:04:03Z",
+        external_disclosure: true,
+      },
+    ],
+  },
 };
 
 const report: ModelActivityReport = {
@@ -83,11 +112,19 @@ describe("ActivityPage", () => {
     expect(screen.queryByText("qwen3:8b")).not.toBeInTheDocument();
     expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "External 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Manifest retrieval…000001")).toBeInTheDocument();
+    expect(screen.getByText("Conversation Reply")).toBeInTheDocument();
+    expect(screen.getByText("Model Codex Subscription · Succeeded")).toBeInTheDocument();
+    expect(screen.getByText("assertion…000001")).toBeInTheDocument();
+    expect(screen.getByText("assertion…000002")).toBeInTheDocument();
+    expect(screen.getByText("Personal · citation_…000001")).toBeInTheDocument();
+    expect(screen.getByText("Internal · citation_…000002")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Local 1" }));
 
     expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
     expect(screen.queryByText("gpt-5.3-codex")).not.toBeInTheDocument();
+    expect(screen.queryByText("assertion…000001")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Local 1" })).toHaveAttribute("aria-pressed", "true");
   });
 

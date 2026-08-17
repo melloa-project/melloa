@@ -4,6 +4,9 @@ import {
   Bot,
   Coins,
   Eye,
+  FileSearch,
+  Fingerprint,
+  MessageSquare,
   RefreshCw,
   ShieldCheck,
   Timer,
@@ -11,10 +14,10 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import type { ModelActivityReport } from "../api";
+import type { ModelActivityEntry, ModelActivityReport } from "../api";
 import { errorMessage, useMelloa } from "../app";
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Metric, SectionHeader } from "../components/ui";
-import { formatDurationMs, formatGbp, formatInstant, shortId } from "../lib/format";
+import { formatDurationMs, formatGbp, formatInstant, shortId, titleCase } from "../lib/format";
 
 type WindowOption = "24h" | "7d" | "30d";
 type DisclosureFilter = "all" | "external" | "local";
@@ -147,40 +150,7 @@ export function ActivityPage() {
                   onChange={setDisclosureFilter}
                 />
                 <div className="activity-list">
-                  {visibleEntries.map((entry) => {
-                    const started = Date.parse(entry.started_at);
-                    const completed = Date.parse(entry.completed_at);
-                    const latency = Number.isFinite(started) && Number.isFinite(completed) ? completed - started : 0;
-                    return (
-                      <article className="activity-row" key={entry.result_id}>
-                        <div className="activity-route-icon"><Bot size={18} /></div>
-                        <div className="activity-identity">
-                          <strong>{entry.model_id}</strong>
-                          <span>{entry.provider_id} · {entry.route_id}</span>
-                        </div>
-                        <div className="activity-facts">
-                          <span><Zap size={14} /> {(entry.input_tokens + entry.output_tokens).toLocaleString()}</span>
-                          <span><Coins size={14} /> {formatGbp(entry.cost_gbp)}</span>
-                          <span><Timer size={14} /> {formatDurationMs(latency)}</span>
-                        </div>
-                        <Badge tone={entry.external_disclosure ? "warning" : "positive"}>
-                          {entry.external_disclosure ? "External" : "Local"}
-                        </Badge>
-                        <div className="activity-time">
-                          <strong>{formatInstant(entry.completed_at)}</strong>
-                          <span>Turn {shortId(entry.turn_id)}</span>
-                        </div>
-                        <Button
-                          aria-label={`Open conversation for ${entry.model_id}`}
-                          onClick={() => navigate(`/conversation/${entry.thread_id}`)}
-                          size="icon"
-                          tone="ghost"
-                        >
-                          <ArrowUpRight size={17} />
-                        </Button>
-                      </article>
-                    );
-                  })}
+                  {visibleEntries.map((entry) => <ActivityRow entry={entry} key={entry.result_id} onOpenThread={navigate} />)}
                 </div>
               </>
             )}
@@ -190,6 +160,92 @@ export function ActivityPage() {
             <ShieldCheck size={14} /> Activity is an inspection surface; policy and Guardian authority remain outside this view.
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+function ActivityRow({
+  entry,
+  onOpenThread,
+}: {
+  readonly entry: ModelActivityEntry;
+  readonly onOpenThread: (path: string) => void;
+}) {
+  const started = Date.parse(entry.started_at);
+  const completed = Date.parse(entry.completed_at);
+  const latency = Number.isFinite(started) && Number.isFinite(completed) ? completed - started : 0;
+
+  return (
+    <article className="activity-row">
+      <div className="activity-route-icon"><Bot size={18} /></div>
+      <div className="activity-identity">
+        <strong>{entry.model_id}</strong>
+        <span>{entry.provider_id} · {entry.route_id}</span>
+      </div>
+      <div className="activity-facts">
+        <span><Zap size={14} /> {(entry.input_tokens + entry.output_tokens).toLocaleString()}</span>
+        <span><Coins size={14} /> {formatGbp(entry.cost_gbp)}</span>
+        <span><Timer size={14} /> {formatDurationMs(latency)}</span>
+      </div>
+      <Badge tone={entry.external_disclosure ? "warning" : "positive"}>
+        {entry.external_disclosure ? "External" : "Local"}
+      </Badge>
+      <div className="activity-time">
+        <strong>{formatInstant(entry.completed_at)}</strong>
+        <span>Turn {shortId(entry.turn_id)}</span>
+      </div>
+      <Button
+        aria-label={`Open conversation for ${entry.model_id}`}
+        onClick={() => onOpenThread(`/conversation/${entry.thread_id}`)}
+        size="icon"
+        tone="ghost"
+      >
+        <ArrowUpRight size={17} />
+      </Button>
+      <ActivityDisclosure entry={entry} />
+    </article>
+  );
+}
+
+function ActivityDisclosure({ entry }: { readonly entry: ModelActivityEntry }) {
+  const disclosure = entry.disclosure;
+  if (disclosure === null || disclosure === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="activity-disclosure" aria-label={`Disclosure evidence for ${entry.model_id}`}>
+      <div className="activity-disclosure-fact">
+        <FileSearch size={14} />
+        <span>Manifest {shortId(disclosure.retrieval_manifest_id)}</span>
+      </div>
+      <div className="activity-disclosure-fact">
+        <MessageSquare size={14} />
+        <span>{disclosure.triggering_message_ids.length} trigger{disclosure.triggering_message_ids.length === 1 ? "" : "s"}</span>
+      </div>
+      <div className="activity-disclosure-fact">
+        <Fingerprint size={14} />
+        <span>{titleCase(disclosure.purpose)}</span>
+      </div>
+      <div className="activity-disclosure-attempts">
+        {disclosure.external_attempts.map((attempt) => (
+          <Badge key={`${attempt.route_id}-${attempt.started_at}`} tone={attempt.outcome === "succeeded" ? "warning" : "danger"}>
+            {titleCase(attempt.route_id)} · {titleCase(attempt.outcome)}
+          </Badge>
+        ))}
+      </div>
+      {disclosure.memory_references.length === 0 ? (
+        <div className="activity-disclosure-empty">No memory IDs were disclosed.</div>
+      ) : (
+        <div className="activity-memory-list" aria-label="Disclosed memory references">
+          {disclosure.memory_references.map((reference) => (
+            <span className="activity-memory-chip" key={reference.citation_id}>
+              <strong>{shortId(reference.assertion_id)}</strong>
+              <small>{titleCase(reference.sensitivity)} · {shortId(reference.citation_id)}</small>
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );

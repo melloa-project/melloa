@@ -1473,6 +1473,74 @@ pre {
   border-bottom: 0;
 }
 
+.activity-disclosure {
+  align-items: center;
+  background: var(--warning-soft);
+  border: 1px solid #f1d8b4;
+  border-radius: var(--radius-sm);
+  color: #6f4615;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-column: 2 / -2;
+  margin: 0 0 4px;
+  padding: 9px;
+}
+
+.activity-disclosure-fact,
+.activity-disclosure-empty {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.activity-disclosure-fact svg {
+  flex: 0 0 auto;
+}
+
+.activity-disclosure-attempts,
+.activity-memory-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.activity-memory-list {
+  flex: 1 1 260px;
+}
+
+.activity-memory-chip {
+  background: rgb(255 255 255 / 58%);
+  border: 1px solid #f0d4a9;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 5px 7px;
+}
+
+.activity-memory-chip strong,
+.activity-memory-chip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-memory-chip strong {
+  color: #57370f;
+  font-size: 0.67rem;
+}
+
+.activity-memory-chip small {
+  color: #8b5719;
+  font-size: 0.58rem;
+}
+
 .activity-identity,
 .activity-time {
   display: flex;
@@ -3208,6 +3276,10 @@ pre {
     display: none;
   }
 
+  .activity-disclosure {
+    grid-column: 1 / -1;
+  }
+
   .activity-toolbar {
     justify-content: flex-start;
   }
@@ -3317,6 +3389,37 @@ pre {
 
   .segmented-option {
     min-width: 0;
+  }
+
+  .activity-disclosure {
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 7px;
+    scrollbar-width: thin;
+  }
+
+  .activity-disclosure-fact,
+  .activity-disclosure-empty,
+  .activity-disclosure-attempts,
+  .activity-memory-list,
+  .activity-memory-chip {
+    flex: 0 0 auto;
+  }
+
+  .activity-memory-list {
+    flex-wrap: nowrap;
+  }
+
+  .activity-memory-chip {
+    align-items: baseline;
+    flex-direction: row;
+    gap: 5px;
+    padding: 4px 6px;
+  }
+
+  .activity-page .page-footnote {
+    display: none;
   }
 
   .card-heading-row {
