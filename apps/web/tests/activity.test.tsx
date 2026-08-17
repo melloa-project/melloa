@@ -182,7 +182,7 @@ describe("ActivityPage", () => {
     expect(screen.getByText(`memory-search=?assertion=${externalEntry.disclosure?.memory_references[0]?.assertion_id}`)).toBeInTheDocument();
   });
 
-  it("filters back to local runs after viewing external disclosure evidence", async () => {
+  it("filters back to no-disclosure runs after viewing external disclosure evidence", async () => {
     render(
       <MemoryRouter>
         <ActivityPage />
@@ -193,12 +193,12 @@ describe("ActivityPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "External 1" }));
     expect(screen.getByText("assertion…000001")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Local 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Private 1" }));
 
     expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
     expect(screen.queryByText("gpt-5.3-codex")).not.toBeInTheDocument();
     expect(screen.queryByText("assertion…000001")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Local 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Private 1" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("labels deterministic synthetic activity as a fixture instead of real local model work", async () => {
@@ -222,7 +222,7 @@ describe("ActivityPage", () => {
     expect(row).toBeInstanceOf(HTMLElement);
     expect(within(row as HTMLElement).getByText("Synthetic fixture")).toBeInTheDocument();
     expect(within(row as HTMLElement).queryByText("Local")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Local 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Private 1" })).toBeInTheDocument();
   });
 
   it("reloads activity when the selected window changes", async () => {

@@ -107,7 +107,7 @@ try {
   await page.getByRole("heading", { name: "Run ledger" }).waitFor();
   await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
   await page.getByText("Synthetic fixture", { exact: true }).first().waitFor();
-  await page.getByRole("button", { name: /^Local \d+$/ }).waitFor();
+  await page.getByRole("button", { name: /^Private \d+$/ }).waitFor();
   await page.getByText("No external disclosure", { exact: true }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/activity-desktop.png`,

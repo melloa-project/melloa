@@ -32,7 +32,7 @@ const windows: ReadonlyArray<{ readonly value: WindowOption; readonly label: str
 const disclosureFilters: ReadonlyArray<{ readonly value: DisclosureFilter; readonly label: string }> = [
   { value: "all", label: "All" },
   { value: "external", label: "External" },
-  { value: "local", label: "Local" },
+  { value: "local", label: "Private" },
 ];
 
 export function ActivityPage() {
@@ -151,7 +151,7 @@ export function ActivityPage() {
                 />
                 <EmptyState
                   icon={disclosureFilter === "external" ? Eye : ShieldCheck}
-                  title={`No ${disclosureFilter} runs in this window`}
+                  title={emptyFilterTitle(disclosureFilter)}
                   description="Choose a different disclosure filter or widen the activity window."
                 />
               </>
@@ -338,4 +338,14 @@ function ActivityFilter({
       </div>
     </div>
   );
+}
+
+function emptyFilterTitle(filter: DisclosureFilter): string {
+  if (filter === "external") {
+    return "No external runs in this window";
+  }
+  if (filter === "local") {
+    return "No runs without external disclosure in this window";
+  }
+  return "No model runs in this window";
 }
