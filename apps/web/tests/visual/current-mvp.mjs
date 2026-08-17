@@ -198,14 +198,14 @@ try {
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await scrollPageShell(0);
+  await scrollIntoPageView(".backup-disclosure");
   await page.screenshot({
     path: `${outputDirectory}/operations-retention-mobile.png`,
   });
 
   await page.getByRole("tab", { name: "Export" }).click();
   await page.getByText("melloa.canonical-owner-export", { exact: true }).waitFor();
-  await scrollPageShell(0);
+  await scrollIntoPageView(".export-summary-panel");
   await page.screenshot({
     path: `${outputDirectory}/operations-export-mobile.png`,
   });

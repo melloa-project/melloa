@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Archive,
   CameraOff,
@@ -9,11 +9,13 @@ import {
   Download,
   FileCheck2,
   HardDrive,
+  ListChecks,
   RefreshCw,
   ServerCog,
   ShieldCheck,
   TimerReset,
   WifiOff,
+  type LucideIcon,
 } from "lucide-react";
 
 import type {
@@ -37,6 +39,17 @@ type OperationsSnapshot = {
 
 type ExportCommandKind = "export" | "validation" | "package" | "packageValidation";
 
+type AttentionTone = "positive" | "warning" | "neutral";
+
+type AttentionItem = {
+  readonly id: string;
+  readonly icon: LucideIcon;
+  readonly title: string;
+  readonly detail: string;
+  readonly tone: AttentionTone;
+  readonly tab: OperationsTab;
+};
+
 const emptySnapshot: OperationsSnapshot = {
   health: null,
   media: null,
@@ -50,6 +63,7 @@ export function OperationsPage() {
   const [snapshot, setSnapshot] = useState<OperationsSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +94,15 @@ export function OperationsPage() {
     (sum, item) => sum + (item.estimated_records ?? 0),
     0,
   ) ?? 0;
+  const attentionItems = operationsAttentionItems(snapshot);
+  const selectAttentionTab = (nextTab: OperationsTab) => {
+    setTab(nextTab);
+    window.requestAnimationFrame(() => {
+      if (typeof tabsRef.current?.scrollIntoView === "function") {
+        tabsRef.current.scrollIntoView({ block: "start" });
+      }
+    });
+  };
 
   return (
     <div className="standard-page operations-page">
@@ -100,7 +123,9 @@ export function OperationsPage() {
         <Metric label="Export" value={snapshot.exportReadiness === null ? "Unknown" : "Preview"} detail={`${formatCount(exportRecords)} estimated records`} />
       </section>
 
-      <div className="tab-list" role="tablist" aria-label="Operations views">
+      <OperationsAttentionSummary items={attentionItems} onSelectTab={selectAttentionTab} />
+
+      <div className="tab-list" ref={tabsRef} role="tablist" aria-label="Operations views">
         <button aria-selected={tab === "health"} className={tab === "health" ? "active" : ""} onClick={() => setTab("health")} role="tab" type="button"><ServerCog size={16} /> Health</button>
         <button aria-selected={tab === "media"} className={tab === "media" ? "active" : ""} onClick={() => setTab("media")} role="tab" type="button"><HardDrive size={16} /> Media & gaps</button>
         <button aria-selected={tab === "retention"} className={tab === "retention" ? "active" : ""} onClick={() => setTab("retention")} role="tab" type="button"><Archive size={16} /> Retention</button>
@@ -113,6 +138,168 @@ export function OperationsPage() {
       {tab === "export" ? <ExportView report={snapshot.exportReadiness} /> : null}
     </div>
   );
+}
+
+function OperationsAttentionSummary({
+  items,
+  onSelectTab,
+}: {
+  readonly items: readonly AttentionItem[];
+  readonly onSelectTab: (tab: OperationsTab) => void;
+}) {
+  return (
+    <Card aria-label="Owner attention summary" className="operations-attention">
+      <div className="card-heading-row">
+        <div>
+          <h2>Owner attention</h2>
+          <p>Current preview boundaries and degraded checks that affect trust in this run.</p>
+        </div>
+        <Badge tone={items.some((item) => item.tone === "warning") ? "warning" : "positive"}>
+          {items.filter((item) => item.tone === "warning").length} action items
+        </Badge>
+      </div>
+      <div className="attention-list">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              className={`attention-row attention-${item.tone}`}
+              key={item.id}
+              onClick={() => onSelectTab(item.tab)}
+              type="button"
+            >
+              <span className={`component-state ${item.tone === "positive" ? "healthy" : item.tone === "neutral" ? "disabled" : ""}`}>
+                <Icon aria-hidden="true" size={17} />
+              </span>
+              <span>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+              </span>
+              <Badge tone={item.tone === "positive" ? "positive" : item.tone === "warning" ? "warning" : "neutral"}>
+                {titleCase(item.tab)}
+              </Badge>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function operationsAttentionItems(snapshot: OperationsSnapshot): readonly AttentionItem[] {
+  const items: AttentionItem[] = [];
+  const health = snapshot.health;
+  if (health === null) {
+    items.push({
+      id: "health-unavailable",
+      icon: CircleAlert,
+      title: "Health report unavailable",
+      detail: "The private core did not return component state.",
+      tone: "warning",
+      tab: "health",
+    });
+  } else {
+    const requiredIssues = health.components.filter((component) => component.required && component.state !== "healthy");
+    const optionalIssues = health.components.filter((component) => !component.required && component.state !== "healthy" && component.state !== "disabled");
+    if (requiredIssues.length > 0) {
+      items.push({
+        id: "required-health",
+        icon: CircleAlert,
+        title: `${requiredIssues.length} required component${requiredIssues.length === 1 ? " needs" : "s need"} attention`,
+        detail: requiredIssues.map((component) => titleCase(component.component_id)).join(", "),
+        tone: "warning",
+        tab: "health",
+      });
+    } else if (optionalIssues.length > 0) {
+      items.push({
+        id: "optional-health",
+        icon: CircleAlert,
+        title: `${optionalIssues.length} optional component${optionalIssues.length === 1 ? "" : "s"} degraded`,
+        detail: optionalIssues.map((component) => titleCase(component.component_id)).join(", "),
+        tone: "warning",
+        tab: "health",
+      });
+    } else {
+      const requiredHealthy = health.components.filter((component) => component.required).length;
+      items.push({
+        id: "health-ok",
+        icon: CheckCircle2,
+        title: "Required runtime checks are healthy",
+        detail: `${requiredHealthy} required component${requiredHealthy === 1 ? "" : "s"} reported healthy.`,
+        tone: "positive",
+        tab: "health",
+      });
+    }
+  }
+
+  const media = snapshot.media;
+  if (media === null) {
+    items.push({
+      id: "media-unavailable",
+      icon: CameraOff,
+      title: "Capture state unavailable",
+      detail: "The media metadata endpoint did not respond.",
+      tone: "warning",
+      tab: "media",
+    });
+  } else if (!media.capture_enabled) {
+    items.push({
+      id: "media-disabled",
+      icon: CameraOff,
+      title: "Camera capture is disabled",
+      detail: "The current MVP should not be treated as ambient observation.",
+      tone: "neutral",
+      tab: "media",
+    });
+  }
+
+  const retention = snapshot.retention;
+  if (retention === null) {
+    items.push({
+      id: "retention-unavailable",
+      icon: TimerReset,
+      title: "Retention report unavailable",
+      detail: "Owner-visible deletion and backup-expiry state could not be read.",
+      tone: "warning",
+      tab: "retention",
+    });
+  } else if (retention.backup_expiry.state !== "configured") {
+    items.push({
+      id: "backup-not-configured",
+      icon: TimerReset,
+      title: "Backup is not configured",
+      detail: titleCase(retention.backup_expiry.status_reason),
+      tone: "warning",
+      tab: "retention",
+    });
+  }
+
+  const exportReadiness = snapshot.exportReadiness;
+  if (exportReadiness === null) {
+    items.push({
+      id: "export-unavailable",
+      icon: Download,
+      title: "Export readiness unavailable",
+      detail: "The owner export coverage endpoint did not respond.",
+      tone: "warning",
+      tab: "export",
+    });
+  } else {
+    const included = exportReadiness.coverage.filter((item) => item.included).length;
+    const excluded = exportReadiness.coverage.length - included;
+    if (excluded > 0 || !exportReadiness.encrypted) {
+      items.push({
+        id: "export-preview",
+        icon: ListChecks,
+        title: "Export remains a preview",
+        detail: `${included} groups included, ${excluded} explicit gaps, ${exportReadiness.encrypted ? "encrypted" : "plaintext"} inner bundle.`,
+        tone: "warning",
+        tab: "export",
+      });
+    }
+  }
+
+  return items;
 }
 
 function HealthView({ report }: { readonly report: OwnerHealthReport | null }) {

@@ -61,7 +61,17 @@ describe("OperationsPage retention view", () => {
     mocks.healthDetail.mockResolvedValue({
       generated_at: "2026-08-16T12:00:00Z",
       overall_state: "healthy",
-      components: [],
+      components: [
+        {
+          component_id: "application.melloa-core",
+          category: "application",
+          state: "healthy",
+          required: true,
+          observed_at: "2026-08-16T12:00:00Z",
+          summary: "Private Melloa core is serving authenticated owner requests.",
+          version: "0.1.0",
+        },
+      ],
     });
     mocks.mediaCatalog.mockResolvedValue({
       generated_at: "2026-08-16T12:00:00Z",
@@ -244,6 +254,56 @@ describe("OperationsPage retention view", () => {
     expect(screen.getByText("Content-free audit ledger")).toBeInTheDocument();
     expect(screen.getByText("Audit records")).toBeInTheDocument();
     expect(screen.getByText("Security events are exposed here only as aggregate counts; credentials, cookies, tokens, prompts, and raw model output are not shown.")).toBeInTheDocument();
+  });
+
+  it("summarizes owner attention across loaded Operations reports", async () => {
+    render(<OperationsPage />);
+
+    const attention = await screen.findByLabelText("Owner attention summary");
+    expect(within(attention).getByText("Required runtime checks are healthy")).toBeInTheDocument();
+    expect(within(attention).getByText("1 required component reported healthy.")).toBeInTheDocument();
+    expect(within(attention).getByText("Camera capture is disabled")).toBeInTheDocument();
+    expect(within(attention).getByText("The current MVP should not be treated as ambient observation.")).toBeInTheDocument();
+    expect(within(attention).getByText("Backup is not configured")).toBeInTheDocument();
+    expect(within(attention).getByText("Retention Backup Not Configured")).toBeInTheDocument();
+    expect(within(attention).getByText("Export remains a preview")).toBeInTheDocument();
+    expect(within(attention).getByText("4 groups included, 2 explicit gaps, plaintext inner bundle.")).toBeInTheDocument();
+
+    fireEvent.click(within(attention).getByRole("button", { name: /Backup is not configured/i }));
+
+    expect(await screen.findByText("Backup expiry")).toBeInTheDocument();
+  });
+
+  it("surfaces required component failures before optional Operations detail", async () => {
+    mocks.healthDetail.mockResolvedValueOnce({
+      generated_at: "2026-08-16T12:00:00Z",
+      overall_state: "unavailable",
+      components: [
+        {
+          component_id: "application.melloa-core",
+          category: "application",
+          state: "unavailable",
+          required: true,
+          observed_at: "2026-08-16T12:00:00Z",
+          summary: "Private Melloa core is unavailable.",
+        },
+        {
+          component_id: "backup.not-configured",
+          category: "backup",
+          state: "disabled",
+          required: false,
+          observed_at: "2026-08-16T12:00:00Z",
+          summary: "Backup remains disabled in this preview.",
+        },
+      ],
+    });
+
+    render(<OperationsPage />);
+
+    const attention = await screen.findByLabelText("Owner attention summary");
+    expect(within(attention).getByText("1 required component needs attention")).toBeInTheDocument();
+    expect(within(attention).getByText("Application Melloa Core")).toBeInTheDocument();
+    expect(within(attention).queryByText("Backup Not Configured")).not.toBeInTheDocument();
   });
 
   it("renders export coverage and validation commands without claiming backup coverage", async () => {
