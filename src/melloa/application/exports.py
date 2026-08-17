@@ -118,6 +118,12 @@ SCHEMA_SOURCE_PATHS = tuple(
 _ENCRYPTED_PACKAGE_MAGIC = b"MELLOA-EXPORT-AESGCM-V1\n"
 _HEADER_LENGTH_BYTES = 4
 _PACKAGE_KEY_BYTES = 32
+_PACKAGE_FORMAT_ID = "melloa.encrypted-owner-export-package"
+_PACKAGE_FORMAT_VERSION = "1.0.0"
+_INNER_FORMAT_ID = "melloa.canonical-owner-export"
+_SCRYPT_SALT_BYTES = 16
+_AES_GCM_NONCE_BYTES = 12
+_AES_GCM_TAG_BYTES = 16
 _SCRYPT_N = 2**15
 _SCRYPT_R = 8
 _SCRYPT_P = 1
@@ -531,8 +537,8 @@ def write_encrypted_package(
         raise ExportBundleError("encrypted export package parent must be a directory")
 
     zip_payload = _zip_bundle_bytes(bundle_dir)
-    salt = os.urandom(16)
-    nonce = os.urandom(12)
+    salt = os.urandom(_SCRYPT_SALT_BYTES)
+    nonce = os.urandom(_AES_GCM_NONCE_BYTES)
     header = EncryptedExportPackageHeader(
         created_at=clock(),
         inner_export_id=validation.export_id,
@@ -543,7 +549,7 @@ def write_encrypted_package(
         nonce_b64=_b64_encode(nonce),
         plaintext_zip_hash=sha256_digest(zip_payload),
         plaintext_zip_size_bytes=len(zip_payload),
-        ciphertext_size_bytes=len(zip_payload) + 16,
+        ciphertext_size_bytes=len(zip_payload) + _AES_GCM_TAG_BYTES,
     )
     header_bytes = canonical_json_bytes(header)
     key = _derive_package_key(passphrase, salt, header)
@@ -764,6 +770,14 @@ def _derive_package_key(
 ) -> bytes:
     if not 16 <= len(passphrase) <= 4096:
         raise ExportBundleError("export package passphrase must contain 16 to 4096 characters")
+    if (header.scrypt_n, header.scrypt_r, header.scrypt_p) != (
+        _SCRYPT_N,
+        _SCRYPT_R,
+        _SCRYPT_P,
+    ):
+        raise ExportBundleError(
+            "encrypted export package key-derivation parameters are unsupported"
+        )
     return Scrypt(
         salt=salt,
         length=_PACKAGE_KEY_BYTES,
@@ -789,7 +803,8 @@ def _read_encrypted_package(
         if len(header_bytes) != header_length:
             raise ExportBundleError("encrypted export package header is truncated")
         header = EncryptedExportPackageHeader.model_validate_json(header_bytes)
-        ciphertext = handle.read()
+        _validate_package_header(header)
+        ciphertext = handle.read(header.ciphertext_size_bytes + 1)
     if len(ciphertext) != header.ciphertext_size_bytes:
         raise ExportBundleError("encrypted export package ciphertext size mismatch")
     return header, header_bytes, ciphertext
@@ -801,12 +816,43 @@ def _decrypt_package_payload(
     ciphertext: bytes,
     passphrase: str,
 ) -> bytes:
-    key = _derive_package_key(passphrase, _b64_decode(header.salt_b64), header)
+    salt, nonce = _validate_package_header(header)
+    key = _derive_package_key(passphrase, salt, header)
     return AESGCM(key).decrypt(
-        _b64_decode(header.nonce_b64),
+        nonce,
         ciphertext,
         _package_aad(header_bytes),
     )
+
+
+def _validate_package_header(
+    header: EncryptedExportPackageHeader,
+) -> tuple[bytes, bytes]:
+    if (
+        header.package_format_id != _PACKAGE_FORMAT_ID
+        or header.package_format_version != _PACKAGE_FORMAT_VERSION
+        or header.inner_format_id != _INNER_FORMAT_ID
+    ):
+        raise ExportBundleError("encrypted export package format is unsupported")
+    if (header.scrypt_n, header.scrypt_r, header.scrypt_p) != (
+        _SCRYPT_N,
+        _SCRYPT_R,
+        _SCRYPT_P,
+    ):
+        raise ExportBundleError(
+            "encrypted export package key-derivation parameters are unsupported"
+        )
+    salt = _b64_decode(header.salt_b64)
+    if len(salt) != _SCRYPT_SALT_BYTES:
+        raise ExportBundleError("encrypted export package salt length is invalid")
+    nonce = _b64_decode(header.nonce_b64)
+    if len(nonce) != _AES_GCM_NONCE_BYTES:
+        raise ExportBundleError("encrypted export package nonce length is invalid")
+    if header.ciphertext_size_bytes != (
+        header.plaintext_zip_size_bytes + _AES_GCM_TAG_BYTES
+    ):
+        raise ExportBundleError("encrypted export package ciphertext size is invalid")
+    return salt, nonce
 
 
 def _package_aad(header_bytes: bytes) -> bytes:

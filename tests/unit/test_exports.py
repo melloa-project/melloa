@@ -205,6 +205,34 @@ def test_owner_export_writes_encrypted_package_for_validated_bundle(
     assert tampered_report.valid is False
     assert tampered_report.errors == ("encrypted export package authentication failed",)
 
+    unsupported_headers = (
+        (
+            "unsupported-version.melloaenc",
+            {"package_format_version": "2.0.0"},
+            "encrypted export package format is unsupported",
+        ),
+        (
+            "unsupported-scrypt.melloaenc",
+            {"scrypt_n": 2**14},
+            "encrypted export package key-derivation parameters are unsupported",
+        ),
+        (
+            "invalid-tag-size.melloaenc",
+            {"ciphertext_size_bytes": header.plaintext_zip_size_bytes + 17},
+            "encrypted export package ciphertext size is invalid",
+        ),
+    )
+    for filename, updates, expected_error in unsupported_headers:
+        malformed = tmp_path / filename
+        _rewrite_encrypted_package_header(package_path, malformed, updates)
+        malformed_report = validate_encrypted_package(
+            malformed,
+            passphrase="correct horse battery staple",
+            clock=lambda: fixed_time,
+        )
+        assert malformed_report.valid is False
+        assert malformed_report.errors == (expected_error,)
+
     with pytest.raises(ExportBundleError, match="already exists"):
         write_encrypted_package(
             bundle_dir,
@@ -279,6 +307,28 @@ def test_encrypted_export_validation_reports_malformed_packages(
     )
     assert invalid_header_report.valid is False
     assert "Field required" in invalid_header_report.errors[0]
+
+
+def _rewrite_encrypted_package_header(
+    source: Path,
+    target: Path,
+    updates: dict[str, object],
+) -> None:
+    magic = b"MELLOA-EXPORT-AESGCM-V1\n"
+    payload = source.read_bytes()
+    header_length_offset = len(magic)
+    header_offset = header_length_offset + 4
+    header_length = int.from_bytes(payload[header_length_offset:header_offset], "big")
+    ciphertext_offset = header_offset + header_length
+    header = json.loads(payload[header_offset:ciphertext_offset])
+    header.update(updates)
+    header_bytes = json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    target.write_bytes(
+        magic
+        + len(header_bytes).to_bytes(4, "big")
+        + header_bytes
+        + payload[ciphertext_offset:]
+    )
 
 
 def test_owner_export_includes_redacted_delivery_status(
