@@ -22,7 +22,8 @@ type MemoryAction = "correct" | "dispute" | "retract" | "delete_content";
 export function MemoryPage() {
   const { api, canMutate, notify } = useMelloa();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get("assertion") ?? "");
+  const assertionQuery = searchParams.get("assertion")?.trim() ?? "";
+  const [query, setQuery] = useState(assertionQuery);
   const [inspection, setInspection] = useState<MemoryInspection | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,6 @@ export function MemoryPage() {
     setLoading(true);
     try {
       setInspection(await api.inspectMemory(normalized));
-      setSearchParams({ assertion: normalized }, { replace: true });
       setError(null);
     } catch (caught) {
       setInspection(null);
@@ -45,19 +45,30 @@ export function MemoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [api, setSearchParams]);
+  }, [api]);
 
   useEffect(() => {
-    const assertionId = searchParams.get("assertion");
-    if (assertionId !== null && assertionId.length > 0) {
-      setQuery(assertionId);
-      void inspect(assertionId);
+    if (assertionQuery.length === 0) {
+      setQuery("");
+      setInspection(null);
+      setError(null);
+      return;
     }
-  }, []);
+    setQuery(assertionQuery);
+    void inspect(assertionQuery);
+  }, [assertionQuery, inspect]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void inspect(query);
+    const normalized = query.trim();
+    if (normalized.length === 0) {
+      return;
+    }
+    if (normalized === assertionQuery) {
+      void inspect(normalized);
+      return;
+    }
+    setSearchParams({ assertion: normalized });
   }
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {

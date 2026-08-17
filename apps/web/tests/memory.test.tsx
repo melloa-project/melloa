@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MemoryInspection } from "../src/api";
@@ -86,6 +86,21 @@ const deletedInspection: MemoryInspection = {
   },
 };
 
+const updatedInspection: MemoryInspection = {
+  ...retainedInspection,
+  assertion: {
+    ...retainedInspection.assertion,
+    assertion_id: "assertion_00000000000000000000000000000002",
+    predicate: "owner.preference.synthetic-exercise",
+    value: { activity: "walking", fixture: true },
+  },
+  current_state: {
+    assertion_id: "assertion_00000000000000000000000000000002",
+    current_status: "confirmed",
+    version: 1,
+  },
+};
+
 describe("MemoryPage", () => {
   beforeEach(() => {
     mocks.inspectMemory.mockReset();
@@ -100,9 +115,14 @@ describe("MemoryPage", () => {
   });
 
   it("deletes retained assertion content and renders tombstone evidence", async () => {
-    mocks.inspectMemory
-      .mockResolvedValueOnce(retainedInspection)
-      .mockResolvedValueOnce(deletedInspection);
+    let contentDeleted = false;
+    mocks.inspectMemory.mockImplementation(() => Promise.resolve(
+      contentDeleted ? deletedInspection : retainedInspection,
+    ));
+    mocks.deleteMemoryContent.mockImplementation(() => {
+      contentDeleted = true;
+      return Promise.resolve({ created: true });
+    });
 
     render(
       <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
@@ -142,4 +162,44 @@ describe("MemoryPage", () => {
     expect(screen.getByRole("button", { name: "Correct" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete content" })).toBeDisabled();
   });
+
+  it("reloads inspection when the assertion query changes on the mounted page", async () => {
+    mocks.inspectMemory.mockImplementation((assertionId: string) => Promise.resolve(
+      assertionId === updatedInspection.assertion.assertion_id ? updatedInspection : retainedInspection,
+    ));
+
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <Routes>
+          <Route
+            path="/memory"
+            element={(
+              <>
+                <MemoryQuerySwitcher assertionId={updatedInspection.assertion.assertion_id} />
+                <MemoryPage />
+              </>
+            )}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("reading")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open alternate memory" }));
+
+    expect(await screen.findByText("walking")).toBeInTheDocument();
+    expect(screen.queryByText("reading")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.inspectMemory).toHaveBeenCalledWith(
+      updatedInspection.assertion.assertion_id,
+    ));
+  });
 });
+
+function MemoryQuerySwitcher({ assertionId }: { readonly assertionId: string }) {
+  const navigate = useNavigate();
+  return (
+    <button onClick={() => navigate(`/memory?assertion=${assertionId}`)} type="button">
+      Open alternate memory
+    </button>
+  );
+}
