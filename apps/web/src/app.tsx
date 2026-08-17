@@ -24,6 +24,7 @@ import { MemoryPage } from "./pages/memory";
 import { OperationsPage } from "./pages/operations";
 import { ProvidersPage } from "./pages/providers";
 import { SettingsPage } from "./pages/settings";
+import { TimelinePage } from "./pages/timeline";
 
 type Notice = {
   readonly id: number;
@@ -165,6 +166,7 @@ export function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/conversation/:threadId?" element={<ConversationPage />} />
+            <Route path="/timeline" element={<TimelinePage />} />
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/providers" element={<ProvidersPage />} />

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleUserRound,
   DatabaseZap,
+  History,
   LockKeyhole,
   LogOut,
   MessageCircleMore,
@@ -23,6 +24,7 @@ import { Badge, Button, IconButton, Modal } from "./ui";
 
 const navigation = [
   { to: "/conversation", label: "Conversation", icon: MessageCircleMore },
+  { to: "/timeline", label: "Timeline", icon: History },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/memory", label: "Memory", icon: Brain },
   { to: "/providers", label: "Providers", icon: Bot },

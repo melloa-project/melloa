@@ -383,6 +383,21 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert activity.json()["total_runs"] == 1
     assert activity.json()["external_disclosure_runs"] == 0
     assert activity.json()["total_cost_gbp"] == 0.0
+    timeline = client.get(
+        "/api/v1/inspection/timeline",
+        params={
+            "from": (fixed_time - timedelta(minutes=1)).isoformat(),
+            "to": (fixed_time + timedelta(minutes=1)).isoformat(),
+            "limit": 20,
+        },
+    )
+    assert timeline.status_code == 200
+    timeline_kinds = {entry["kind"] for entry in timeline.json()["entries"]}
+    assert "timeline.conversation.message-created" in timeline_kinds
+    assert "timeline.conversation.turn-recorded" in timeline_kinds
+    assert "timeline.model-route.completed" in timeline_kinds
+    assert "Please use my reading preference." not in timeline.text
+    assert "No external model" not in timeline.text
     export_after = client.get("/api/v1/inspection/export")
     export_after_coverage = {
         item["group_id"]: item for item in export_after.json()["coverage"]
@@ -391,7 +406,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert export_after_coverage["export.delivery-records"]["estimated_records"] == 0
     assert export_after_coverage["export.model-activity"]["estimated_records"] == 1
     assert export_after_coverage["export.retention-report"]["estimated_records"] == 1
-    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 13
+    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 14
     csrf_denied_export = client.post("/api/v1/exports/preview")
     assert csrf_denied_export.status_code == 403
     assert runtime.event_audit_store.events[-1].event_type == (

@@ -274,6 +274,34 @@ export type ModelActivityReport = {
   readonly entries: readonly ModelActivityEntry[];
 };
 
+export type OwnerTimelineEvent = {
+  readonly event_id: string;
+  readonly kind: string;
+  readonly occurred_at: string;
+  readonly source: string;
+  readonly summary: string;
+  readonly thread_id?: string | null;
+  readonly message_id?: string | null;
+  readonly turn_id?: string | null;
+  readonly work_id?: string | null;
+  readonly status?: string | null;
+  readonly sensitivity?: string | null;
+  readonly references: readonly string[];
+  readonly metadata: JsonObject;
+};
+
+export type OwnerTimelineReport = {
+  readonly contract_version: "1.0.0";
+  readonly owner_id: string;
+  readonly window_start: string;
+  readonly window_end: string;
+  readonly generated_at: string;
+  readonly total_events: number;
+  readonly coverage: readonly string[];
+  readonly limitations: readonly string[];
+  readonly entries: readonly OwnerTimelineEvent[];
+};
+
 export type DisclosedMemoryReference = {
   readonly citation_id: string;
   readonly assertion_id: string;
@@ -835,6 +863,21 @@ export class MelloaApi {
     }
     const suffix = query.size === 0 ? "" : `?${query.toString()}`;
     return this.#request<ModelActivityReport>(`/api/v1/inspection/model-activity${suffix}`);
+  }
+
+  async ownerTimeline(
+    windowStart?: Date,
+    windowEnd?: Date,
+    limit = 100,
+  ): Promise<OwnerTimelineReport> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (windowStart !== undefined) {
+      query.set("from", windowStart.toISOString());
+    }
+    if (windowEnd !== undefined) {
+      query.set("to", windowEnd.toISOString());
+    }
+    return this.#request<OwnerTimelineReport>(`/api/v1/inspection/timeline?${query.toString()}`);
   }
 
   async #changeMemoryState(

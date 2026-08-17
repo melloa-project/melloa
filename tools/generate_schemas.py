@@ -35,7 +35,7 @@ from melloa.domain.events import EventEnvelope
 from melloa.domain.exports import CanonicalExportManifest, CanonicalExportValidationReport
 from melloa.domain.guardian import GuardianStatusPayload, SignedGuardianStatus
 from melloa.domain.identity import OwnerIdentity, PersistentIntelligenceIdentity
-from melloa.domain.inspection import OwnerModelActivityReport
+from melloa.domain.inspection import OwnerModelActivityReport, OwnerTimelineReport
 from melloa.domain.memory import (
     Assertion,
     AssertionContentDeletionResult,
@@ -142,6 +142,10 @@ REGISTRY: dict[str, tuple[str, type[BaseModel]]] = {
     "inspection/owner-model-activity-v1.json": (
         "owner-model-activity",
         OwnerModelActivityReport,
+    ),
+    "inspection/owner-timeline-v1.json": (
+        "owner-timeline",
+        OwnerTimelineReport,
     ),
     "inspection/owner-health-v1.json": ("owner-health", OwnerHealthReport),
     "inspection/owner-media-catalog-v1.json": (

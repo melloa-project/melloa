@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from melloa.domain.base import AwareDatetime, ContractModel, QualifiedName, RecordId
+from melloa.domain.base import AwareDatetime, ContractModel, JsonObject, QualifiedName, RecordId
 from melloa.domain.classification import Sensitivity
 from melloa.domain.models import ModelRouteAttempt
 
@@ -115,4 +115,78 @@ class OwnerModelActivityReport(ContractModel):
             )
         ):
             raise ValueError("model activity totals do not match its entries")
+        return self
+
+
+class OwnerTimelineEvent(ContractModel):
+    event_id: RecordId
+    kind: QualifiedName
+    occurred_at: AwareDatetime
+    source: QualifiedName
+    summary: str = Field(min_length=1, max_length=256)
+    thread_id: RecordId | None = None
+    message_id: RecordId | None = None
+    turn_id: RecordId | None = None
+    work_id: RecordId | None = None
+    status: QualifiedName | None = None
+    sensitivity: Sensitivity | None = None
+    references: tuple[RecordId, ...] = ()
+    metadata: JsonObject = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_event(self) -> OwnerTimelineEvent:
+        if len(set(self.references)) != len(self.references):
+            raise ValueError("timeline event references must be unique")
+        if not (
+            self.thread_id is not None
+            or self.message_id is not None
+            or self.turn_id is not None
+            or self.work_id is not None
+            or self.references
+        ):
+            raise ValueError("timeline events must reference canonical owner records")
+        return self
+
+
+class OwnerTimelineReport(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    owner_id: RecordId
+    window_start: AwareDatetime
+    window_end: AwareDatetime
+    generated_at: AwareDatetime
+    total_events: Annotated[int, Field(ge=0)]
+    coverage: tuple[QualifiedName, ...] = Field(min_length=1)
+    limitations: tuple[QualifiedName, ...]
+    entries: tuple[OwnerTimelineEvent, ...]
+
+    @model_validator(mode="after")
+    def validate_report(self) -> OwnerTimelineReport:
+        if self.window_end <= self.window_start:
+            raise ValueError("timeline window must end after it starts")
+        if self.total_events != len(self.entries):
+            raise ValueError("timeline total does not match its entries")
+        event_ids = tuple(entry.event_id for entry in self.entries)
+        if len(set(event_ids)) != len(event_ids):
+            raise ValueError("timeline event IDs must be unique")
+        if self.entries != tuple(
+            sorted(
+                self.entries,
+                key=lambda entry: (entry.occurred_at, entry.event_id),
+                reverse=True,
+            )
+        ):
+            raise ValueError("timeline entries must use deterministic newest-first order")
+        if any(
+            not self.window_start <= entry.occurred_at < self.window_end
+            for entry in self.entries
+        ):
+            raise ValueError("timeline event falls outside the report window")
+        if self.coverage != tuple(sorted(self.coverage)):
+            raise ValueError("timeline coverage must use deterministic order")
+        if len(set(self.coverage)) != len(self.coverage):
+            raise ValueError("timeline coverage values must be unique")
+        if self.limitations != tuple(sorted(self.limitations)):
+            raise ValueError("timeline limitations must use deterministic order")
+        if len(set(self.limitations)) != len(self.limitations):
+            raise ValueError("timeline limitations must be unique")
         return self

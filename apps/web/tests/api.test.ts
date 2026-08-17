@@ -181,6 +181,7 @@ describe("MelloaApi", () => {
     await api.retentionReport();
     await api.exportReadiness();
     await api.modelActivity(new Date("2026-08-10T00:00:00Z"), new Date("2026-08-17T00:00:00Z"));
+    await api.ownerTimeline(new Date("2026-08-11T00:00:00Z"), new Date("2026-08-17T00:00:00Z"), 75);
 
     expect(requested.slice(0, 5)).toEqual([
       "/api/v1/providers/routes",
@@ -191,6 +192,9 @@ describe("MelloaApi", () => {
     ]);
     expect(requested[5]).toContain("from=2026-08-10T00%3A00%3A00.000Z");
     expect(requested[5]).toContain("to=2026-08-17T00%3A00%3A00.000Z");
+    expect(requested[6]).toContain("/api/v1/inspection/timeline?");
+    expect(requested[6]).toContain("limit=75");
+    expect(requested[6]).toContain("from=2026-08-11T00%3A00%3A00.000Z");
   });
 
   it("deletes assertion content through a CSRF-bound memory route", async () => {

@@ -400,7 +400,7 @@ def test_owner_operations_service_sorts_and_scopes_reports(fixed_time) -> None:
     assert retention_coverage.estimated_records == 0
     assert retention_coverage.artifact_path == "inspection/retention.jsonl"
     assert export.coverage[-2].group_id == "export.schemas-checksums"
-    assert export.coverage[-2].estimated_records == 13
+    assert export.coverage[-2].estimated_records == 14
     assert export.validation_checks[0].check_id == "export.validation.checksums"
     assert export.validation_checks[0].implemented is True
     assert export.validation_checks[-1].check_id == "export.validation.schemas"

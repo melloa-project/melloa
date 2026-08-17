@@ -82,7 +82,7 @@ from melloa.domain.conversation import (
 )
 from melloa.domain.delivery import DeliveryWorkState, DeliveryWorkStatus
 from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
-from melloa.domain.inspection import OwnerModelActivityReport
+from melloa.domain.inspection import OwnerModelActivityReport, OwnerTimelineReport
 from melloa.domain.memory import (
     AssertionContentDeletionResult,
     AssertionCorrectionResult,
@@ -1589,6 +1589,24 @@ def create_app(
             principal,
             window_start=window_start,
             window_end=window_end,
+        )
+
+    @app.get(
+        "/api/v1/inspection/timeline",
+        response_model=OwnerTimelineReport,
+    )
+    async def inspect_owner_timeline(
+        request: Request,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+        window_start: Annotated[datetime | None, Query(alias="from")] = None,
+        window_end: Annotated[datetime | None, Query(alias="to")] = None,
+        limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    ) -> OwnerTimelineReport:
+        return _configured_inspection(request).timeline(
+            principal,
+            window_start=window_start,
+            window_end=window_end,
+            limit=limit,
         )
 
     @app.get(

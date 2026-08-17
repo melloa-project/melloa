@@ -465,6 +465,7 @@ def build_synthetic_runtime(
     inspection = OwnerInspectionService(
         owner_id=SYNTHETIC_OWNER_ID,
         conversation_store=conversation_store,
+        delivery=delivery,
         clock=clock,
     )
     operations = OwnerOperationsService(

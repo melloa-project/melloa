@@ -275,5 +275,5 @@ class OwnerOperationsService:
             "delivery_records": delivery_count,
             "model_activity_entries": turn_count,
             "retention_reports": 0 if retention is None else 1,
-            "validation_artifacts": 13,
+            "validation_artifacts": 14,
         }

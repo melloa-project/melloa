@@ -13,6 +13,8 @@ from melloa.application.inspection import (
     InspectionOwnershipError,
     InspectionWindowError,
     OwnerInspectionService,
+    _delivery_summary,
+    _processing_summary,
 )
 from melloa.apps.core import create_app
 from melloa.domain.auth import AuthenticatedOwner
@@ -20,6 +22,7 @@ from melloa.domain.base import sha256_digest
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import (
     ConversationMessage,
+    ConversationProcessingState,
     ConversationReplyWork,
     ConversationThread,
     ConversationTurn,
@@ -27,8 +30,13 @@ from melloa.domain.conversation import (
     MessageKind,
     MessagePart,
 )
+from melloa.domain.delivery import DeliveryWorkState, DeliveryWorkStatus
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
-from melloa.domain.inspection import ModelDisclosureInspection, OwnerModelActivityReport
+from melloa.domain.inspection import (
+    ModelDisclosureInspection,
+    OwnerModelActivityReport,
+    OwnerTimelineReport,
+)
 from melloa.domain.memory import AssertionStatus
 from melloa.domain.models import (
     ModelAttemptOutcome,
@@ -280,6 +288,226 @@ def test_owner_model_activity_reports_cost_and_every_disclosed_memory(fixed_time
     )
 
 
+def test_owner_timeline_aggregates_canonical_records_without_content(fixed_time) -> None:
+    store, thread = _populated_store(fixed_time)
+    service = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        clock=lambda: fixed_time + timedelta(hours=3),
+    )
+
+    report = service.timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+        limit=50,
+    )
+
+    assert report.coverage == (
+        "timeline.coverage.canonical-conversation",
+        "timeline.coverage.model-activity",
+        "timeline.coverage.reply-processing",
+    )
+    assert "timeline.limit.no-message-or-model-text" in report.limitations
+    assert "timeline.limit.no-outbound-delivery-store-configured" in report.limitations
+    assert report.entries == tuple(
+        sorted(
+            report.entries,
+            key=lambda entry: (entry.occurred_at, entry.event_id),
+            reverse=True,
+        )
+    )
+    kinds = {entry.kind for entry in report.entries}
+    assert {
+        "timeline.conversation.thread-created",
+        "timeline.conversation.message-created",
+        "timeline.conversation.turn-recorded",
+        "timeline.reply-processing.ready",
+        "timeline.model-route.completed",
+    } <= kinds
+    external_model = next(
+        entry
+        for entry in report.entries
+        if entry.kind == "timeline.model-route.completed"
+        and entry.status == "model.disclosure.external"
+    )
+    assert external_model.references == (
+        record_id("request", 1),
+        record_id("retrieval_manifest", 1),
+        record_id("message", 1),
+        record_id("assertion", 1),
+        record_id("assertion", 2),
+    )
+    assert external_model.metadata["disclosed_memory_count"] == 2
+    encoded = report.model_dump_json()
+    assert "Synthetic prompt" not in encoded
+    assert "Synthetic reply" not in encoded
+    assert "raw-output" not in encoded
+
+    limited = service.timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+        limit=3,
+    )
+    assert limited.total_events == 3
+    assert len(limited.entries) == 3
+
+
+def test_owner_timeline_includes_delivery_when_configured(fixed_time) -> None:
+    store, thread = _populated_store(fixed_time)
+    delivery_status = DeliveryWorkStatus(
+        work_id=record_id("deliverywork", 1),
+        thread_id=thread.thread_id,
+        message_id=record_id("message", 2),
+        client_adapter="client.telegram.synthetic",
+        destination_ref="synthetic:owner",
+        action_hash="sha256:" + "2" * 64,
+        current_policy_decision_id=record_id("decision", 1),
+        state=DeliveryWorkState.READY,
+        attempt_count=0,
+        max_attempts=3,
+        available_at=fixed_time + timedelta(hours=2, minutes=1),
+    )
+    outside_window = delivery_status.model_copy(
+        update={
+            "work_id": record_id("deliverywork", 2),
+            "available_at": fixed_time + timedelta(days=2),
+        }
+    )
+
+    class TimelineDelivery:
+        def list_deliveries(
+            self,
+            principal: AuthenticatedOwner,
+            thread_id: str,
+        ) -> tuple[DeliveryWorkStatus, ...]:
+            assert principal.owner_id == thread.owner_id
+            assert thread_id == thread.thread_id
+            return (delivery_status, outside_window)
+
+    service = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        delivery=TimelineDelivery(),  # type: ignore[arg-type]
+        clock=lambda: fixed_time + timedelta(hours=3),
+    )
+
+    report = service.timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+    )
+
+    assert "timeline.coverage.outbound-delivery" in report.coverage
+    assert "timeline.limit.no-outbound-delivery-store-configured" not in report.limitations
+    delivery_event = next(
+        entry
+        for entry in report.entries
+        if entry.kind == "timeline.outbound-delivery.ready"
+    )
+    assert delivery_event.status == "delivery.work.ready"
+    assert delivery_event.metadata["client_adapter"] == "client.telegram.synthetic"
+    assert record_id("deliverywork", 2) not in report.model_dump_json()
+
+
+def test_timeline_state_summaries_are_owner_visible() -> None:
+    assert (
+        _processing_summary(ConversationProcessingState.COMPLETED)
+        == "Reply processing completed."
+    )
+    assert (
+        _processing_summary(ConversationProcessingState.DEAD)
+        == "Reply processing reached terminal failure."
+    )
+    assert (
+        _processing_summary(ConversationProcessingState.RUNNING)
+        == "Reply processing is leased to a worker."
+    )
+    assert (
+        _processing_summary(ConversationProcessingState.CANCELLED)
+        == "Reply processing was cancelled."
+    )
+    assert (
+        _processing_summary(ConversationProcessingState.READY)
+        == "Reply processing is queued or waiting."
+    )
+    assert (
+        _delivery_summary(DeliveryWorkState.COMPLETED)
+        == "Outbound delivery completed under exact authorization."
+    )
+    assert (
+        _delivery_summary(DeliveryWorkState.DEAD)
+        == "Outbound delivery reached terminal failure."
+    )
+    assert (
+        _delivery_summary(DeliveryWorkState.RUNNING)
+        == "Outbound delivery is leased to a worker."
+    )
+    assert (
+        _delivery_summary(DeliveryWorkState.CANCELLED)
+        == "Outbound delivery was cancelled."
+    )
+    assert (
+        _delivery_summary(DeliveryWorkState.READY)
+        == "Outbound delivery is queued or waiting."
+    )
+
+
+def test_timeline_rejects_bad_owner_window_limit_and_contract_shape(fixed_time) -> None:
+    store, thread = _populated_store(fixed_time)
+    service = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        clock=lambda: fixed_time + timedelta(hours=3),
+    )
+
+    with pytest.raises(InspectionOwnershipError):
+        service.timeline(_principal(fixed_time, owner_number=2))
+    with pytest.raises(InspectionWindowError, match="limit"):
+        service.timeline(_principal(fixed_time), limit=0)
+    with pytest.raises(InspectionWindowError, match="end after"):
+        service.timeline(
+            _principal(fixed_time),
+            window_start=fixed_time,
+            window_end=fixed_time,
+        )
+
+    report = service.timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+    )
+    with pytest.raises(ValidationError, match="total"):
+        OwnerTimelineReport.model_validate({**report.model_dump(), "total_events": 99})
+    with pytest.raises(ValidationError, match="newest-first"):
+        OwnerTimelineReport.model_validate(
+            {**report.model_dump(), "entries": tuple(reversed(report.entries))}
+        )
+    with pytest.raises(ValidationError, match="coverage values"):
+        OwnerTimelineReport.model_validate(
+            {
+                **report.model_dump(),
+                "coverage": (
+                    report.coverage[0],
+                    report.coverage[0],
+                    *report.coverage[1:],
+                ),
+            }
+        )
+    with pytest.raises(ValidationError, match="canonical owner records"):
+        report.entries[0].__class__.model_validate(
+            {
+                **report.entries[0].model_dump(),
+                "thread_id": None,
+                "message_id": None,
+                "turn_id": None,
+                "work_id": None,
+                "references": (),
+            }
+        )
+
+
 def test_model_activity_rejects_bad_owner_window_and_contract_totals(fixed_time) -> None:
     store, thread = _populated_store(fixed_time)
     service = OwnerInspectionService(
@@ -439,6 +667,73 @@ def test_authenticated_model_activity_api_is_bounded_and_fail_closed(fixed_time)
     )
     assert invalid.status_code == 422
     assert invalid.json()["code"] == "invalid_inspection_window"
+
+    absent_client = TestClient(
+        create_app(_guardian(fixed_time), sessions),
+        base_url="https://testserver",
+    )
+    absent_client.cookies.update(client.cookies)
+    absent = absent_client.get(endpoint)
+    assert absent.status_code == 503
+    assert absent.json()["detail"] == "Owner activity inspection is not configured."
+
+    foreign_inspection = OwnerInspectionService(
+        owner_id=record_id("owner", 2),
+        conversation_store=store,
+        clock=lambda: fixed_time,
+    )
+    foreign_client = TestClient(
+        create_app(
+            _guardian(fixed_time),
+            sessions,
+            inspection_service=foreign_inspection,
+        ),
+        base_url="https://testserver",
+    )
+    foreign_client.cookies.update(client.cookies)
+    concealed = foreign_client.get(endpoint)
+    assert concealed.status_code == 404
+    assert concealed.json()["code"] == "inspection_not_found"
+
+
+def test_authenticated_timeline_api_is_bounded_and_fail_closed(fixed_time) -> None:
+    store, thread = _populated_store(fixed_time)
+    inspection = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        clock=lambda: fixed_time + timedelta(hours=3),
+    )
+    tokens = iter(("session-token", "csrf-token"))
+    sessions = InMemoryOwnerSessionManager(
+        thread.owner_id,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(tokens),
+    )
+    client = TestClient(
+        create_app(_guardian(fixed_time), sessions, inspection_service=inspection),
+        base_url="https://testserver",
+    )
+    endpoint = "/api/v1/inspection/timeline"
+    assert client.get(endpoint).status_code == 401
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": _BOOTSTRAP_TOKEN},
+    )
+    assert login.status_code == 200
+    report = client.get(
+        endpoint,
+        params={
+            "from": fixed_time.isoformat(),
+            "to": (fixed_time + timedelta(hours=3)).isoformat(),
+            "limit": 5,
+        },
+    )
+    assert report.status_code == 200
+    assert report.json()["total_events"] == 5
+    assert all("Synthetic prompt" not in str(entry) for entry in report.json()["entries"])
+    invalid = client.get(endpoint, params={"limit": 0})
+    assert invalid.status_code == 422
 
     absent_client = TestClient(
         create_app(_guardian(fixed_time), sessions),
