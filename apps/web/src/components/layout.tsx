@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
   Activity,
   Bot,
@@ -44,12 +44,17 @@ export function AppLayout() {
     notify,
   } = useMelloa();
   const location = useLocation();
+  const pageShellRef = useRef<HTMLElement | null>(null);
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthenticating, setReauthenticating] = useState(false);
   const page = navigation.find((item) => location.pathname.startsWith(item.to));
   const pageShellClassName = page?.to === "/conversation"
     ? "page-shell page-shell-conversation"
     : "page-shell page-shell-standard";
+
+  useEffect(() => {
+    pageShellRef.current?.scrollTo({ left: 0, top: 0 });
+  }, [location.pathname]);
 
   async function reauthenticate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -141,7 +146,7 @@ export function AppLayout() {
           </div>
         </header>
 
-        <main className={pageShellClassName}><Outlet /></main>
+        <main className={pageShellClassName} ref={pageShellRef}><Outlet /></main>
       </div>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">

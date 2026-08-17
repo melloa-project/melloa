@@ -35,6 +35,8 @@ type OperationsSnapshot = {
   readonly exportReadiness: OwnerExportReadinessReport | null;
 };
 
+type ExportCommandKind = "export" | "validation" | "package" | "packageValidation";
+
 const emptySnapshot: OperationsSnapshot = {
   health: null,
   media: null,
@@ -253,7 +255,7 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
 function ExportView({ report }: { readonly report: OwnerExportReadinessReport | null }) {
   const { api, canMutate, notify } = useMelloa();
   const [copyState, setCopyState] = useState<{
-    readonly command: "export" | "validation";
+    readonly command: ExportCommandKind;
     readonly status: "copied" | "failed";
   } | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -263,7 +265,11 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
   const includedCoverage = report.coverage.filter((item) => item.included);
   const excludedCoverage = report.coverage.filter((item) => !item.included);
   const implementedValidationChecks = report.validation_checks.filter((item) => item.implemented).length;
-  const copyCommand = async (command: "export" | "validation", value: string) => {
+  const packageReadiness = report.encrypted_package;
+  const packageCommand = packageReadiness.supported ? packageReadiness.package_command ?? null : null;
+  const packageValidationCommand = packageReadiness.supported ? packageReadiness.validation_command ?? null : null;
+  const packageSupported = packageCommand !== null && packageValidationCommand !== null;
+  const copyCommand = async (command: ExportCommandKind, value: string) => {
     try {
       if (navigator.clipboard === undefined) {
         throw new Error("Clipboard API unavailable");
@@ -313,7 +319,8 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
           <div><span>Included groups</span><strong>{includedCoverage.length} of {report.coverage.length}</strong></div>
           <div><span>Validation checks</span><strong>{implementedValidationChecks} of {report.validation_checks.length}</strong></div>
           <div><span>Known gaps</span><strong>{excludedCoverage.length}</strong></div>
-          <div><span>Bundle encryption</span><strong>{report.encrypted ? "Enabled" : "Not encrypted"}</strong></div>
+          <div><span>Inner bundle</span><strong>{report.encrypted ? "Encrypted" : "Plaintext"}</strong></div>
+          <div><span>Package encryption</span><strong>{packageSupported ? packageReadiness.cipher : "Unavailable"}</strong></div>
         </div>
         <div className="export-command-grid" aria-label="Live export download">
           <div>
@@ -333,6 +340,29 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
             <small>Validated before download. The ZIP is not encrypted and excludes blobs and SQL snapshots.</small>
           </div>
         </div>
+        {packageSupported ? (
+          <div className="export-command-grid" aria-label="Encrypted package commands">
+            <div>
+              <div className="export-command-header">
+                <span>Encrypted package</span>
+                <Badge tone="positive">{packageReadiness.package_format_id}</Badge>
+              </div>
+              <small>{packageReadiness.cipher} with {packageReadiness.kdf}; passphrase file mode {packageReadiness.required_file_mode}</small>
+            </div>
+            <CommandBlock
+              command={packageCommand}
+              copied={copyState?.command === "package" ? copyState.status : null}
+              label="Package command"
+              onCopy={() => void copyCommand("package", packageCommand)}
+            />
+            <CommandBlock
+              command={packageValidationCommand}
+              copied={copyState?.command === "packageValidation" ? copyState.status : null}
+              label="Package validation command"
+              onCopy={() => void copyCommand("packageValidation", packageValidationCommand)}
+            />
+          </div>
+        ) : null}
         <div className="export-command-grid" aria-label="Export commands">
           <CommandBlock
             command={report.cli_command}
@@ -410,7 +440,7 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
       </Card>
       <Card className="backup-disclosure">
         <span className="summary-icon"><ShieldCheck size={18} /></span>
-        <div><h2>Limitations</h2><p>{report.limitations.map(titleCase).join(" · ")}</p></div>
+        <div><h2>Limitations</h2><p>{[...report.limitations, ...packageReadiness.limitations].map(titleCase).join(" · ")}</p></div>
         <Badge tone="warning">Preview</Badge>
       </Card>
     </div>

@@ -12,6 +12,7 @@ from melloa.domain.base import (
     ContractModel,
     QualifiedName,
     RecordId,
+    SemanticVersion,
     Sha256Digest,
 )
 from melloa.domain.classification import Sensitivity
@@ -216,6 +217,50 @@ class ExportValidationCheck(ContractModel):
     status_reason: QualifiedName
 
 
+class EncryptedExportPackageReadiness(ContractModel):
+    supported: bool
+    package_format_id: QualifiedName = "melloa.encrypted-owner-export-package"
+    package_format_version: SemanticVersion = "1.0.0"
+    package_command: str | None = Field(default=None, min_length=1, max_length=512)
+    validation_command: str | None = Field(default=None, min_length=1, max_length=256)
+    passphrase_file_required: bool
+    required_file_mode: Literal["0600"] | None = None
+    cipher: Literal["aes-256-gcm"] | None = None
+    kdf: Literal["scrypt"] | None = None
+    limitations: tuple[QualifiedName, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_package_readiness(self) -> EncryptedExportPackageReadiness:
+        if len(set(self.limitations)) != len(self.limitations):
+            raise ValueError("encrypted package limitations must be unique")
+        if self.limitations != tuple(sorted(self.limitations)):
+            raise ValueError("encrypted package limitations must use deterministic order")
+        if self.supported:
+            if (
+                self.package_command is None
+                or self.validation_command is None
+                or not self.passphrase_file_required
+                or self.required_file_mode != "0600"
+                or self.cipher is None
+                or self.kdf is None
+            ):
+                raise ValueError(
+                    "supported encrypted package requires complete command and crypto metadata"
+                )
+        elif (
+            self.package_command is not None
+            or self.validation_command is not None
+            or self.passphrase_file_required
+            or self.required_file_mode is not None
+            or self.cipher is not None
+            or self.kdf is not None
+        ):
+            raise ValueError(
+                "unsupported encrypted package cannot expose command or crypto metadata"
+            )
+        return self
+
+
 class OwnerExportReadinessReport(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     owner_id: RecordId
@@ -226,6 +271,7 @@ class OwnerExportReadinessReport(ContractModel):
     encrypted: bool
     includes_sql_snapshot: bool
     includes_blobs: bool
+    encrypted_package: EncryptedExportPackageReadiness
     coverage: tuple[ExportCoverageItem, ...] = Field(min_length=1)
     validation_checks: tuple[ExportValidationCheck, ...] = Field(min_length=1)
     limitations: tuple[QualifiedName, ...]

@@ -141,6 +141,22 @@ describe("OperationsPage retention view", () => {
       encrypted: false,
       includes_sql_snapshot: false,
       includes_blobs: false,
+      encrypted_package: {
+        supported: true,
+        package_format_id: "melloa.encrypted-owner-export-package",
+        package_format_version: "1.0.0",
+        package_command: "melloa export-encrypt --bundle-dir <export-dir> --passphrase-file <passphrase-file> --output-file <export-dir>.melloaenc",
+        validation_command: "melloa export-decrypt-validate --package-file <export-dir>.melloaenc --passphrase-file <passphrase-file>",
+        passphrase_file_required: true,
+        required_file_mode: "0600",
+        cipher: "aes-256-gcm",
+        kdf: "scrypt",
+        limitations: [
+          "export.package-not-backup-proof",
+          "export.package-not-signed",
+          "export.package-wraps-preview-bundle",
+        ],
+      },
       coverage: [
         {
           group_id: "export.conversation-records",
@@ -246,10 +262,17 @@ describe("OperationsPage retention view", () => {
     expect(screen.getByText("Validation checks")).toBeInTheDocument();
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
     expect(screen.getByText("Known gaps")).toBeInTheDocument();
-    expect(screen.getByText("Bundle encryption")).toBeInTheDocument();
-    expect(screen.getByText("Not encrypted")).toBeInTheDocument();
+    expect(screen.getByText("Inner bundle")).toBeInTheDocument();
+    expect(screen.getByText("Plaintext")).toBeInTheDocument();
+    expect(screen.getByText("Package encryption")).toBeInTheDocument();
+    expect(screen.getByText("aes-256-gcm")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download current ZIP" })).toBeEnabled();
     expect(screen.getByText("Validated before download. The ZIP is not encrypted and excludes blobs and SQL snapshots.")).toBeInTheDocument();
+    const packageCommands = screen.getByLabelText("Encrypted package commands");
+    expect(within(packageCommands).getByText("melloa.encrypted-owner-export-package")).toBeInTheDocument();
+    expect(within(packageCommands).getByText("aes-256-gcm with scrypt; passphrase file mode 0600")).toBeInTheDocument();
+    expect(within(packageCommands).getByText("melloa export-encrypt --bundle-dir <export-dir> --passphrase-file <passphrase-file> --output-file <export-dir>.melloaenc")).toBeInTheDocument();
+    expect(within(packageCommands).getByText("melloa export-decrypt-validate --package-file <export-dir>.melloaenc --passphrase-file <passphrase-file>")).toBeInTheDocument();
     expect(screen.getByText("Included artifacts")).toBeInTheDocument();
     expect(screen.getByText("Explicit gaps")).toBeInTheDocument();
     expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();
@@ -274,6 +297,7 @@ describe("OperationsPage retention view", () => {
     expect(screen.getByText("Logical SQL snapshots remain pending.")).toBeInTheDocument();
     expect(screen.getByText("Attachment, media, and object-store blobs are not exported.")).toBeInTheDocument();
     expect(screen.getAllByText("Excluded")).toHaveLength(2);
+    expect(screen.getByText(/Export Package Not Signed/i)).toBeInTheDocument();
   });
 
   it("copies export commands from the Operations view", async () => {
@@ -282,6 +306,8 @@ describe("OperationsPage retention view", () => {
     fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
     const commands = screen.getByLabelText("Export commands");
     const [copyExport, copyValidation] = within(commands).getAllByRole("button", { name: "Copy" });
+    const packageCommands = screen.getByLabelText("Encrypted package commands");
+    const [copyPackage, copyPackageValidation] = within(packageCommands).getAllByRole("button", { name: "Copy" });
 
     fireEvent.click(copyExport!);
     await screen.findByText("Export command copied");
@@ -293,6 +319,18 @@ describe("OperationsPage retention view", () => {
     await screen.findByText("Validation command copied");
     expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
       "melloa import-validate --bundle-dir <export-dir>",
+    );
+
+    fireEvent.click(copyPackage!);
+    await screen.findByText("Package command copied");
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
+      "melloa export-encrypt --bundle-dir <export-dir> --passphrase-file <passphrase-file> --output-file <export-dir>.melloaenc",
+    );
+
+    fireEvent.click(copyPackageValidation!);
+    await screen.findByText("Package validation command copied");
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
+      "melloa export-decrypt-validate --package-file <export-dir>.melloaenc --passphrase-file <passphrase-file>",
     );
   });
 

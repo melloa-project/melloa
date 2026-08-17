@@ -12,6 +12,7 @@ from melloa.application.retention import OwnerRetentionService
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, utc_now
 from melloa.domain.operations import (
+    EncryptedExportPackageReadiness,
     ExportCoverageItem,
     ExportValidationCheck,
     OwnerExportReadinessReport,
@@ -99,6 +100,28 @@ class OwnerOperationsService:
             encrypted=False,
             includes_sql_snapshot=False,
             includes_blobs=False,
+            encrypted_package=EncryptedExportPackageReadiness(
+                supported=True,
+                package_command=(
+                    "melloa export-encrypt --bundle-dir <export-dir> "
+                    "--passphrase-file <passphrase-file> "
+                    "--output-file <export-dir>.melloaenc"
+                ),
+                validation_command=(
+                    "melloa export-decrypt-validate "
+                    "--package-file <export-dir>.melloaenc "
+                    "--passphrase-file <passphrase-file>"
+                ),
+                passphrase_file_required=True,
+                required_file_mode="0600",
+                cipher="aes-256-gcm",
+                kdf="scrypt",
+                limitations=(
+                    "export.package-not-backup-proof",
+                    "export.package-not-signed",
+                    "export.package-wraps-preview-bundle",
+                ),
+            ),
             coverage=(
                 ExportCoverageItem(
                     group_id="export.assertion-inspections",

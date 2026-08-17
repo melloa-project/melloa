@@ -522,6 +522,19 @@ export type ExportValidationCheck = {
   readonly status_reason: string;
 };
 
+export type EncryptedExportPackageReadiness = {
+  readonly supported: boolean;
+  readonly package_format_id: string;
+  readonly package_format_version: string;
+  readonly package_command?: string | null;
+  readonly validation_command?: string | null;
+  readonly passphrase_file_required: boolean;
+  readonly required_file_mode?: "0600" | null;
+  readonly cipher?: "aes-256-gcm" | null;
+  readonly kdf?: "scrypt" | null;
+  readonly limitations: readonly string[];
+};
+
 export type OwnerExportReadinessReport = {
   readonly contract_version: "1.0.0";
   readonly owner_id: string;
@@ -532,6 +545,7 @@ export type OwnerExportReadinessReport = {
   readonly encrypted: boolean;
   readonly includes_sql_snapshot: boolean;
   readonly includes_blobs: boolean;
+  readonly encrypted_package: EncryptedExportPackageReadiness;
   readonly coverage: readonly ExportCoverageItem[];
   readonly validation_checks: readonly ExportValidationCheck[];
   readonly limitations: readonly string[];

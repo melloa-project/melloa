@@ -1,4 +1,3 @@
-a2e88b55fef4ff9a86bc4671425dadcdbbb0d50f0f2e3212d05936c7c4232038  ./.env.example
 4b4c4dc2ecf6ce2dd16d1293c55582e0fae0071420dbe717b76dd19b54cb6b0b  ./.github/CODEOWNERS
 c41f34048914d5e4b39e5e4e4f1e5d6b4fab6747bbf38c21d0835985907e3188  ./.github/workflows/ci.yml
 12234036bfc31d8d48f7b7886cac0f3ea0e8cb8c844231d4b57a3e2cf194cf44  ./.gitignore
@@ -18,9 +17,9 @@ c11f07d2cbc30c5bfc73f5d8b9fbfa48aaf239d4f57a4afd1712c577e8a49af6  ./README.md
 a6d6c1d19d09c0ae8f496e56d6343445aacd16177893758cb22f1c2fd177ce63  ./apps/web/package-lock.json
 b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/package.json
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
-f70f38c1a57dfd94d3ca9eb31e26969cea84e0995d037d451d0cf5c5c13ebbe8  ./apps/web/src/api.ts
+4b999c1ad39255a74db5e314f295f7a8ebacd5d4f759bf67ebf26a8ffb435de3  ./apps/web/src/api.ts
 dac5c70dc428d046375e99711fb6c16b630110b878fe35a0948864893c01dfb1  ./apps/web/src/app.tsx
-12c742aa4a0224a5d1b0f7aa359670f481792e2854f572c9aac466ad0fb79515  ./apps/web/src/components/layout.tsx
+3d7c05c9c702aa3dbb5466943fe8135db8de85e050a2dd93c0c50c618a586bf1  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
@@ -28,7 +27,7 @@ e834f43726bd40821ba3cf6cee83c80a95fe1090d017ca207a9a7011c9e258cb  ./apps/web/src
 6d869d2eb3039a432feb1ff95eeb7127a8a0b63566b6aab1cee8fa0f1c1f3b53  ./apps/web/src/pages/conversation.tsx
 fe5acd1e584f66388dd3d95f2471a8067621d8895f78ef563a2b507a9d5a9d2d  ./apps/web/src/pages/login.tsx
 cd4b0e25e5583fa0f10893e58c4f25de85c294eb849493ab4e3426f37d07832a  ./apps/web/src/pages/memory.tsx
-f8162abdd10d6994815dcbf3597920666e54021a556cb8451482be628d786720  ./apps/web/src/pages/operations.tsx
+922746df2345a259eac75f2a45272b54a6718e5fc4d6ffe3b0c97977d17dba65  ./apps/web/src/pages/operations.tsx
 18f5144fd827be68237a2dc301e285bf7abcb548f08416472fe39d1b2813688e  ./apps/web/src/pages/providers.tsx
 ebf6b9c1362676da34b011d745f4429e8d7e8b0acc4cfd7733846859b97167f6  ./apps/web/src/pages/settings.tsx
 51faf9c886f8cf75fc027c707fbc730d228fe31b2883f7e576cb5cce3582dbfd  ./apps/web/src/pages/timeline.tsx
@@ -39,14 +38,15 @@ d477bd2ec0467e9e2c7889cbe227cfbce50a1c716c8cdb10224fe812be86c5f6  ./apps/web/tes
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
 86ccb01e06f688517a28b54b714205a8c70b5f8e73ef526c49cfbdc241e8e1a2  ./apps/web/tests/login.test.tsx
 21f4383b3e39e1802e28555743e9d414d98c6f4d4fba28e0ccb2952d938c8393  ./apps/web/tests/memory.test.tsx
-367111ff4c829bc8feb0427cdbb05f5d8f7294e93df1c4cae101140c317abb8d  ./apps/web/tests/operations.test.tsx
+27da374e785dd03c6b111e91a3b804b87192493facdd5619be00fb773b930a28  ./apps/web/tests/operations.test.tsx
 2396a3e4df0a450b066375d689e0bf30a1ea067b89ded88bce1dab04fdd26b61  ./apps/web/tests/providers.test.tsx
 46915bab06bc981a863da2ad4ca9fe6da1518473040e45329c15fc46f451b23b  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 98116799a432b178484f33b12620ae348f61f5d7a693b67d182f84ea8a86ea8e  ./apps/web/tests/timeline.test.tsx
-35d70473083570cc72cca3b94ee9b1f1d2db4e2aa8ce18da9ef01916483e6155  ./apps/web/tests/visual/current-mvp.mjs
+c5a7ba4c686d92b94a96755d18c3e30255d7f4e56fd4555f420853499fabc151  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
+0a80289e6719f79651540934a96e58a142f9325cebb6a7cf63cb795cbb408ccd  ./com1.txt
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml
 5c14b0c991da3eb3296ef2cd4a0f9ca540149f154e26d796c17f64ef95f372f8  ./config/routes/codex-cli.example.json
 13c90557fb564928a210bcf744c144254e1dc95b1cfae604a10515dc1d5cc2de  ./config/routes/ollama-qwen.example.json
@@ -75,7 +75,7 @@ afde7c16ec2b3582a3497aef8b95a34fcd1192eb739a41a4d6b1b21b199ed165  ./docs/21-revi
 5852f70ce8cf8e58ed5034cbdc1062aa50c73a66029470eb90c2c84d8c853c95  ./docs/22-final-synthesis.md
 44a3db513e0454571ab58ba1cd330327664e02dc30e572ebaf4f6a18210031f7  ./docs/23-v0.2-decisions.md
 a98b2657cf236c2c0b16d0a85611fd2566cff6448d68d74932fd0c275f133758  ./docs/24-m0-implementation.md
-a9fa29da348797bb082df1c0bbc2b432f5b9923bf3f60a9bbcca8228f281ff11  ./docs/25-m1-implementation.md
+316169811c606b9423f295f73986831e3aa6f0bf5f7bf0102f4064aa999db84e  ./docs/25-m1-implementation.md
 926510904a18d0f582bc498e6d7a780e1aa9c61d2e67e94d380622b751e68260  ./docs/adr/ADR-001-event-oriented-provenance-ledger.md
 725fd9f2048fa570db36387aeae26d5821a549cd2a56af09659037ff018562aa  ./docs/adr/ADR-002-postgresql-primary-store-and-jobs.md
 31517d8fc1cb8bb74ae96a6222e839322b398da126d1aa89d9df63089eb6ca78  ./docs/adr/ADR-003-policy-aware-model-routing.md
@@ -107,7 +107,7 @@ ceceedca56a9accccdcc2753b4777c1459b0346a7b65786d961c1ae517b2aaad  ./docs/index.m
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
 2d1ef864609cb2fc96bf33e5aefe8cfebd25f2a8ccb2cc051331530f93a34d9f  ./docs/research/method-and-limitations.md
 fd9dd415102bb9d3335e0e2c430a1d1a24dd6bed0bc61fac591676296f5ee942  ./docs/research/primary-sources.md
-593eff87012bcb99a8e6427caed1c2ea91ca1cc1444284e82483329985e35628  ./docs/run-current-mvp.md
+cc667f0d89bbb8146c394c860added517f47cb4a9ab2c4eb50e18b95a86f9244  ./docs/run-current-mvp.md
 16abfa728e0566f3e89793756a6ae71cd8fc9ffc6d888e2c1ac5902cfe59d64d  ./infra/postgres/init/001_roles.sql
 b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f  ./migrations/0001_m0_foundation.sql
 90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2  ./migrations/0002_m1_conversation_retrieval.sql
@@ -146,7 +146,7 @@ e9b481410a8cd42d4ed5fe2dcf03aa9ebdcd9fb9b60983196738c33db8366e56  ./schemas/conv
 21422edbc53a96862e22bbc51bda5871b96cc5041c147c717d22b858befefc6b  ./schemas/guardian/status-payload-v1.json
 d1b31d4205131abdaa8ea30462d6ada3c745e30382e0d57cdc1468b89fc7ea44  ./schemas/identity/owner-v1.json
 f5417116c88ca28ddff9a65a4202595af3a138f45dc061eee3d7eb6d1ff7a09d  ./schemas/identity/persistent-intelligence-v1.json
-6b2fbd2da28b324d1adaff419466cbfeee2fd2336575e78fece8b2626d503757  ./schemas/inspection/owner-export-readiness-v1.json
+23a628d5aa49f11ef2018084ab8514956ef723df0a116789b530faa7a90c8255  ./schemas/inspection/owner-export-readiness-v1.json
 32df120a1aec1f95406bdd376d937d0fee573e0172300a33fe1745b20f86e502  ./schemas/inspection/owner-health-v1.json
 2f322b87859020caa8ef241498f1750a5782ba87a2b55d34714c4246c5cd0de2  ./schemas/inspection/owner-media-catalog-v1.json
 f18d86ae3399cd45ee2f44f13f98be25e964a77b00ee13877ad82de928544b23  ./schemas/inspection/owner-model-activity-v1.json
@@ -218,7 +218,7 @@ b67650fefe22965449bb9f702ed2e23a705a32faf203a8fd8f329b552af4bb5f  ./src/melloa/a
 fb949e9ef7019ad165a08d42bee7e3a87349e60a51cb1db4d690f4d5579c0e53  ./src/melloa/application/exports.py
 525cd993c8e08043986a698b87960f66f20a59e9287238e82d7676387a6b47ef  ./src/melloa/application/inspection.py
 55d92b75723a225da5f426f396b38718334733b8bbc38a6dbd3786106eef5fac  ./src/melloa/application/memory.py
-1ee6737b74a089969726b184fdd06feb449760502dd49371b712d9f812483b0a  ./src/melloa/application/operations.py
+ba0a2cd98fee9698b65bea447c87226fe105237efa4c39191402e0c47aa80da9  ./src/melloa/application/operations.py
 a3d9dd1f3b61cedbf94bc94440a8c7b706f818bd17b9b09ced9d358f029ebdc6  ./src/melloa/application/retention.py
 0937c1b8397ef04b119879a839e6115f23b774c2bf1904d49874a23a5a1b9e60  ./src/melloa/application/retrieval.py
 12926c54da48605ef7ebc3e4aa6c9e23f61da02b8caf0d8614ff9beb8e88f165  ./src/melloa/application/routing.py
@@ -244,7 +244,7 @@ e795696885c0cab9cae12fff5af950110b9ccf426c31eecce99c198cac42e122  ./src/melloa/d
 0f14ebcc0e483fcc9b7160b69b65e6fa7adcf9365e873d49384cc43deed6142b  ./src/melloa/domain/inspection.py
 4274168ed1f337faff6a5e33b77d39d3edb7d199e26e2479e337b97b69f47155  ./src/melloa/domain/memory.py
 a474acbe93b360aa9ce514109f01e713069d36605f977796021266401cfd2355  ./src/melloa/domain/models.py
-42f041ca48858bcfb9947db556b2b85e0815a215e80f9aa54bc9d9be4a6cefb6  ./src/melloa/domain/operations.py
+792071415e49e79925c5f335e5e26c9299a20f54cdf9161c2ea61a934f93834d  ./src/melloa/domain/operations.py
 272729833663d8c39e046c0880d6bfb4abf357e52f7d788a476ec9dabb6ae24b  ./src/melloa/domain/policy.py
 3b054f7c4e082bf9e4eaa0bda39c914737a534b1a3c6ed29eabe9623c3b0726a  ./src/melloa/domain/retention.py
 39a8a38c759025286fdf59bd6a992ad462e317048cb79f823d88fccd3736151a  ./src/melloa/domain/retrieval.py
@@ -285,7 +285,7 @@ de02d65c601cd52a9ed0c0e991f9f26eaaa3b4b54d92276a8a718924e8618078  ./tests/unit/t
 87c0a6d060960e204241654d7b6b45d72996be4638e7ea686f231a433ef876c1  ./tests/unit/test_model_routes_api.py
 38e036e044bc170b82be2174839c5496182d06b46d009ab4ae7f3a5402006b42  ./tests/unit/test_model_routing.py
 7cae5a16cdf3abcff08062afa1f211282a5008ab2117d14d866e0d2dbde8c8f0  ./tests/unit/test_openai_compatible_model.py
-f9aba7e46180aa758e28848085bed17f72716160fe65d7313f596e2020b1d7a8  ./tests/unit/test_operations.py
+8b2f6d94ab8ac1e486f291888f717926dff3ebda5341cf7122454600562e53ac  ./tests/unit/test_operations.py
 e3c6307e8f7187b22cde9116cd723cd439e3e21733d9cc7903c4dda108b92e65  ./tests/unit/test_policy.py
 589a55ddd6b21505d62884c6e5fc312ffbb9f2b863bfa2dc716632e47f27d1f8  ./tests/unit/test_postgres_auth.py
 e66fc1eeda7cc7774eec8fc90b3464f12f5f1a940a9c1b47eddfa597d4dd5e81  ./tests/unit/test_postgres_mvp.py

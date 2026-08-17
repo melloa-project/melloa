@@ -27,6 +27,12 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 
+async function scrollPageShell(top) {
+  await page.locator(".page-shell").evaluate((element, nextTop) => {
+    element.scrollTop = nextTop;
+  }, top);
+}
+
 try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Your conversation with Melli/ }).waitFor();
@@ -69,6 +75,7 @@ try {
   await page.getByRole("tab", { name: "Export" }).click();
   await page.getByText("melloa.canonical-owner-export", { exact: true }).waitFor();
   await page.getByText("Unencrypted preview", { exact: true }).waitFor();
+  await page.getByText("melloa.encrypted-owner-export-package", { exact: true }).waitFor();
   const [ownerExport] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Download current ZIP" }).click(),
@@ -105,14 +112,14 @@ try {
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollPageShell(0);
   await page.screenshot({
     path: `${outputDirectory}/operations-retention-mobile.png`,
   });
 
   await page.getByRole("tab", { name: "Export" }).click();
   await page.getByText("melloa.canonical-owner-export", { exact: true }).waitFor();
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollPageShell(0);
   await page.screenshot({
     path: `${outputDirectory}/operations-export-mobile.png`,
   });
@@ -131,7 +138,9 @@ try {
   await page.screenshot({
     path: `${outputDirectory}/providers-mobile.png`,
   });
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.locator(".page-shell").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
   const providerGuidanceBox = await page.locator(".provider-guidance").boundingBox();
   const mobileNavBox = await page.locator(".mobile-nav").boundingBox();
   if (
@@ -141,7 +150,7 @@ try {
   ) {
     throw new Error("Provider mobile content does not clear the bottom navigation");
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollPageShell(0);
 
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("heading", { name: "Settings" }).waitFor();
@@ -153,9 +162,7 @@ try {
   });
 
   await page.setViewportSize({ width: 1440, height: 1100 });
-  await page.locator(".page-shell").evaluate((element) => {
-    element.scrollTop = 0;
-  });
+  await scrollPageShell(0);
   await page.screenshot({
     path: `${outputDirectory}/settings-desktop.png`,
     fullPage: true,

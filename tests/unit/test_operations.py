@@ -243,6 +243,26 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
         encrypted=False,
         includes_sql_snapshot=False,
         includes_blobs=False,
+        encrypted_package={
+            "supported": True,
+            "package_command": (
+                "melloa export-encrypt --bundle-dir <export-dir> "
+                "--passphrase-file <passphrase-file> --output-file <export-dir>.melloaenc"
+            ),
+            "validation_command": (
+                "melloa export-decrypt-validate --package-file <export-dir>.melloaenc "
+                "--passphrase-file <passphrase-file>"
+            ),
+            "passphrase_file_required": True,
+            "required_file_mode": "0600",
+            "cipher": "aes-256-gcm",
+            "kdf": "scrypt",
+            "limitations": (
+                "export.package-not-backup-proof",
+                "export.package-not-signed",
+                "export.package-wraps-preview-bundle",
+            ),
+        },
         coverage=(
             {
                 "group_id": "export.conversation-records",
@@ -274,6 +294,7 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
         ),
     )
     assert report.format_id == "melloa.canonical-owner-export"
+    assert report.encrypted_package.supported is True
 
     with pytest.raises(ValidationError, match="relative and contained"):
         OwnerExportReadinessReport.model_validate(
@@ -338,6 +359,29 @@ def test_export_readiness_contract_rejects_misleading_status(fixed_time) -> None
                 ),
             }
         )
+    with pytest.raises(ValidationError, match="complete command and crypto metadata"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "encrypted_package": {
+                    **report.encrypted_package.model_dump(),
+                    "package_command": None,
+                },
+            }
+        )
+    with pytest.raises(ValidationError, match="deterministic order"):
+        OwnerExportReadinessReport.model_validate(
+            {
+                **report.model_dump(),
+                "encrypted_package": {
+                    **report.encrypted_package.model_dump(),
+                    "limitations": (
+                        "export.package-wraps-preview-bundle",
+                        "export.package-not-signed",
+                    ),
+                },
+            }
+        )
 
 
 def test_health_aggregation_distinguishes_required_optional_and_disabled(fixed_time) -> None:
@@ -387,6 +431,15 @@ def test_owner_operations_service_sorts_and_scopes_reports(fixed_time) -> None:
     assert export.encrypted is False
     assert export.includes_sql_snapshot is False
     assert export.includes_blobs is False
+    assert export.encrypted_package.supported is True
+    assert export.encrypted_package.cipher == "aes-256-gcm"
+    assert export.encrypted_package.kdf == "scrypt"
+    assert export.encrypted_package.required_file_mode == "0600"
+    assert "export-encrypt" in (export.encrypted_package.package_command or "")
+    assert "export-decrypt-validate" in (
+        export.encrypted_package.validation_command or ""
+    )
+    assert "export.package-not-signed" in export.encrypted_package.limitations
     assert export.coverage[0].group_id == "export.assertion-inspections"
     assert export.coverage[0].estimated_records == 0
     delivery_coverage = next(
@@ -457,6 +510,9 @@ def test_operational_inspection_api_is_authenticated_and_fail_closed(fixed_time)
     assert client.get(media_endpoint).json()["items"][0]["media_id"] == record_id("media", 1)
     export_payload = client.get(export_endpoint).json()
     assert export_payload["encrypted"] is False
+    assert export_payload["encrypted_package"]["supported"] is True
+    assert export_payload["encrypted_package"]["cipher"] == "aes-256-gcm"
+    assert "export-encrypt" in export_payload["encrypted_package"]["package_command"]
     assert export_payload["coverage"][0]["group_id"] == "export.assertion-inspections"
     assert export_payload["coverage"][0]["estimated_records"] == 0
     assert export_payload["validation_checks"][0]["check_id"] == (
