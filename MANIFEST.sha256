@@ -30,7 +30,7 @@ cb2904f6a5a4544af2f92a7f8390f0cf0dd75f9aff1e0101688c2ee8cf035c01  ./apps/web/src
 c0365fb5a50215241758d7cafe806a301e12b30d1e84616009cad3a702c3ec02  ./apps/web/src/pages/memory.tsx
 9479d4e6a042eb5d194d170836212b46384cca21852c76ea96874d85517d9b3a  ./apps/web/src/pages/operations.tsx
 7c00c409b9ce89e257c1a54f620e580f4d79295f1f1b5e6de0dafd5d820f52f7  ./apps/web/src/pages/providers.tsx
-6e9bc31054099571d2fdb700cf342a009ea335eed0eb8c98846ad9f48a764893  ./apps/web/src/pages/settings.tsx
+fab905d187bc9099eba278995e55e5c4adda5abda275bb8eb36568b8fb26be0f  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
 e45157d379531195a0ab56a95c4f1839c3bfcd6567bb67d0ece8893b13d95eda  ./apps/web/src/styles.css
 55d282e48d557fc1483a2a46fdbdc00206df98395c069a504222a8500060c70f  ./apps/web/tests/activity.test.tsx
@@ -43,7 +43,7 @@ d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tes
 f7ddb45f51c311dea6a502334cf136768f860d80af24704a44445d1a73fc69bf  ./apps/web/tests/memory.test.tsx
 51e101fbcb36effc880797f888df93817315690c56c0027a159aa25e9f18ec1f  ./apps/web/tests/operations.test.tsx
 9bf5084cee1630e10b2f9fb3a47987124ba4c997da564cb3d26af6dc0cca5202  ./apps/web/tests/providers.test.tsx
-5c455056819d1581f07dae71710f5751743bfb95178c98a7c08f0353fae9e75a  ./apps/web/tests/settings.test.tsx
+cb28bc375380054a094eb6b064fcf6d29bb8ead8142ba166798cfc6245ce1acb  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
 14e5cc8a1188f31df3541f97eae593cd16b0f90b2b5d3c58003de78c161013c5  ./apps/web/tests/visual/current-mvp.mjs

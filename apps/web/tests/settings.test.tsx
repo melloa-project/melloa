@@ -204,6 +204,32 @@ describe("SettingsPage Telegram inspection", () => {
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Telegram adapter ID copy failed.", "error"));
   });
 
+  it("copies exact owner session and Guardian authority ids", async () => {
+    render(<SettingsPage />);
+
+    expect(await screen.findByText(/Bot API · Healthy/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Owner ID owner_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("owner_01"));
+    expect(mocks.notify).toHaveBeenCalledWith("Owner ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Session ID session_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("session_01"));
+    expect(mocks.notify).toHaveBeenCalledWith("Session ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Current session ID session_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("session_01"));
+    expect(mocks.notify).toHaveBeenCalledWith("Current session ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Other session ID session_02" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("session_02"));
+    expect(mocks.notify).toHaveBeenCalledWith("Other session ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Guardian key ID guardian.status-v1" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("guardian.status-v1"));
+    expect(mocks.notify).toHaveBeenCalledWith("Guardian key ID copied.", "success");
+  });
+
   it("inspects active sessions and confirms signing out other browsers", async () => {
     let revoked = false;
     mocks.activeSessions.mockImplementation(() => Promise.resolve(

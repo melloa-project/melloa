@@ -172,7 +172,7 @@ export function SettingsPage() {
     }
   }
 
-  async function copyTelegramAuthorityId(label: string, id: string) {
+  async function copyAuthorityId(label: string, id: string) {
     try {
       if (navigator.clipboard === undefined) {
         throw new Error("Clipboard API unavailable");
@@ -203,7 +203,8 @@ export function SettingsPage() {
         <Card className="settings-card">
           <div className="settings-card-heading"><span className="settings-icon"><UserRound size={19} /></span><div><h2>Owner session</h2><p>Short-lived application authentication</p></div><Badge tone={canMutate ? "positive" : "warning"}>{canMutate ? "Changes unlocked" : "Read only"}</Badge></div>
           <dl className="settings-details">
-            <div><dt>Owner</dt><dd>{shortId(principal.owner_id)}</dd></div>
+            <div><dt>Owner</dt><dd><CopyableAuthorityId label="Owner" id={principal.owner_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
+            <div><dt>Session</dt><dd><CopyableAuthorityId label="Session" id={principal.session_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
             <div><dt>Method</dt><dd>{titleCase(principal.authentication_method)}</dd></div>
             <div><dt>Authenticated</dt><dd>{formatInstant(principal.authenticated_at)}</dd></div>
             <div><dt>Session expires</dt><dd>{formatRelative(principal.expires_at)}</dd></div>
@@ -219,7 +220,13 @@ export function SettingsPage() {
                   return (
                     <div key={session.session_id}>
                       <dt>{current ? "This browser" : `Other browser · ${shortId(session.session_id)}`}</dt>
-                      <dd>{titleCase(session.authentication_method)} · signed in {formatInstant(session.authenticated_at)} · expires {formatRelative(session.expires_at)}</dd>
+                      <dd>
+                        <CopyableAuthorityId
+                          label={current ? "Current session" : "Other session"}
+                          id={session.session_id}
+                          onCopy={(label, id) => void copyAuthorityId(label, id)}
+                        /> · {titleCase(session.authentication_method)} · signed in {formatInstant(session.authenticated_at)} · expires {formatRelative(session.expires_at)}
+                      </dd>
                     </div>
                   );
                 })}
@@ -244,7 +251,7 @@ export function SettingsPage() {
           <div className="settings-card-heading"><span className="settings-icon guardian"><ShieldCheck size={19} /></span><div><h2>Guardian boundary</h2><p>Independently controlled authority</p></div><Badge tone={status === null ? "warning" : "positive"}>{status === null ? "Unverified" : titleCase(status.guardian.mode)}</Badge></div>
           <dl className="settings-details">
             <div><dt>Signed sequence</dt><dd>{status?.guardian.sequence ?? "Unavailable"}</dd></div>
-            <div><dt>Key ID</dt><dd>{status?.guardian.key_id ?? "Unavailable"}</dd></div>
+            <div><dt>Key ID</dt><dd>{status === null ? "Unavailable" : <CopyableAuthorityId label="Guardian key" id={status.guardian.key_id} onCopy={(label, id) => void copyAuthorityId(label, id)} />}</dd></div>
             <div><dt>Changed</dt><dd>{formatInstant(status?.guardian.changed_at)}</dd></div>
             <div><dt>External actions</dt><dd>{status?.external_actions_enabled === true ? "Enabled" : "Bounded"}</dd></div>
             <div><dt>Public ingress</dt><dd>{status?.public_ingress === false ? "None" : "Unverified"}</dd></div>
@@ -265,7 +272,7 @@ export function SettingsPage() {
         {telegram === null ? null : (
           <dl className="channel-status-grid">
             <div><dt>Transport</dt><dd>{realTransport ? "Real Telegram Bot API" : "Synthetic, no network"}</dd></div>
-            <div><dt>Adapter</dt><dd><CopyableTelegramAuthorityId label="Telegram adapter" id={telegram.status.adapter_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} /></dd></div>
+            <div><dt>Adapter</dt><dd><CopyableAuthorityId label="Telegram adapter" id={telegram.status.adapter_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
             <div><dt>Polling</dt><dd>{titleCase(telegram.status.polling?.reason_code ?? "not configured")}</dd></div>
             <div><dt>Replies</dt><dd>{telegram.status.replies === null ? "Not enabled" : `${telegram.status.replies.deliveries_submitted} sent · ${telegram.status.replies.pending_replies} pending`}</dd></div>
             <div><dt>Delivery</dt><dd>{titleCase(telegram.status.delivery?.status ?? "not configured")}</dd></div>
@@ -295,7 +302,7 @@ export function SettingsPage() {
                       <strong>Telegram user {redactNumericIdentifier(candidate.telegram_user_id)}</strong>
                       <span>Chat {redactNumericIdentifier(candidate.telegram_chat_id)} · expires {formatRelative(candidate.expires_at)}</span>
                       <div className="telegram-authority-copy-list">
-                        <CopyableTelegramAuthorityId label="Telegram candidate" id={candidate.candidate_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} />
+                        <CopyableAuthorityId label="Telegram candidate" id={candidate.candidate_id} onCopy={(label, id) => void copyAuthorityId(label, id)} />
                       </div>
                     </div>
                     <Button disabled={!canMutate} onClick={() => setSelectedCandidate(candidate)} tone="primary"><Link2 size={15} /> Confirm</Button>
@@ -311,8 +318,8 @@ export function SettingsPage() {
             <span className="paired-channel-icon"><CheckCircle2 size={21} /></span>
             <div className="paired-channel-copy"><Badge tone="positive">Paired</Badge><h3>Telegram user {redactNumericIdentifier(telegram.pairing.telegram_user_id)}</h3><p>Chat {redactNumericIdentifier(telegram.pairing.telegram_chat_id)} · confirmed {formatInstant(telegram.pairing.confirmed_at)}</p></div>
             <dl className="paired-channel-meta">
-              <div><dt>Pairing</dt><dd><CopyableTelegramAuthorityId label="Telegram pairing" id={telegram.pairing.pairing_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} /></dd></div>
-              <div><dt>Candidate</dt><dd><CopyableTelegramAuthorityId label="Telegram candidate" id={telegram.pairing.candidate_id} onCopy={(label, id) => void copyTelegramAuthorityId(label, id)} /></dd></div>
+              <div><dt>Pairing</dt><dd><CopyableAuthorityId label="Telegram pairing" id={telegram.pairing.pairing_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
+              <div><dt>Candidate</dt><dd><CopyableAuthorityId label="Telegram candidate" id={telegram.pairing.candidate_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
               <div><dt>Confirmed by</dt><dd>{shortId(telegram.pairing.confirmed_by_owner_id)}</dd></div>
             </dl>
             <Button disabled={!canMutate} onClick={() => setRevokeOpen(true)} tone="danger"><Unlink size={15} /> Revoke pairing</Button>
@@ -359,7 +366,7 @@ export function SettingsPage() {
   );
 }
 
-function CopyableTelegramAuthorityId({
+function CopyableAuthorityId({
   id,
   label,
   onCopy,
