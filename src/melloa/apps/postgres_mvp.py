@@ -60,12 +60,14 @@ def build_postgres_mvp_stores(
         memory_store=stores.memory_store,
         delivery_store=stores.delivery_store,
         event_audit_store=stores.event_audit_store,
+        owner_session_factory=stores.owner_session_factory,
         telegram_pairing_store=stores.telegram_pairing_store,
         telegram_poll_state_store=stores.telegram_poll_state_store,
         database_health_reader=stores.database_health_reader,
         status=RuntimePersistenceStatus(
             mode="postgresql-partial-preview",
             durable_state=(
+                "hashed owner sessions and append-only revocations",
                 "canonical conversations, turns, retrieval manifests, and model provenance",
                 "memory assertions, corrections, and state history",
                 "reply and delivery work, retries, resumptions, and receipts",
@@ -73,7 +75,6 @@ def build_postgres_mvp_stores(
                 "audit append records for assembled audit-emitting owner actions",
             ),
             ephemeral_state=(
-                "authentication sessions",
                 "Telegram challenge-send observation and attachment quarantine bytes",
                 "provider health observations",
                 "event/audit emission for actions not yet assembled",

@@ -15,6 +15,7 @@ from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.delivery import PostgresDeliveryStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
@@ -38,6 +39,7 @@ from melloa.domain.identity import (
 )
 from melloa.domain.memory import Assertion, AssertionMetadata
 from melloa.domain.operations import ComponentHealth, HealthCategory, HealthState
+from melloa.ports.auth import OwnerSessionManager
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.delivery import DeliveryStore
 from melloa.ports.memory import MemoryNotFoundError, MemoryStore
@@ -62,6 +64,7 @@ class PostgresMvpStores:
     memory_store: MemoryStore
     delivery_store: DeliveryStore
     event_audit_store: EventAuditStore
+    owner_session_factory: Callable[[str], OwnerSessionManager]
     telegram_pairing_store: TelegramPairingStateStore
     telegram_poll_state_store: TelegramPollStateStore
     database_health_reader: Callable[[], ComponentHealth]
@@ -188,8 +191,8 @@ def build_postgres_mvp_store_bundle(
             required=True,
             observed_at=clock(),
             summary=(
-                "Private PostgreSQL backs canonical MVP stores, Telegram control state, "
-                "durable work queues, and audit append records."
+                "Private PostgreSQL backs owner sessions, canonical MVP stores, Telegram "
+                "control state, durable work queues, and audit append records."
             ),
             version=version,
         )
@@ -207,6 +210,22 @@ def build_postgres_mvp_store_bundle(
         PostgresEventAuditStore(audit_connection),
         audit_lock,
     )
+
+    def owner_session_factory(bootstrap_token: str) -> OwnerSessionManager:
+        return cast(
+            OwnerSessionManager,
+            _serialized(
+                PostgresOwnerSessionManager(
+                    audit_connection,
+                    owner_id,
+                    bootstrap_token,
+                    clock=clock,
+                    id_factory=id_factory,
+                ),
+                audit_lock,
+            ),
+        )
+
     telegram_pairing_store = _serialized(
         PostgresTelegramPairingStateStore(telegram_connection),
         telegram_lock,
@@ -230,6 +249,7 @@ def build_postgres_mvp_store_bundle(
         memory_store=cast(MemoryStore, memory_store),
         delivery_store=cast(DeliveryStore, delivery_store),
         event_audit_store=cast(EventAuditStore, event_audit_store),
+        owner_session_factory=owner_session_factory,
         telegram_pairing_store=cast(TelegramPairingStateStore, telegram_pairing_store),
         telegram_poll_state_store=cast(TelegramPollStateStore, telegram_poll_state_store),
         database_health_reader=database_health,

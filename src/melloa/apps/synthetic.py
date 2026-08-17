@@ -81,6 +81,7 @@ from melloa.domain.retention import (
     RetentionMode,
     RetentionPolicyStatus,
 )
+from melloa.ports.auth import OwnerSessionManager
 from melloa.ports.client import ClientAdapter
 from melloa.ports.conversation import ConversationNotFoundError, ConversationStore
 from melloa.ports.delivery import DeliveryStore
@@ -118,6 +119,7 @@ class DurableRuntimeStores:
     database_health_reader: Callable[[], ComponentHealth]
     status: RuntimePersistenceStatus
     event_audit_store: EventAuditStore | None = None
+    owner_session_factory: Callable[[str], OwnerSessionManager] | None = None
     telegram_pairing_store: TelegramPairingStateStore | None = None
     telegram_poll_state_store: TelegramPollStateStore | None = None
 
@@ -278,10 +280,14 @@ def build_synthetic_runtime(
         router=model_router,
         clock=clock,
     )
-    sessions = InMemoryOwnerSessionManager(
-        SYNTHETIC_OWNER_ID,
-        bootstrap_token,
-        clock=clock,
+    sessions = (
+        InMemoryOwnerSessionManager(
+            SYNTHETIC_OWNER_ID,
+            bootstrap_token,
+            clock=clock,
+        )
+        if durable_stores is None or durable_stores.owner_session_factory is None
+        else durable_stores.owner_session_factory(bootstrap_token)
     )
     conversation = ConversationService(
         owner_id=SYNTHETIC_OWNER_ID,

@@ -74,6 +74,7 @@ from melloa.domain.telegram import (
     TelegramInboundMessage,
     TelegramInboundUpdate,
 )
+from melloa.ports.auth import AuthenticationError
 from melloa.ports.delivery import DeliveryConflictError
 from melloa.ports.memory import (
     AssertionCorrectionWrite,
@@ -103,6 +104,8 @@ def reset_append_tables(connection) -> None:
     connection.execute(
         """
         TRUNCATE
+            melloa.owner_session_revocations,
+            melloa.owner_sessions,
             melloa.assertion_derived_rebuild_work,
             melloa.assertion_content_deletions,
             melloa.telegram_poll_states,
@@ -1763,7 +1766,23 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
             json={"credential": bootstrap_token},
         )
         assert login.status_code == 200
-        headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+        csrf_token = login.json()["csrf_token"]
+        headers = {"X-Melloa-CSRF": csrf_token}
+        session_token = first_client.cookies.get("__Host-melloa_session")
+        assert session_token is not None
+        stored_session = first_connections[-1].execute(
+            """
+            SELECT octet_length(session_digest), octet_length(credential_digest),
+                   octet_length(csrf_digest), document::text
+              FROM melloa.owner_sessions
+            """
+        ).fetchone()
+        assert stored_session is not None
+        assert stored_session[:3] == (32, 32, 32)
+        stored_document = str(stored_session[3])
+        assert bootstrap_token not in stored_document
+        assert session_token not in stored_document
+        assert csrf_token not in stored_document
         thread = first_client.post(
             "/api/v1/conversations",
             headers=headers,
@@ -1837,13 +1856,18 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         second_client = second_run.enter_context(
             TestClient(second_runtime.app, base_url="https://testserver")
         )
-        assert second_client.get("/api/v1/conversations").status_code == 401
-        login = second_client.post(
-            "/api/v1/auth/session",
-            json={"credential": bootstrap_token},
+        second_client.headers["Cookie"] = (
+            f"__Host-melloa_session={session_token}"
         )
-        assert login.status_code == 200
-        headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+        current_session = second_client.get("/api/v1/auth/session")
+        assert current_session.status_code == 200
+        assert current_session.json()["session_id"] == login.json()["principal"]["session_id"]
+        assert second_stores.owner_session_factory is not None
+        rotated_sessions = second_stores.owner_session_factory(
+            "rotated-owner-bootstrap-token-value-0002"
+        )
+        with pytest.raises(AuthenticationError):
+            rotated_sessions.verify(session_token)
 
         threads = second_client.get("/api/v1/conversations")
         assert threads.status_code == 200
@@ -1894,6 +1918,34 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         }
         assert components["database.postgresql-mvp"]["state"] == "healthy"
         assert components["storage.process-local-control-state"]["state"] == "degraded"
+        logout = second_client.delete("/api/v1/auth/session", headers=headers)
+        assert logout.status_code == 204
+
+    with ExitStack() as third_run:
+        third_connections = tuple(
+            third_run.enter_context(psycopg.connect(database_dsn, autocommit=True))
+            for _ in range(5)
+        )
+        for database in third_connections:
+            database.execute("SET ROLE melloa_core")
+        third_stores = build_postgres_mvp_stores(
+            *third_connections,
+            clock=lambda: fixed_time + timedelta(seconds=2),
+        )
+        third_runtime = build_mvp_runtime(
+            guardian,
+            bootstrap_token,
+            durable_stores=third_stores,
+            clock=lambda: fixed_time + timedelta(seconds=2),
+        )
+        third_client = third_run.enter_context(
+            TestClient(third_runtime.app, base_url="https://testserver")
+        )
+        third_client.headers["Cookie"] = f"__Host-melloa_session={session_token}"
+        assert third_client.get("/api/v1/auth/session").status_code == 401
+        assert third_connections[-1].execute(
+            "SELECT count(*) FROM melloa.owner_session_revocations"
+        ).fetchone() == (1,)
 
 
 def _telegram_update(

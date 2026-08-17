@@ -74,6 +74,7 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
     event_audit_store = object()
     telegram_pairing_store = object()
     telegram_poll_state_store = object()
+    owner_session_factory = object()
 
     def health_reader():
         return None
@@ -88,6 +89,7 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
             memory_store=memory_store,
             delivery_store=delivery_store,
             event_audit_store=event_audit_store,
+            owner_session_factory=owner_session_factory,
             telegram_pairing_store=telegram_pairing_store,
             telegram_poll_state_store=telegram_poll_state_store,
             database_health_reader=health_reader,
@@ -110,6 +112,7 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
     assert stores.memory_store is memory_store
     assert stores.delivery_store is delivery_store
     assert stores.event_audit_store is event_audit_store
+    assert stores.owner_session_factory is owner_session_factory
     assert stores.telegram_pairing_store is telegram_pairing_store
     assert stores.telegram_poll_state_store is telegram_poll_state_store
     assert stores.database_health_reader is health_reader
@@ -117,8 +120,9 @@ def test_postgres_mvp_assembly_adds_explicit_partial_persistence_status(
     assert any("conversations" in item for item in stores.status.durable_state)
     assert any("Telegram" in item for item in stores.status.durable_state)
     assert any("audit" in item for item in stores.status.durable_state)
+    assert any("owner sessions" in item for item in stores.status.durable_state)
     assert any("not yet assembled" in item for item in stores.status.ephemeral_state)
-    assert "authentication sessions" in stores.status.ephemeral_state
+    assert "authentication sessions" not in stores.status.ephemeral_state
 
 
 def test_postgres_mvp_jsonb_documents_round_trip_through_strict_contracts(
