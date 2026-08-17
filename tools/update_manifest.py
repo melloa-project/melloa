@@ -22,7 +22,7 @@ IGNORED_DIRECTORIES = {
     "node_modules",
     "site",
 }
-IGNORED_FILES = {".coverage"}
+IGNORED_FILES = {".coverage", "com1.txt"}
 
 
 def included(path: Path) -> bool:

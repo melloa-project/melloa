@@ -1,3 +1,4 @@
+a2e88b55fef4ff9a86bc4671425dadcdbbb0d50f0f2e3212d05936c7c4232038  ./.env.example
 4b4c4dc2ecf6ce2dd16d1293c55582e0fae0071420dbe717b76dd19b54cb6b0b  ./.github/CODEOWNERS
 c41f34048914d5e4b39e5e4e4f1e5d6b4fab6747bbf38c21d0835985907e3188  ./.github/workflows/ci.yml
 12234036bfc31d8d48f7b7886cac0f3ea0e8cb8c844231d4b57a3e2cf194cf44  ./.gitignore
@@ -46,7 +47,6 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 c5a7ba4c686d92b94a96755d18c3e30255d7f4e56fd4555f420853499fabc151  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
-0a80289e6719f79651540934a96e58a142f9325cebb6a7cf63cb795cbb408ccd  ./com1.txt
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml
 5c14b0c991da3eb3296ef2cd4a0f9ca540149f154e26d796c17f64ef95f372f8  ./config/routes/codex-cli.example.json
 13c90557fb564928a210bcf744c144254e1dc95b1cfae604a10515dc1d5cc2de  ./config/routes/ollama-qwen.example.json
@@ -307,7 +307,7 @@ d6f22a43174549d9d1557775c25ad4f02b7b46db11fb7b1c01163db92fa94b1d  ./tools/check_
 1aa5e83527ac9e26e5fd19993e844afab43bc07963bf34499d12f54d335c52f7  ./tools/generate_schemas.py
 b33d62948cdd8e0d47a37d0aaac2855da826e5b8924e8b5eee8925a5abbfcf17  ./tools/m0_restore_drill.sh
 4d0a113b60deb45dbd0dc1d4cd90582a2fd7c0666c723ed0a8148e334c7f3e4e  ./tools/test_postgres_integration.sh
-d8ea9f8dd1d2e92a57fe31fdff77d021885319ac7c71dfaafbd94374b771500d  ./tools/update_manifest.py
+f630e95ae22db486a771bdd181416f20ed4982da7a5d82c22113a760c055b77b  ./tools/update_manifest.py
 b4c17d24bcf22a1da83fbca02ab02bc4065d18f74379acf88cbb03130ddb24e1  ./tools/update_migration_manifest.py
 b79c16abb0b1a068928cb9d7567ff44b6ee6041f2cb70f6118cf7571469e5134  ./tools/validate_spec.py
 f43618fe651c9bfd2c05595c838777ab60619df78481bb26b89cd18d139fb6ee  ./uv.lock
