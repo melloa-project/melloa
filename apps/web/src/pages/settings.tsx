@@ -13,7 +13,12 @@ import {
   UserRound,
 } from "lucide-react";
 
-import type { TelegramChannelStatus, TelegramOwnerPairing, TelegramPairingCandidate } from "../api";
+import type {
+  OwnerSessionInventory,
+  TelegramChannelStatus,
+  TelegramOwnerPairing,
+  TelegramPairingCandidate,
+} from "../api";
 import { errorMessage, useMelloa } from "../app";
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Modal, SectionHeader } from "../components/ui";
 import { formatInstant, formatRelative, redactNumericIdentifier, shortId, titleCase } from "../lib/format";
@@ -26,6 +31,11 @@ type TelegramState = {
 
 export function SettingsPage() {
   const { api, principal, status, canMutate, notify } = useMelloa();
+  const [sessions, setSessions] = useState<OwnerSessionInventory | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [revokeSessionsOpen, setRevokeSessionsOpen] = useState(false);
+  const [revokingSessions, setRevokingSessions] = useState(false);
   const [telegram, setTelegram] = useState<TelegramState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +43,19 @@ export function SettingsPage() {
   const [confirming, setConfirming] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [revoking, setRevoking] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      setSessions(await api.activeSessions());
+      setSessionsError(null);
+    } catch (caught) {
+      setSessions(null);
+      setSessionsError(errorMessage(caught));
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [api]);
 
   const loadTelegram = useCallback(async () => {
     setLoading(true);
@@ -53,8 +76,24 @@ export function SettingsPage() {
   }, [api]);
 
   useEffect(() => {
+    void loadSessions();
     void loadTelegram();
-  }, [loadTelegram]);
+  }, [loadSessions, loadTelegram]);
+
+  async function revokeOtherSessions() {
+    setRevokingSessions(true);
+    try {
+      const result = await api.revokeOtherSessions();
+      setRevokeSessionsOpen(false);
+      await loadSessions();
+      const noun = result.revoked_count === 1 ? "session" : "sessions";
+      notify(`${result.revoked_count} other ${noun} signed out.`, "success");
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    } finally {
+      setRevokingSessions(false);
+    }
+  }
 
   async function confirmPairing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,6 +139,9 @@ export function SettingsPage() {
   const pollingState = telegram?.status.polling?.state ?? "unavailable";
   const realTransport = telegram?.status.capabilities?.network === true;
   const channelTone = pollingState === "healthy" ? "positive" : pollingState === "disabled" ? "neutral" : "warning";
+  const otherSessions = sessions?.sessions.filter(
+    (session) => session.session_id !== sessions.current_session_id,
+  ) ?? [];
 
   return (
     <div className="standard-page settings-page">
@@ -119,6 +161,34 @@ export function SettingsPage() {
             <div><dt>Session expires</dt><dd>{formatRelative(principal.expires_at)}</dd></div>
             <div><dt>Recent auth</dt><dd>{formatRelative(principal.reauthenticated_until)}</dd></div>
           </dl>
+          {sessionsLoading && sessions === null ? <LoadingState label="Reading active sessions" /> : null}
+          {sessionsError === null ? null : <ErrorState title="Session inventory unavailable" message={sessionsError} />}
+          {sessions === null ? null : (
+            <>
+              <dl className="channel-status-grid" aria-label="Active owner sessions">
+                {sessions.sessions.map((session) => {
+                  const current = session.session_id === sessions.current_session_id;
+                  return (
+                    <div key={session.session_id}>
+                      <dt>{current ? "This browser" : `Other browser · ${shortId(session.session_id)}`}</dt>
+                      <dd>{titleCase(session.authentication_method)} · signed in {formatInstant(session.authenticated_at)} · expires {formatRelative(session.expires_at)}</dd>
+                    </div>
+                  );
+                })}
+              </dl>
+              <div className="memory-actions">
+                <Button loading={sessionsLoading} onClick={() => void loadSessions()} size="sm"><RefreshCw size={15} /> Refresh sessions</Button>
+                <Button
+                  disabled={!canMutate || sessionsLoading || otherSessions.length === 0}
+                  onClick={() => setRevokeSessionsOpen(true)}
+                  size="sm"
+                  tone="danger"
+                >
+                  <Unlink size={15} /> Sign out other sessions
+                </Button>
+              </div>
+            </>
+          )}
           <p className="settings-note"><KeyRound size={15} /> Credentials and mutation proof are not written to browser storage.</p>
         </Card>
 
@@ -190,6 +260,16 @@ export function SettingsPage() {
 
         <div className="channel-boundary"><ShieldCheck size={16} /><span><strong>Channel-neutral by design</strong><small>Telegram messages become canonical conversation records; Telegram does not own Melli, memory, or policy authority.</small></span></div>
       </Card>
+
+      <Modal
+        description="This browser stays signed in. Every other active session for the current owner credential is revoked together with content-free audit evidence."
+        onClose={() => setRevokeSessionsOpen(false)}
+        open={revokeSessionsOpen}
+        title={`Sign out ${otherSessions.length} other ${otherSessions.length === 1 ? "session" : "sessions"}?`}
+      >
+        <div className="destructive-confirmation danger"><LockKeyhole size={19} /><p>Other browsers lose access immediately. This action requires recent owner authentication and cannot reveal or recover their opaque tokens.</p></div>
+        <div className="modal-actions"><Button onClick={() => setRevokeSessionsOpen(false)}>Cancel</Button><Button loading={revokingSessions} onClick={() => void revokeOtherSessions()} tone="danger">Sign out other sessions</Button></div>
+      </Modal>
 
       <Modal
         description="Enter the short-lived code shown through the Telegram pairing challenge."

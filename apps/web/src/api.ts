@@ -9,6 +9,15 @@ export type AuthenticatedOwner = {
   readonly expires_at: string;
 };
 
+export type OwnerSessionInventory = {
+  readonly current_session_id: string;
+  readonly sessions: readonly AuthenticatedOwner[];
+};
+
+export type OwnerSessionRevocationResult = {
+  readonly revoked_count: number;
+};
+
 export type ConversationThread = {
   readonly thread_id: string;
   readonly owner_id: string;
@@ -546,6 +555,17 @@ export class MelloaApi {
 
   async currentSession(): Promise<AuthenticatedOwner> {
     return this.#request<AuthenticatedOwner>("/api/v1/auth/session");
+  }
+
+  async activeSessions(): Promise<OwnerSessionInventory> {
+    return this.#request<OwnerSessionInventory>("/api/v1/auth/sessions");
+  }
+
+  async revokeOtherSessions(): Promise<OwnerSessionRevocationResult> {
+    return this.#request<OwnerSessionRevocationResult>("/api/v1/auth/sessions/others", {
+      method: "DELETE",
+      csrf: true,
+    });
   }
 
   async logout(): Promise<void> {

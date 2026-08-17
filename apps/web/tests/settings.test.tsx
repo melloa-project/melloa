@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPage } from "../src/pages/settings";
 
 const mocks = vi.hoisted(() => ({
+  activeSessions: vi.fn(),
+  revokeOtherSessions: vi.fn(),
   inspectTelegramPairing: vi.fn(),
   inspectTelegramStatus: vi.fn(),
   listTelegramPairingCandidates: vi.fn(),
@@ -16,6 +18,8 @@ vi.mock("../src/app", () => ({
   errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
   useMelloa: () => ({
     api: {
+      activeSessions: mocks.activeSessions,
+      revokeOtherSessions: mocks.revokeOtherSessions,
       inspectTelegramPairing: mocks.inspectTelegramPairing,
       inspectTelegramStatus: mocks.inspectTelegramStatus,
       listTelegramPairingCandidates: mocks.listTelegramPairingCandidates,
@@ -80,6 +84,28 @@ describe("SettingsPage Telegram inspection", () => {
       limitations: ["attachments rejected before fetch"],
     });
     mocks.inspectTelegramPairing.mockResolvedValue(null);
+    mocks.activeSessions.mockResolvedValue({
+      current_session_id: "session_01",
+      sessions: [
+        {
+          owner_id: "owner_01",
+          session_id: "session_01",
+          authentication_method: "auth.local",
+          authenticated_at: "2026-08-16T12:00:00Z",
+          reauthenticated_until: "2026-08-16T12:05:00Z",
+          expires_at: "2026-08-16T12:30:00Z",
+        },
+        {
+          owner_id: "owner_01",
+          session_id: "session_02",
+          authentication_method: "auth.local",
+          authenticated_at: "2026-08-16T12:01:00Z",
+          reauthenticated_until: "2026-08-16T12:06:00Z",
+          expires_at: "2026-08-16T12:31:00Z",
+        },
+      ],
+    });
+    mocks.revokeOtherSessions.mockResolvedValue({ revoked_count: 1 });
     mocks.listTelegramPairingCandidates.mockResolvedValue([
       {
         candidate_id: "tgcandidate_01",
@@ -106,5 +132,61 @@ describe("SettingsPage Telegram inspection", () => {
     expect(input).toHaveAttribute("minlength", "20");
     expect(input).toHaveAttribute("maxlength", "128");
     expect(input).toHaveAttribute("pattern", "[A-Za-z0-9_-]{20,128}");
+  });
+
+  it("inspects active sessions and confirms signing out other browsers", async () => {
+    let revoked = false;
+    mocks.activeSessions.mockImplementation(() => Promise.resolve(
+      revoked
+        ? {
+            current_session_id: "session_01",
+            sessions: [
+              {
+                owner_id: "owner_01",
+                session_id: "session_01",
+                authentication_method: "auth.local",
+                authenticated_at: "2026-08-16T12:00:00Z",
+                reauthenticated_until: "2026-08-16T12:05:00Z",
+                expires_at: "2026-08-16T12:30:00Z",
+              },
+            ],
+          }
+        : {
+        current_session_id: "session_01",
+        sessions: [
+          {
+            owner_id: "owner_01",
+            session_id: "session_01",
+            authentication_method: "auth.local",
+            authenticated_at: "2026-08-16T12:00:00Z",
+            reauthenticated_until: "2026-08-16T12:05:00Z",
+            expires_at: "2026-08-16T12:30:00Z",
+          },
+          {
+            owner_id: "owner_01",
+            session_id: "session_02",
+            authentication_method: "auth.local",
+            authenticated_at: "2026-08-16T12:01:00Z",
+            reauthenticated_until: "2026-08-16T12:06:00Z",
+            expires_at: "2026-08-16T12:31:00Z",
+          },
+        ],
+      },
+    ));
+    mocks.revokeOtherSessions.mockImplementation(() => {
+      revoked = true;
+      return Promise.resolve({ revoked_count: 1 });
+    });
+    render(<SettingsPage />);
+
+    expect(await screen.findByText("This browser")).toBeInTheDocument();
+    expect(screen.getByText(/^Other browser · /i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out other sessions" }));
+    expect(screen.getByRole("heading", { name: "Sign out 1 other session?" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Sign out other sessions" }));
+
+    await waitFor(() => expect(mocks.revokeOtherSessions).toHaveBeenCalledOnce());
+    expect(mocks.notify).toHaveBeenCalledWith("1 other session signed out.", "success");
+    await waitFor(() => expect(screen.queryByText(/^Other browser · /i)).not.toBeInTheDocument());
   });
 });

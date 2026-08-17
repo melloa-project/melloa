@@ -55,6 +55,33 @@ describe("MelloaApi", () => {
     expect(calls[1]?.init?.body).toContain("Private thread");
   });
 
+  it("lists active sessions and signs out others with mutation proof", async () => {
+    const calls: Array<{ readonly input: string; readonly init?: RequestInit }> = [];
+    const api = new MelloaApi(async (input, init) => {
+      calls.push({ input: String(input), init });
+      if (String(input) === "/api/v1/auth/session") {
+        return jsonResponse({ principal, csrf_token: "csrf-proof" });
+      }
+      if (String(input) === "/api/v1/auth/sessions") {
+        return jsonResponse({ current_session_id: principal.session_id, sessions: [principal] });
+      }
+      return jsonResponse({ revoked_count: 2 });
+    });
+
+    await api.login("owner-credential");
+    await expect(api.activeSessions()).resolves.toEqual({
+      current_session_id: principal.session_id,
+      sessions: [principal],
+    });
+    await expect(api.revokeOtherSessions()).resolves.toEqual({ revoked_count: 2 });
+
+    expect(calls[1]?.input).toBe("/api/v1/auth/sessions");
+    expect(calls[1]?.init?.method).toBe("GET");
+    expect(calls[2]?.input).toBe("/api/v1/auth/sessions/others");
+    expect(calls[2]?.init?.method).toBe("DELETE");
+    expect(new Headers(calls[2]?.init?.headers).get("X-Melloa-CSRF")).toBe("csrf-proof");
+  });
+
   it("rejects mutations before making a request when proof is absent", async () => {
     let called = false;
     const api = new MelloaApi(async () => {
@@ -67,6 +94,10 @@ describe("MelloaApi", () => {
       code: "recent_authentication_required",
     });
     await expect(api.deleteMemoryContent("assertion_01")).rejects.toMatchObject({
+      status: 403,
+      code: "recent_authentication_required",
+    });
+    await expect(api.revokeOtherSessions()).rejects.toMatchObject({
       status: 403,
       code: "recent_authentication_required",
     });
