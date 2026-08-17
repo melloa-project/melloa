@@ -391,22 +391,23 @@ describe("OperationsPage retention view", () => {
     expect(screen.getByText("Validated before download. The ZIP is not encrypted and excludes blobs and SQL snapshots.")).toBeInTheDocument();
     const packageCommands = screen.getByLabelText("Encrypted package commands");
     expect(within(packageCommands).getByText("melloa.encrypted-owner-export-package")).toBeInTheDocument();
+    expect(within(packageCommands).getByText("Package format ID")).toBeInTheDocument();
     expect(within(packageCommands).getByText("aes-256-gcm with scrypt; passphrase file mode 0600")).toBeInTheDocument();
     expect(within(packageCommands).getByText("melloa export-encrypt --bundle-dir <export-dir> --passphrase-file <passphrase-file> --output-file <export-dir>.melloaenc")).toBeInTheDocument();
     expect(within(packageCommands).getByText("melloa export-decrypt-validate --package-file <export-dir>.melloaenc --passphrase-file <passphrase-file>")).toBeInTheDocument();
     expect(screen.getByText("Included artifacts")).toBeInTheDocument();
     expect(screen.getByText("Explicit gaps")).toBeInTheDocument();
-    expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();
-    expect(screen.getByText("conversations/deliveries.jsonl")).toBeInTheDocument();
-    expect(screen.getByText("inspection/model-activity.jsonl")).toBeInTheDocument();
-    expect(screen.getByText("inspection/retention.jsonl")).toBeInTheDocument();
+    expect(screen.getAllByText("conversations/*.jsonl")).toHaveLength(2);
+    expect(screen.getAllByText("conversations/deliveries.jsonl")).toHaveLength(2);
+    expect(screen.getAllByText("inspection/model-activity.jsonl")).toHaveLength(2);
+    expect(screen.getAllByText("inspection/retention.jsonl")).toHaveLength(2);
     const conversationCoverage = screen
-      .getByText("conversations/*.jsonl")
+      .getByRole("button", { name: "Copy Export artifact path conversations/*.jsonl" })
       .closest(".export-coverage-row");
     expect(conversationCoverage).toBeInstanceOf(HTMLElement);
     expect(within(conversationCoverage as HTMLElement).getByText("7 estimated records")).toBeInTheDocument();
     const retentionCoverage = screen
-      .getByText("inspection/retention.jsonl")
+      .getByRole("button", { name: "Copy Export artifact path inspection/retention.jsonl" })
       .closest(".export-coverage-row");
     expect(retentionCoverage).toBeInstanceOf(HTMLElement);
     expect(within(retentionCoverage as HTMLElement).getByText("1 estimated record")).toBeInTheDocument();
@@ -453,6 +454,45 @@ describe("OperationsPage retention view", () => {
     expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
       "melloa export-decrypt-validate --package-file <export-dir>.melloaenc --passphrase-file <passphrase-file>",
     );
+  });
+
+  it("copies exact export provenance ids and artifact paths from the Operations view", async () => {
+    render(<OperationsPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Export format ID melloa.canonical-owner-export" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("melloa.canonical-owner-export"));
+    expect(mocks.notify).toHaveBeenCalledWith("Export format ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Package format ID melloa.encrypted-owner-export-package" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("melloa.encrypted-owner-export-package"));
+    expect(mocks.notify).toHaveBeenCalledWith("Package format ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Export coverage group ID export.conversation-records" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("export.conversation-records"));
+    expect(mocks.notify).toHaveBeenCalledWith("Export coverage group ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Export artifact path conversations/*.jsonl" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("conversations/*.jsonl"));
+    expect(mocks.notify).toHaveBeenCalledWith("Export artifact path copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Export validation check ID export.validation.checksums" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("export.validation.checksums"));
+    expect(mocks.notify).toHaveBeenCalledWith("Export validation check ID copied.", "success");
+  });
+
+  it("reports when export provenance copy is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    render(<OperationsPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Export format ID melloa.canonical-owner-export" }));
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Export format ID copy failed.", "error"));
   });
 
   it("downloads the validated live export and releases its object URL", async () => {

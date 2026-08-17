@@ -28,11 +28,11 @@ f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src
 781edd965deaac901bebf16fa5e0b8540e6854375bd7b38a63d1ff45d844c6c0  ./apps/web/src/pages/conversation.tsx
 43a0807292b01c143547ff56bb4718ef06f21b1d2ab418f05e375ec021c41b0b  ./apps/web/src/pages/login.tsx
 b1d63e0f9a32c51a8871d66307fc3cca20cef3954c1957b038698db81da3c8d4  ./apps/web/src/pages/memory.tsx
-9479d4e6a042eb5d194d170836212b46384cca21852c76ea96874d85517d9b3a  ./apps/web/src/pages/operations.tsx
+12b3cfb22f31ff9db0cf6f46beab02b25dd29f7012f80263276434d6b16ff791  ./apps/web/src/pages/operations.tsx
 359b93f9b3062a3109bc6042ec28586f536cbbfd7aad6b41de36d1f7a0c8d2de  ./apps/web/src/pages/providers.tsx
 fab905d187bc9099eba278995e55e5c4adda5abda275bb8eb36568b8fb26be0f  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
-d2118c8f2d705d5df4dadc9059ff7a807d166e94b8dd3ff40ec20e93d66bd490  ./apps/web/src/styles.css
+70a6ac67829881e5efe2da5fda46360c56d2748af14b903fce5205309373eeb0  ./apps/web/src/styles.css
 41c57f1a91b9bd626993c2cdd5bb740b1e321a01e3bf36ef14ab960f9977c459  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
@@ -41,7 +41,7 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
 89837ff5211508d1917a26bcb5a2d14c5bc4aaa85c1f236bf1cc5ada21496a81  ./apps/web/tests/login.test.tsx
 222792b35189844f78306196707d191542c9052aa0b5897d0b00c870f4cc5eb2  ./apps/web/tests/memory.test.tsx
-51e101fbcb36effc880797f888df93817315690c56c0027a159aa25e9f18ec1f  ./apps/web/tests/operations.test.tsx
+6ab7bebe9906cc3cf20f4a801eb125ab8120118fbfa901c17d6afca80506e102  ./apps/web/tests/operations.test.tsx
 594c46dc012fde834e486dc9e54a1e9d7bac3ebfaf6a7dc3f21ace9dab82e175  ./apps/web/tests/providers.test.tsx
 cb28bc375380054a094eb6b064fcf6d29bb8ead8142ba166798cfc6245ce1acb  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts

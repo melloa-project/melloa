@@ -494,6 +494,17 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
   const packageCommand = packageReadiness.supported ? packageReadiness.package_command ?? null : null;
   const packageValidationCommand = packageReadiness.supported ? packageReadiness.validation_command ?? null : null;
   const packageSupported = packageCommand !== null && packageValidationCommand !== null;
+  const copyExportProvenance = async (label: string, value: string) => {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(value);
+      notify(`${label} copied.`, "success");
+    } catch {
+      notify(`${label} copy failed.`, "error");
+    }
+  };
   const copyCommand = async (command: ExportCommandKind, value: string) => {
     try {
       if (navigator.clipboard === undefined) {
@@ -540,7 +551,13 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
         <div className="card-heading-row">
           <div>
             <h2>Canonical owner export</h2>
-            <p>{report.format_id}</p>
+            <div className="operation-copy-list">
+              <CopyableOperationValue
+                label="Export format ID"
+                onCopy={(label, value) => void copyExportProvenance(label, value)}
+                value={report.format_id}
+              />
+            </div>
           </div>
           <Badge tone={report.encrypted ? "positive" : "warning"}>{report.encrypted ? "Encrypted" : "Unencrypted preview"}</Badge>
         </div>
@@ -575,6 +592,14 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
               <div className="export-command-header">
                 <span>Encrypted package</span>
                 <Badge tone="positive">{packageReadiness.package_format_id}</Badge>
+              </div>
+              <div className="operation-copy-list">
+                <CopyableOperationValue
+                  displayValue="Package format ID"
+                  label="Package format ID"
+                  onCopy={(label, value) => void copyExportProvenance(label, value)}
+                  value={packageReadiness.package_format_id}
+                />
               </div>
               <small>{packageReadiness.cipher} with {packageReadiness.kdf}; passphrase file mode {packageReadiness.required_file_mode}</small>
             </div>
@@ -624,6 +649,20 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
                 {item.artifact_path === null || item.artifact_path === undefined ? null : (
                   <code>{item.artifact_path}</code>
                 )}
+                <div className="operation-copy-list">
+                  <CopyableOperationValue
+                    label="Export coverage group ID"
+                    onCopy={(label, value) => void copyExportProvenance(label, value)}
+                    value={item.group_id}
+                  />
+                  {item.artifact_path === null || item.artifact_path === undefined ? null : (
+                    <CopyableOperationValue
+                      label="Export artifact path"
+                      onCopy={(label, value) => void copyExportProvenance(label, value)}
+                      value={item.artifact_path}
+                    />
+                  )}
+                </div>
               </div>
               <Badge tone="positive">Included</Badge>
             </article>
@@ -641,6 +680,13 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
               <div>
                 <strong>{titleCase(item.group_id.replace(/^export[.-]/, ""))}</strong>
                 <p>{item.summary}</p>
+                <div className="operation-copy-list">
+                  <CopyableOperationValue
+                    label="Export coverage group ID"
+                    onCopy={(label, value) => void copyExportProvenance(label, value)}
+                    value={item.group_id}
+                  />
+                </div>
               </div>
               <Badge tone="neutral">Excluded</Badge>
             </article>
@@ -661,6 +707,13 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
               <div>
                 <strong>{titleCase(item.check_id.replace(/^export[.-]validation[.-]/, ""))}</strong>
                 <p>{item.summary}</p>
+                <div className="operation-copy-list">
+                  <CopyableOperationValue
+                    label="Export validation check ID"
+                    onCopy={(label, value) => void copyExportProvenance(label, value)}
+                    value={item.check_id}
+                  />
+                </div>
               </div>
               <Badge tone={item.implemented ? "positive" : "warning"}>{item.implemented ? "Checked" : "Pending"}</Badge>
             </article>
@@ -673,6 +726,31 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
         <Badge tone="warning">Preview</Badge>
       </Card>
     </div>
+  );
+}
+
+function CopyableOperationValue({
+  displayValue,
+  label,
+  onCopy,
+  value,
+}: {
+  readonly displayValue?: string;
+  readonly label: string;
+  readonly onCopy: (label: string, value: string) => void;
+  readonly value: string;
+}) {
+  return (
+    <button
+      aria-label={`Copy ${label} ${value}`}
+      className="operation-copy-chip"
+      onClick={() => onCopy(label, value)}
+      title={value}
+      type="button"
+    >
+      <code>{displayValue ?? value}</code>
+      <Copy aria-hidden="true" size={13} />
+    </button>
   );
 }
 
