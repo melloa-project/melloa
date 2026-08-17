@@ -27,12 +27,12 @@ f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src
 af69ac5cf2b49cc46f4ba63e5eede94d294f5d6941225d00635f9a38f4221681  ./apps/web/src/pages/activity.tsx
 1265d8a4087ebbff4366d3a395aad5f6912572495429907238ad4e95c6199379  ./apps/web/src/pages/conversation.tsx
 43a0807292b01c143547ff56bb4718ef06f21b1d2ab418f05e375ec021c41b0b  ./apps/web/src/pages/login.tsx
-61b6fed8328e0c9e95088417b1feff606f8d973befad8146ec4f6762d38fcf2d  ./apps/web/src/pages/memory.tsx
+f416711c029d78b3d5d9c9c74d670819abe8d475b429103077426e3c9211b8c0  ./apps/web/src/pages/memory.tsx
 edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src/pages/operations.tsx
 529a522a3d0662674f1617d3d3b636e30f882838834f48d90d125e498d25c3d2  ./apps/web/src/pages/providers.tsx
 424ecc932c0d414a885fe3e83229482fa89c027270b9b3b3b113a117a859051d  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
-4ff854591bc4662b24aca81008d9e78ce89798f89894c99154a586a3866821a2  ./apps/web/src/styles.css
+51c49af394765837981d08755248ecefac2c49e67df938694a6b5c6f6d710d36  ./apps/web/src/styles.css
 238f989d336b90f783a4cbf991ceab03b621e47480ae30694f20b92f1859d606  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
@@ -40,7 +40,7 @@ b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tes
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
 d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
 89837ff5211508d1917a26bcb5a2d14c5bc4aaa85c1f236bf1cc5ada21496a81  ./apps/web/tests/login.test.tsx
-b364b6ee5fb73a9f31783bbbf325ac17ec8d7feeb3e52de9f706fac92e000c7a  ./apps/web/tests/memory.test.tsx
+dd389a229112ca15e4936e0e3d7f1fbedb9843a6b8d53cdbd05dbfad080bed07  ./apps/web/tests/memory.test.tsx
 0a18d03ce451081e7edc4eea1cfb286f2c85cc99dfebda599ff4001ce75d3762  ./apps/web/tests/operations.test.tsx
 2fadad01615672d43f137a49e83b6e599d70511f938ec47acd00766bccfc03ab  ./apps/web/tests/providers.test.tsx
 841689a3c1ca7b23fcbd056729eaf817381590a983ea470311b9e88946f2c456  ./apps/web/tests/settings.test.tsx

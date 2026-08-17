@@ -2423,9 +2423,9 @@ pre {
   align-items: center;
   background: #f4f6f4;
   border-radius: 7px;
-  display: flex;
+  display: grid;
   gap: 12px;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   margin: 15px 0;
   padding: 9px 10px;
 }

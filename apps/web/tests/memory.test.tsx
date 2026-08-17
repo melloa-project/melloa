@@ -126,6 +126,12 @@ describe("MemoryPage", () => {
     mocks.canMutate = true;
     mocks.inspectMemory.mockResolvedValue(retainedInspection);
     mocks.deleteMemoryContent.mockResolvedValue({ created: true });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("deletes retained assertion content and renders tombstone evidence", async () => {
@@ -175,6 +181,39 @@ describe("MemoryPage", () => {
     expect(await screen.findByText("reading")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Correct" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete content" })).toBeDisabled();
+  });
+
+  it("copies the exact inspected assertion id", async () => {
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("reading")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy assertion ID" }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      retainedInspection.assertion.assertion_id,
+    ));
+    expect(mocks.notify).toHaveBeenCalledWith("Assertion ID copied.", "success");
+  });
+
+  it("reports when assertion id copy is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("reading")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy assertion ID" }));
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Assertion ID copy failed.", "error"));
   });
 
   it("keeps memory modal mutations disabled when recent owner authentication lapses", async () => {

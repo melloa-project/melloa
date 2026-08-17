@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Brain,
   CheckCircle2,
+  Copy,
   ExternalLink,
   GitBranch,
   History,
@@ -92,6 +93,18 @@ export function MemoryPage() {
       return;
     }
     setSearchParams({ assertion: normalized });
+  }
+
+  async function copyAssertionId(assertionId: string) {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(assertionId);
+      notify("Assertion ID copied.", "success");
+    } catch {
+      notify("Assertion ID copy failed.", "error");
+    }
   }
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
@@ -184,7 +197,13 @@ export function MemoryPage() {
               <div><p className="eyebrow">Assertion</p><h2>{readString(inspection.assertion, "predicate")}</h2></div>
               <Badge tone={status === "confirmed" ? "positive" : status === "disputed" ? "warning" : "danger"}>{titleCase(status)}</Badge>
             </div>
-            <div className="memory-id-row"><code>{inspection.assertion.assertion_id}</code><span>v{inspection.current_state.version}</span></div>
+            <div className="memory-id-row">
+              <code title={inspection.assertion.assertion_id}>{inspection.assertion.assertion_id}</code>
+              <span>v{inspection.current_state.version}</span>
+              <Button onClick={() => void copyAssertionId(inspection.assertion.assertion_id)} size="sm" tone="ghost" type="button">
+                <Copy aria-hidden="true" size={14} /><span className="sr-only">Copy assertion ID</span>
+              </Button>
+            </div>
             <div className="memory-value">
               {contentDeleted ? (
                 <p>Assertion content was deleted by owner request. Metadata, state history, and deletion evidence remain inspectable.</p>
