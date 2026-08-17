@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -158,6 +160,84 @@ def test_owner_login_session_csrf_and_logout(fixed_time) -> None:
     )
     assert logout.status_code == 204
     assert client.get("/api/v1/auth/session").status_code == 401
+
+
+def test_owner_lists_sessions_and_recently_revokes_others(fixed_time) -> None:
+    now = fixed_time
+    tokens = iter(
+        (
+            "first-session-token",
+            "first-csrf-token",
+            "second-session-token",
+            "second-csrf-token",
+            "fresh-session-token",
+            "fresh-csrf-token",
+        )
+    )
+    sessions = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+    )
+    app = create_app(guardian_reader(fixed_time), sessions)
+    first_client = TestClient(app, base_url="https://testserver")
+    second_client = TestClient(app, base_url="https://testserver")
+    anonymous_client = TestClient(app, base_url="https://testserver")
+    first_login = first_client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    second_login = second_client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    assert first_login.status_code == 200
+    assert second_login.status_code == 200
+
+    assert anonymous_client.get("/api/v1/auth/sessions").status_code == 401
+    inventory = first_client.get("/api/v1/auth/sessions")
+    assert inventory.status_code == 200
+    assert inventory.json()["current_session_id"] == first_login.json()["principal"][
+        "session_id"
+    ]
+    assert {
+        session["session_id"] for session in inventory.json()["sessions"]
+    } == {
+        first_login.json()["principal"]["session_id"],
+        second_login.json()["principal"]["session_id"],
+    }
+    assert first_client.delete("/api/v1/auth/sessions/others").status_code == 403
+
+    now = fixed_time + timedelta(minutes=5)
+    stale = first_client.delete(
+        "/api/v1/auth/sessions/others",
+        headers={"X-Melloa-CSRF": first_login.json()["csrf_token"]},
+    )
+    assert stale.status_code == 403
+    assert stale.json()["code"] == "recent_authentication_required"
+
+    fresh_client = TestClient(app, base_url="https://testserver")
+    fresh_login = fresh_client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    revoked = fresh_client.delete(
+        "/api/v1/auth/sessions/others",
+        headers={"X-Melloa-CSRF": fresh_login.json()["csrf_token"]},
+    )
+    assert revoked.status_code == 200
+    assert revoked.json() == {"revoked_count": 2}
+    assert first_client.get("/api/v1/auth/session").status_code == 401
+    assert second_client.get("/api/v1/auth/session").status_code == 401
+    assert fresh_client.get("/api/v1/auth/session").status_code == 200
+    assert fresh_client.get("/api/v1/auth/sessions").json()["sessions"] == [
+        fresh_login.json()["principal"]
+    ]
+    assert fresh_client.delete(
+        "/api/v1/auth/sessions/others",
+        headers={"X-Melloa-CSRF": fresh_login.json()["csrf_token"]},
+    ).json() == {"revoked_count": 0}
 
 
 def test_owner_authentication_routes_fail_closed_when_unconfigured(fixed_time) -> None:

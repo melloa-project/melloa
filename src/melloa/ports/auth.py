@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from melloa.domain.auth import AuthenticatedOwner
+from melloa.domain.base import RecordId
 
 
 class AuthenticationError(RuntimeError):
@@ -43,3 +44,9 @@ class OwnerSessionManager(Protocol):
 
     def revoke(self, session_token: str) -> None:
         """Revoke an opaque owner session without disclosing whether it existed."""
+
+    def active_sessions(self) -> tuple[AuthenticatedOwner, ...]:
+        """List unexpired, unrevoked sessions for the configured owner credential."""
+
+    def revoke_other_sessions(self, current_session_id: RecordId) -> int:
+        """Revoke every active session except the authenticated current session."""

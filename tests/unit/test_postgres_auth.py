@@ -21,11 +21,20 @@ _BOOTSTRAP_TOKEN = "postgres-owner-bootstrap-token-value-0001"
 
 
 class _Result:
-    def __init__(self, row: tuple[Any, ...] | None) -> None:
+    def __init__(
+        self,
+        row: tuple[Any, ...] | None = None,
+        *,
+        rows: tuple[tuple[Any, ...], ...] = (),
+    ) -> None:
         self._row = row
+        self._rows = rows
 
     def fetchone(self) -> tuple[Any, ...] | None:
         return self._row
+
+    def fetchall(self) -> tuple[tuple[Any, ...], ...]:
+        return self._rows
 
 
 @dataclass
@@ -52,16 +61,51 @@ class _Connection:
                 parameters[4],
                 document.obj,
                 session_id,
+                parameters[2],
+                parameters[6],
+                parameters[8],
             )
             self.database.session_ids.add(session_id)
             return _Result((session_id,))
-        if "LEFT JOIN melloa.owner_session_revocations" in statement:
+        if "SELECT session.document" in statement:
+            owner_id, credential_digest, now = parameters
+            active = tuple(
+                sorted(
+                    (
+                        (stored[2], stored[5], stored[3])
+                        for stored in self.database.sessions.values()
+                        if stored[4] == owner_id
+                        and stored[0] == credential_digest
+                        and stored[6] > now
+                        and stored[3] not in self.database.revoked_session_ids
+                    ),
+                    key=lambda row: (row[1], row[2]),
+                    reverse=True,
+                )
+            )
+            return _Result(rows=tuple((document,) for document, _at, _id in active))
+        if "WHERE session.session_digest = %s" in statement:
             stored = self.database.sessions.get(parameters[0])
             if stored is None:
                 return _Result(None)
-            credential_digest, csrf_digest, document, session_id = stored
+            credential_digest, csrf_digest, document, session_id = stored[:4]
             revoked = session_id if session_id in self.database.revoked_session_ids else None
             return _Result((credential_digest, csrf_digest, document, revoked))
+        if "'auth.owner-signout-other-sessions'" in statement:
+            revoked_at, owner_id, credential_digest, current_session_id, now = parameters
+            revoked_rows: list[tuple[Any, ...]] = []
+            for stored in self.database.sessions.values():
+                session_id = stored[3]
+                if (
+                    stored[4] == owner_id
+                    and stored[0] == credential_digest
+                    and session_id != current_session_id
+                    and stored[6] > now
+                    and session_id not in self.database.revoked_session_ids
+                ):
+                    self.database.revoked_session_ids.add(session_id)
+                    revoked_rows.append((session_id, max(stored[5], revoked_at)))
+            return _Result(rows=tuple(revoked_rows))
         if "INSERT INTO melloa.owner_session_revocations" in statement:
             session_digest = parameters[1]
             stored = self.database.sessions.get(session_digest)
@@ -235,6 +279,66 @@ def test_postgres_owner_session_expiry_collision_and_validation(fixed_time) -> N
         ).issue(_BOOTSTRAP_TOKEN)
 
 
+def test_postgres_owner_lists_and_audits_other_session_revocation(fixed_time) -> None:
+    database = _SessionDatabase()
+    now = fixed_time
+    tokens = iter(
+        (
+            "first-csrf",
+            "first-session",
+            "second-csrf",
+            "second-session",
+        )
+    )
+    session_ids = iter((record_id("session", 1), record_id("session", 2)))
+    audit_store = InMemoryEventAuditStore()
+    manager = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        event_audit_store=audit_store,
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+        id_factory=lambda _prefix: next(session_ids),
+    )
+    first = manager.issue(_BOOTSTRAP_TOKEN)
+    now = fixed_time + timedelta(seconds=1)
+    second = manager.issue(_BOOTSTRAP_TOKEN)
+
+    assert manager.active_sessions() == (second.principal, first.principal)
+    assert PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        "rotated-owner-bootstrap-token-value-0002",
+        clock=lambda: now,
+    ).active_sessions() == ()
+    assert manager.revoke_other_sessions(first.principal.session_id) == 1
+    assert manager.active_sessions() == (first.principal,)
+    assert manager.verify(first.session_token) == first.principal
+    with pytest.raises(AuthenticationError):
+        manager.verify(second.session_token)
+    assert manager.revoke_other_sessions(first.principal.session_id) == 0
+
+    assert tuple(event.event_type for event in audit_store.events) == (
+        "auth.owner-session-issued.v1",
+        "auth.owner-session-issued.v1",
+        "auth.owner-session-revoked.v1",
+    )
+    revoked_event = audit_store.events[-1]
+    assert revoked_event.payload == {
+        "authentication_method": "auth.local-opaque-token",
+        "session_id": second.principal.session_id,
+        "state": "revoked",
+    }
+    audit_documents = tuple(
+        event.model_dump_json() for event in audit_store.events
+    ) + tuple(record.model_dump_json() for record in audit_store.audit_records)
+    assert all("first-session" not in document for document in audit_documents)
+    assert all("second-session" not in document for document in audit_documents)
+    assert all("first-csrf" not in document for document in audit_documents)
+    assert all("second-csrf" not in document for document in audit_documents)
+
+
 def test_postgres_owner_session_rolls_back_when_audit_fails(fixed_time) -> None:
     database = _SessionDatabase()
     tokens = iter(("failed-csrf", "failed-session"))
@@ -273,6 +377,20 @@ def test_postgres_owner_session_rolls_back_when_audit_fails(fixed_time) -> None:
         failing_revoke.revoke(persisted.session_token)
     assert database.revoked_session_ids == set()
     assert failing_revoke.verify(persisted.session_token) == persisted.principal
+
+    other_tokens = iter(("other-csrf", "other-session"))
+    other = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(other_tokens),
+        id_factory=lambda _prefix: record_id("session", 6),
+    ).issue(_BOOTSTRAP_TOKEN)
+    with pytest.raises(RuntimeError, match="synthetic audit outage"):
+        failing_revoke.revoke_other_sessions(persisted.principal.session_id)
+    assert database.revoked_session_ids == set()
+    assert failing_revoke.verify(other.session_token) == other.principal
 
 
 @pytest.mark.parametrize(

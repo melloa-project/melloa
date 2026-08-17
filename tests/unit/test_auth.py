@@ -66,6 +66,41 @@ def test_owner_session_rejects_bad_credentials_expiry_and_revocation(fixed_time)
         manager.verify(issued.session_token)
 
 
+def test_owner_can_list_and_revoke_other_active_sessions(fixed_time) -> None:
+    now = fixed_time
+    tokens = iter(
+        (
+            "first-session-token",
+            "first-csrf-token",
+            "second-session-token",
+            "second-csrf-token",
+        )
+    )
+    manager = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+        session_ttl=timedelta(minutes=10),
+    )
+    first = manager.issue("synthetic-bootstrap-token-value-0001")
+    now = fixed_time + timedelta(seconds=1)
+    second = manager.issue("synthetic-bootstrap-token-value-0001")
+
+    assert manager.active_sessions() == (second.principal, first.principal)
+    assert manager.revoke_other_sessions(first.principal.session_id) == 1
+    assert manager.active_sessions() == (first.principal,)
+    assert manager.verify(first.session_token) == first.principal
+    with pytest.raises(AuthenticationError):
+        manager.verify(second.session_token)
+    assert manager.revoke_other_sessions(first.principal.session_id) == 0
+
+    now = fixed_time + timedelta(minutes=10)
+    assert manager.active_sessions() == ()
+    with pytest.raises(AuthenticationError):
+        manager.revoke_other_sessions(first.principal.session_id)
+
+
 @pytest.mark.parametrize(
     ("session_ttl", "recent_ttl"),
     [

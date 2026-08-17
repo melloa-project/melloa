@@ -120,6 +120,34 @@ class InMemoryOwnerSessionManager:
         if self._valid_secret(session_token):
             self._sessions.pop(_digest(session_token), None)
 
+    def active_sessions(self) -> tuple[AuthenticatedOwner, ...]:
+        now = self._clock()
+        for session_digest, record in tuple(self._sessions.items()):
+            if now >= record.principal.expires_at:
+                self._sessions.pop(session_digest, None)
+        return tuple(
+            sorted(
+                (record.principal for record in self._sessions.values()),
+                key=lambda principal: (principal.authenticated_at, principal.session_id),
+                reverse=True,
+            )
+        )
+
+    def revoke_other_sessions(self, current_session_id: RecordId) -> int:
+        active_session_ids = {
+            principal.session_id for principal in self.active_sessions()
+        }
+        if current_session_id not in active_session_ids:
+            raise AuthenticationError("owner authentication failed")
+        revoked_digests = tuple(
+            session_digest
+            for session_digest, record in self._sessions.items()
+            if record.principal.session_id != current_session_id
+        )
+        for session_digest in revoked_digests:
+            self._sessions.pop(session_digest, None)
+        return len(revoked_digests)
+
     def _new_unique_session_token(self) -> str:
         for _attempt in range(8):
             token = self._new_token()

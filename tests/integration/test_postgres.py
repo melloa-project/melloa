@@ -1918,6 +1918,40 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         }
         assert components["database.postgresql-mvp"]["state"] == "healthy"
         assert components["storage.process-local-control-state"]["state"] == "degraded"
+
+        other_client = second_run.enter_context(
+            TestClient(second_runtime.app, base_url="https://testserver")
+        )
+        other_login = other_client.post(
+            "/api/v1/auth/session",
+            json={"credential": bootstrap_token},
+        )
+        assert other_login.status_code == 200
+        other_session_token = other_client.cookies.get("__Host-melloa_session")
+        assert other_session_token is not None
+        other_csrf_token = other_login.json()["csrf_token"]
+        active_sessions = second_client.get("/api/v1/auth/sessions")
+        assert active_sessions.status_code == 200
+        assert active_sessions.json()["current_session_id"] == login.json()["principal"][
+            "session_id"
+        ]
+        assert {
+            session["session_id"] for session in active_sessions.json()["sessions"]
+        } == {
+            login.json()["principal"]["session_id"],
+            other_login.json()["principal"]["session_id"],
+        }
+        revoke_others = second_client.delete(
+            "/api/v1/auth/sessions/others",
+            headers=headers,
+        )
+        assert revoke_others.status_code == 200
+        assert revoke_others.json() == {"revoked_count": 1}
+        assert other_client.get("/api/v1/auth/session").status_code == 401
+        assert second_client.get("/api/v1/auth/session").status_code == 200
+        assert second_client.get("/api/v1/auth/sessions").json()["sessions"] == [
+            login.json()["principal"]
+        ]
         logout = second_client.delete("/api/v1/auth/session", headers=headers)
         assert logout.status_code == 204
 
@@ -1945,9 +1979,9 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert third_client.get("/api/v1/auth/session").status_code == 401
         assert third_connections[-1].execute(
             "SELECT count(*) FROM melloa.owner_session_revocations"
-        ).fetchone() == (1,)
+        ).fetchone() == (2,)
         audit_inventory = third_runtime.event_audit_store.audit_retention_inventory()
-        assert audit_inventory.retained_objects == 4
+        assert audit_inventory.retained_objects == 6
         auth_events = third_connections[-1].execute(
             """
             SELECT event_type, document::text
@@ -1959,14 +1993,15 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
              ORDER BY occurred_at, event_type
             """
         ).fetchall()
-        assert tuple(row[0] for row in auth_events) == (
-            "auth.owner-session-issued.v1",
-            "auth.owner-session-revoked.v1",
-        )
+        auth_event_types = tuple(row[0] for row in auth_events)
+        assert auth_event_types.count("auth.owner-session-issued.v1") == 2
+        assert auth_event_types.count("auth.owner-session-revoked.v1") == 2
         auth_documents = tuple(str(row[1]) for row in auth_events)
         assert all(bootstrap_token not in document for document in auth_documents)
         assert all(session_token not in document for document in auth_documents)
         assert all(csrf_token not in document for document in auth_documents)
+        assert all(other_session_token not in document for document in auth_documents)
+        assert all(other_csrf_token not in document for document in auth_documents)
         assert all("credential_digest" not in document for document in auth_documents)
         assert all("session_digest" not in document for document in auth_documents)
         assert all("csrf_digest" not in document for document in auth_documents)
@@ -1980,7 +2015,12 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
              )
             """
         ).fetchone() == (
-            ["auth.owner-session.issue", "auth.owner-session.revoke"],
+            [
+                "auth.owner-session.issue",
+                "auth.owner-session.issue",
+                "auth.owner-session.revoke",
+                "auth.owner-session.revoke",
+            ],
         )
 
 

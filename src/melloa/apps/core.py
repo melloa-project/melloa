@@ -123,6 +123,19 @@ class _OwnerSessionResponse(BaseModel):
     csrf_token: str = Field(min_length=1, max_length=4096)
 
 
+class _OwnerSessionInventoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_session_id: RecordId
+    sessions: tuple[AuthenticatedOwner, ...]
+
+
+class _OwnerSessionRevocationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revoked_count: int = Field(ge=0)
+
+
 class _CreateThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -840,6 +853,36 @@ def create_app(
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
     ) -> AuthenticatedOwner:
         return principal
+
+    @app.get(
+        "/api/v1/auth/sessions",
+        response_model=_OwnerSessionInventoryResponse,
+    )
+    async def active_owner_sessions(
+        request: Request,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+    ) -> _OwnerSessionInventoryResponse:
+        return _OwnerSessionInventoryResponse(
+            current_session_id=principal.session_id,
+            sessions=_configured_sessions(request).active_sessions(),
+        )
+
+    @app.delete(
+        "/api/v1/auth/sessions/others",
+        response_model=_OwnerSessionRevocationResponse,
+    )
+    async def revoke_other_owner_sessions(
+        request: Request,
+        principal: Annotated[
+            AuthenticatedOwner,
+            Depends(_authenticated_owner_sensitive_mutation),
+        ],
+    ) -> _OwnerSessionRevocationResponse:
+        return _OwnerSessionRevocationResponse(
+            revoked_count=_configured_sessions(request).revoke_other_sessions(
+                principal.session_id
+            )
+        )
 
     @app.delete("/api/v1/auth/session", status_code=status.HTTP_204_NO_CONTENT)
     async def logout(

@@ -157,13 +157,11 @@ class PostgresOwnerSessionManager:
         try:
             credential_digest = bytes(row[0])
             csrf_digest = bytes(row[1])
-            principal = AuthenticatedOwner.model_validate_json(canonical_json_bytes(row[2]))
-        except (TypeError, ValueError, ValidationError) as error:
+            principal = self._validated_principal(row[2])
+        except (TypeError, ValueError) as error:
             raise AuthenticationError("owner authentication failed") from error
         if (
             row[3] is not None
-            or principal.owner_id != self._owner_id
-            or principal.authentication_method != _AUTHENTICATION_METHOD
             or not hmac.compare_digest(credential_digest, self._bootstrap_digest)
         ):
             raise AuthenticationError("owner authentication failed")
@@ -202,6 +200,76 @@ class PostgresOwnerSessionManager:
                     occurred_at=revoked[1],
                     lifecycle="revoked",
                 )
+
+    def active_sessions(self) -> tuple[AuthenticatedOwner, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT session.document
+              FROM melloa.owner_sessions AS session
+              LEFT JOIN melloa.owner_session_revocations AS revocation
+                ON revocation.session_id = session.session_id
+             WHERE session.owner_id = %s
+               AND session.credential_digest = %s
+               AND session.expires_at > %s
+               AND revocation.session_id IS NULL
+             ORDER BY session.authenticated_at DESC, session.session_id DESC
+            """,
+            (self._owner_id, self._bootstrap_digest, self._clock()),
+        ).fetchall()
+        try:
+            return tuple(self._validated_principal(row[0]) for row in rows)
+        except (TypeError, ValueError) as error:
+            raise AuthenticationError("owner authentication failed") from error
+
+    def revoke_other_sessions(self, current_session_id: RecordId) -> int:
+        revoked_at = self._clock()
+        with self._connection.transaction():
+            revoked = self._connection.execute(
+                """
+                INSERT INTO melloa.owner_session_revocations (
+                    session_id, revoked_at, reason_code
+                )
+                SELECT session.session_id,
+                       greatest(session.authenticated_at, %s),
+                       'auth.owner-signout-other-sessions'
+                  FROM melloa.owner_sessions AS session
+                  LEFT JOIN melloa.owner_session_revocations AS revocation
+                    ON revocation.session_id = session.session_id
+                 WHERE session.owner_id = %s
+                   AND session.credential_digest = %s
+                   AND session.session_id <> %s
+                   AND session.expires_at > %s
+                   AND revocation.session_id IS NULL
+                ON CONFLICT DO NOTHING
+                RETURNING session_id, revoked_at
+                """,
+                (
+                    revoked_at,
+                    self._owner_id,
+                    self._bootstrap_digest,
+                    current_session_id,
+                    revoked_at,
+                ),
+            ).fetchall()
+            for session_id, session_revoked_at in revoked:
+                self._append_session_audit(
+                    session_id=str(session_id),
+                    occurred_at=session_revoked_at,
+                    lifecycle="revoked",
+                )
+        return len(revoked)
+
+    def _validated_principal(self, document: Any) -> AuthenticatedOwner:
+        try:
+            principal = AuthenticatedOwner.model_validate_json(canonical_json_bytes(document))
+        except (TypeError, ValueError, ValidationError) as error:
+            raise ValueError("invalid persisted owner session") from error
+        if (
+            principal.owner_id != self._owner_id
+            or principal.authentication_method != _AUTHENTICATION_METHOD
+        ):
+            raise ValueError("persisted owner session authority mismatch")
+        return principal
 
     def _append_session_audit(
         self,
