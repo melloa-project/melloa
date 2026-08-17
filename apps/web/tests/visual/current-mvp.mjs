@@ -58,6 +58,7 @@ async function scrollIntoPageView(subjectSelector, block = "start") {
 try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Your conversation with Melli/ }).waitFor();
+  await page.getByRole("button", { name: "Retry signed status check" }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/login-desktop.png`,
     fullPage: true,
@@ -94,7 +95,7 @@ try {
   await response.waitFor({ timeout: 20_000 });
   await response.click();
   await page.getByRole("heading", { name: "Turn details" }).waitFor();
-  await page.getByText("deterministic-fixture-v1", { exact: true }).waitFor();
+  await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
   await page.screenshot({
     path: `${outputDirectory}/conversation-desktop.png`,
     fullPage: true,
@@ -103,7 +104,7 @@ try {
   await page.getByRole("link", { name: "Activity" }).click();
   await page.getByRole("heading", { name: "Activity" }).waitFor();
   await page.getByRole("heading", { name: "Run ledger" }).waitFor();
-  await page.getByText("deterministic-fixture-v1", { exact: true }).waitFor();
+  await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
   await page.getByRole("button", { name: /^Local \d+$/ }).waitFor();
   await page.getByText("No external disclosure", { exact: true }).waitFor();
   await page.screenshot({
@@ -172,15 +173,15 @@ try {
   await page.getByRole("heading", { name: "Timeline", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Canonical timeline" }).waitFor();
   await page.getByRole("button", { name: /^Audit \d+$/ }).click();
-  await page.getByText("Owner export preview generated and audited.", { exact: true }).waitFor();
-  await page.getByText("Plaintext preview", { exact: true }).waitFor();
+  await page.getByText("Owner export preview generated and audited.", { exact: true }).first().waitFor();
+  await page.getByText("Plaintext preview", { exact: true }).first().waitFor();
   await page.screenshot({
     path: `${outputDirectory}/timeline-audit-desktop.png`,
     fullPage: true,
   });
 
   await page.getByRole("button", { name: /^All \d+$/ }).click();
-  await page.getByText("Structured reply turn recorded with decision evidence.", { exact: true }).waitFor();
+  await page.getByText("Structured reply turn recorded with decision evidence.", { exact: true }).first().waitFor();
   await page.screenshot({
     path: `${outputDirectory}/timeline-desktop.png`,
     fullPage: true,
@@ -194,7 +195,7 @@ try {
   await assertPageClearsMobileNavigation(".timeline-disclosure-panel", "Timeline");
 
   await page.getByRole("button", { name: /^Audit \d+$/ }).click();
-  await page.getByText("Owner export preview generated and audited.", { exact: true }).waitFor();
+  await page.getByText("Owner export preview generated and audited.", { exact: true }).first().waitFor();
   await scrollIntoPageView(".timeline-card");
   await page.screenshot({
     path: `${outputDirectory}/timeline-audit-mobile.png`,
@@ -237,7 +238,7 @@ try {
 
   await page.getByRole("link", { name: "Activity" }).click();
   await page.getByRole("heading", { name: "Activity" }).waitFor();
-  await page.getByText("deterministic-fixture-v1", { exact: true }).waitFor();
+  await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
   await page.screenshot({
     path: `${outputDirectory}/activity-mobile.png`,
   });

@@ -46,7 +46,7 @@ c37751db6e2e4a364debaa436ce4684cec6a7d2cf11a1080df886a69ef94d317  ./apps/web/tes
 2caed0bbb30a6c71e71ece7592715ab550b591cac2dccf0a0efd98751bf039fc  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
-b1627cab5c749f6abd12543b03808129a85e8ecafde6fd78e56a9fd405efa3d7  ./apps/web/tests/visual/current-mvp.mjs
+40399a14a70184c066ab8dc0f3d488bc139427f2d988c640f05d729d3552c841  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml
