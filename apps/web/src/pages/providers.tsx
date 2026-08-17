@@ -101,7 +101,7 @@ export function ProvidersPage() {
                 </div>
                 <div className="provider-eligibility-routes">
                   {group.routes.length === 0 ? (
-                    <span className="provider-route-chip muted">No healthy route</span>
+                    <span className="provider-route-chip muted">No owner-usable route</span>
                   ) : group.routes.map((route) => (
                     <span className="provider-route-chip" key={route.route_id}>{route.display_name}</span>
                   ))}

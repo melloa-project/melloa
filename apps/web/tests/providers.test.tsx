@@ -117,7 +117,8 @@ describe("ProvidersPage", () => {
     expect(eligibility.getByText("Personal no-disclosure")).toBeInTheDocument();
     expect(eligibility.getByText("External disclosure")).toBeInTheDocument();
     expect(eligibility.getAllByText("1 healthy route")).toHaveLength(2);
-    expect(eligibility.getByText("No owner-usable route")).toBeInTheDocument();
+    expect(eligibility.getAllByText("No owner-usable route")).toHaveLength(2);
+    expect(eligibility.queryByText("No healthy route")).not.toBeInTheDocument();
     expect(eligibility.getByText("Local Qwen through Ollama")).toBeInTheDocument();
     expect(eligibility.getByText("Codex subscription route")).toBeInTheDocument();
     expect(eligibility.queryByText("Deterministic synthetic fixture")).not.toBeInTheDocument();
