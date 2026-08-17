@@ -368,6 +368,7 @@ def export_mvp(args: argparse.Namespace) -> int:
                 memory=runtime.memory_service,
                 memory_repository=runtime.memory_store,
                 delivery=runtime.delivery_service,
+                retention=runtime.retention_service,
                 source_runtime=f"melloa-mvp/{runtime.persistence.mode}",
             ).write_bundle(args.output_dir, schema_root=ROOT / "schemas")
             validation = validate_bundle(args.output_dir)

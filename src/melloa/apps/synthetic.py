@@ -426,6 +426,32 @@ def build_synthetic_runtime(
             receipt_store=telegram_poll_state_store,
         )
     )
+    retention = OwnerRetentionService(
+        owner_id=SYNTHETIC_OWNER_ID,
+        reader=AuditBackedRetentionReader(
+            ConversationBackedRetentionReader(
+                DeliveryBackedRetentionReader(
+                    MemoryBackedRetentionReader(
+                        TelegramQuarantineBackedRetentionReader(
+                            InMemoryRetentionReader(
+                                SYNTHETIC_OWNER_ID,
+                                policies=_synthetic_retention_policies(),
+                                inventory=_synthetic_retention_inventory(),
+                                backup_expiry=backup_expiry,
+                            ),
+                            telegram_attachment_backend,
+                        ),
+                        memory_store,
+                    ),
+                    delivery_store,
+                ),
+                conversation_store,
+            ),
+            SYNTHETIC_OWNER_ID,
+            event_audit_store,
+        ),
+        clock=clock,
+    )
     inspection = OwnerInspectionService(
         owner_id=SYNTHETIC_OWNER_ID,
         conversation_store=conversation_store,
@@ -517,33 +543,8 @@ def build_synthetic_runtime(
         ),
         conversation=conversation,
         delivery=delivery,
+        retention=retention,
         memory_repository=memory_store,
-        clock=clock,
-    )
-    retention = OwnerRetentionService(
-        owner_id=SYNTHETIC_OWNER_ID,
-        reader=AuditBackedRetentionReader(
-            ConversationBackedRetentionReader(
-                DeliveryBackedRetentionReader(
-                    MemoryBackedRetentionReader(
-                        TelegramQuarantineBackedRetentionReader(
-                            InMemoryRetentionReader(
-                                SYNTHETIC_OWNER_ID,
-                                policies=_synthetic_retention_policies(),
-                                inventory=_synthetic_retention_inventory(),
-                                backup_expiry=backup_expiry,
-                            ),
-                            telegram_attachment_backend,
-                        ),
-                        memory_store,
-                    ),
-                    delivery_store,
-                ),
-                conversation_store,
-            ),
-            SYNTHETIC_OWNER_ID,
-            event_audit_store,
-        ),
         clock=clock,
     )
     return SyntheticRuntime(

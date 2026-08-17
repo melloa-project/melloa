@@ -8,6 +8,7 @@ from datetime import datetime
 from melloa.application.conversation import ConversationService
 from melloa.application.delivery import DeliveryService
 from melloa.application.inspection import InspectionOwnershipError
+from melloa.application.retention import OwnerRetentionService
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, utc_now
 from melloa.domain.operations import (
@@ -30,6 +31,7 @@ class OwnerOperationsService:
         reader: OperationsInspectionReader,
         conversation: ConversationService | None = None,
         delivery: DeliveryService | None = None,
+        retention: OwnerRetentionService | None = None,
         memory_repository: MemoryRepository | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
@@ -37,6 +39,7 @@ class OwnerOperationsService:
         self._reader = reader
         self._conversation = conversation
         self._delivery = delivery
+        self._retention = retention
         self._memory_repository = memory_repository
         self._clock = clock
 
@@ -159,6 +162,17 @@ class OwnerOperationsService:
                     status_reason="export.coverage.model-activity",
                 ),
                 ExportCoverageItem(
+                    group_id="export.retention-report",
+                    included=True,
+                    estimated_records=counts["retention_reports"],
+                    artifact_path="inspection/retention.jsonl",
+                    summary=(
+                        "Owner-visible retention policy, aggregate inventory, and "
+                        "backup-expiry disclosure."
+                    ),
+                    status_reason="export.coverage.retention-report",
+                ),
+                ExportCoverageItem(
                     group_id="export.schemas-checksums",
                     included=True,
                     estimated_records=counts["validation_artifacts"],
@@ -191,8 +205,8 @@ class OwnerOperationsService:
                     check_id="export.validation.references",
                     implemented=True,
                     summary=(
-                        "Conversation, delivery, turn, and model-activity records receive "
-                        "basic referential-integrity checks inside the bundle."
+                        "Conversation, delivery, retention, turn, and model-activity "
+                        "records receive basic referential-integrity checks inside the bundle."
                     ),
                     status_reason="export.validation.basic-references",
                 ),
@@ -232,6 +246,7 @@ class OwnerOperationsService:
     def _export_counts(self, principal: AuthenticatedOwner) -> dict[str, int]:
         conversation = self._conversation
         delivery = self._delivery
+        retention = self._retention
         memory_repository = self._memory_repository
         threads = conversation.list_threads(principal) if conversation is not None else ()
         message_count = 0
@@ -259,5 +274,6 @@ class OwnerOperationsService:
             ),
             "delivery_records": delivery_count,
             "model_activity_entries": turn_count,
-            "validation_artifacts": 12,
+            "retention_reports": 0 if retention is None else 1,
+            "validation_artifacts": 13,
         }

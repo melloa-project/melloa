@@ -42,6 +42,7 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
         delivery=runtime.delivery_service,
         memory=runtime.memory_service,
         memory_repository=runtime.memory_store,
+        retention=runtime.retention_service,
         clock=lambda: fixed_time,
         id_factory=_fixed_ids(),
     ).write_bundle(bundle_dir, schema_root=_schema_root())
@@ -53,8 +54,10 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     assert report.record_counts["conversations/threads.jsonl"] == 1
     assert report.record_counts["assertions/inspections.jsonl"] == 1
     assert report.record_counts["inspection/model-activity.jsonl"] == 1
+    assert report.record_counts["inspection/retention.jsonl"] == 1
     assert (bundle_dir / "schemas/owner-export/manifest-v1.json").is_file()
     assert (bundle_dir / "schemas/inspection/owner-model-activity-v1.json").is_file()
+    assert (bundle_dir / "schemas/retention/owner-report-v1.json").is_file()
     assert (bundle_dir / "schemas/conversation/delivery-work-status-v1.json").is_file()
     assert "export.preview-unencrypted" in manifest.limitations
     assert manifest.encrypted is False

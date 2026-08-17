@@ -294,7 +294,8 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert export_after_coverage["export.conversation-records"]["estimated_records"] == 7
     assert export_after_coverage["export.delivery-records"]["estimated_records"] == 0
     assert export_after_coverage["export.model-activity"]["estimated_records"] == 1
-    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 12
+    assert export_after_coverage["export.retention-report"]["estimated_records"] == 1
+    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 13
 
     correction = client.post(
         f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",

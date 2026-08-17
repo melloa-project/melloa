@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from melloa.application.conversation import ConversationService
 from melloa.application.delivery import DeliveryService
 from melloa.application.memory import MemoryService
+from melloa.application.retention import OwnerRetentionService
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import (
     RecordId,
@@ -44,6 +45,7 @@ from melloa.domain.inspection import (
     OwnerModelActivityReport,
 )
 from melloa.domain.memory import MemoryInspection
+from melloa.domain.retention import OwnerRetentionReport
 from melloa.ports.memory import MemoryRepository
 
 DATA_SCHEMAS: dict[str, tuple[str, type[BaseModel], str]] = {
@@ -82,6 +84,11 @@ DATA_SCHEMAS: dict[str, tuple[str, type[BaseModel], str]] = {
         OwnerModelActivityReport,
         "schemas/inspection/owner-model-activity-v1.json",
     ),
+    "inspection/retention.jsonl": (
+        "export.owner-retention-report",
+        OwnerRetentionReport,
+        "schemas/retention/owner-report-v1.json",
+    ),
     "assertions/inspections.jsonl": (
         "export.memory-inspection",
         MemoryInspection,
@@ -113,6 +120,7 @@ class OwnerExportService:
         memory: MemoryService,
         memory_repository: MemoryRepository,
         delivery: DeliveryService | None = None,
+        retention: OwnerRetentionService | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
         source_runtime: str = "melloa-core/0.1.0-export-preview",
@@ -123,6 +131,7 @@ class OwnerExportService:
         self._memory = memory
         self._memory_repository = memory_repository
         self._delivery = delivery
+        self._retention = retention
         self._clock = clock
         self._id_factory = id_factory
         self._source_runtime = source_runtime
@@ -237,6 +246,9 @@ class OwnerExportService:
             sorted(deliveries, key=lambda item: (item.available_at, item.work_id))
         )
         model_activity = self._model_activity_report(sorted_turn_inspections)
+        retention_report = (
+            () if self._retention is None else (self._retention.report(principal),)
+        )
         return {
             "conversations/threads.jsonl": sorted_threads,
             "conversations/messages.jsonl": sorted_messages,
@@ -245,6 +257,7 @@ class OwnerExportService:
             "conversations/processing.jsonl": sorted_processing,
             "conversations/deliveries.jsonl": sorted_deliveries,
             "inspection/model-activity.jsonl": (model_activity,),
+            "inspection/retention.jsonl": retention_report,
             "assertions/inspections.jsonl": inspections,
         }
 
