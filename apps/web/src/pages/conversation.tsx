@@ -107,6 +107,8 @@ export function ConversationPage() {
   const [selectedDeliveryWorkId, setSelectedDeliveryWorkId] = useState<string | null>(null);
   const [inspection, setInspection] = useState<ConversationTurnInspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
+  const threadsLoadRequestRef = useRef(0);
+  const conversationLoadRequestRef = useRef(0);
   const listEnd = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -149,21 +151,33 @@ export function ConversationPage() {
     || deliveries.some((status) => !TERMINAL_PROCESSING_STATES.has(status.state));
 
   const loadThreads = useCallback(async () => {
+    const requestId = threadsLoadRequestRef.current + 1;
+    threadsLoadRequestRef.current = requestId;
     setLoadingThreads(true);
     try {
       const nextThreads = await api.listThreads();
+      if (requestId !== threadsLoadRequestRef.current) {
+        return [];
+      }
       setThreads(nextThreads);
       setError(null);
       return nextThreads;
     } catch (caught) {
+      if (requestId !== threadsLoadRequestRef.current) {
+        return [];
+      }
       setError(errorMessage(caught));
       return [];
     } finally {
-      setLoadingThreads(false);
+      if (requestId === threadsLoadRequestRef.current) {
+        setLoadingThreads(false);
+      }
     }
   }, [api]);
 
   const loadConversation = useCallback(async (selectedId: string, quiet = false) => {
+    const requestId = conversationLoadRequestRef.current + 1;
+    conversationLoadRequestRef.current = requestId;
     if (!quiet) {
       setLoadingConversation(true);
     }
@@ -174,15 +188,21 @@ export function ConversationPage() {
         api.listProcessing(selectedId),
         api.listDeliveries(selectedId),
       ]);
+      if (requestId !== conversationLoadRequestRef.current) {
+        return;
+      }
       setMessages(nextMessages);
       setTurns(nextTurns);
       setProcessing(nextProcessing);
       setDeliveries(nextDeliveries);
       setError(null);
     } catch (caught) {
+      if (requestId !== conversationLoadRequestRef.current) {
+        return;
+      }
       setError(errorMessage(caught));
     } finally {
-      if (!quiet) {
+      if (requestId === conversationLoadRequestRef.current) {
         setLoadingConversation(false);
       }
     }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -93,6 +93,16 @@ const outputMessage: ConversationMessage = {
   citation_ids: ["citation_01"],
   created_at: "2026-08-16T12:00:02Z",
   observed_at: "2026-08-16T12:00:02Z",
+};
+
+const otherOutputMessage: ConversationMessage = {
+  ...outputMessage,
+  message_id: "message_melli_02",
+  thread_id: otherThread.thread_id,
+  parts: [{ kind: "text", text: "Second thread reply." }],
+  citation_ids: [],
+  created_at: "2026-08-16T12:30:02Z",
+  observed_at: "2026-08-16T12:30:02Z",
 };
 
 const turn: ConversationTurn = {
@@ -409,6 +419,41 @@ describe("ConversationPage", () => {
     ));
   });
 
+  it("keeps the latest selected conversation when an older thread load resolves last", async () => {
+    const staleMessages = deferred<readonly ConversationMessage[]>();
+    mocks.listThreads.mockResolvedValue([thread, otherThread]);
+    mocks.listMessages.mockImplementation((selectedId: string) => (
+      selectedId === thread.thread_id
+        ? staleMessages.promise
+        : Promise.resolve([otherOutputMessage])
+    ));
+    mocks.listTurns.mockResolvedValue([]);
+    mocks.listProcessing.mockResolvedValue([]);
+    mocks.listDeliveries.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Follow-up thread/i }));
+
+    expect(await screen.findByRole("heading", { name: otherThread.title })).toBeInTheDocument();
+    expect(await screen.findByText("Second thread reply.")).toBeInTheDocument();
+
+    await act(async () => {
+      staleMessages.resolve([ownerMessage, outputMessage]);
+      await staleMessages.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("A grounded response.")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Second thread reply.")).toBeInTheDocument();
+  });
+
   it("opens the exact turn inspector from a route query", async () => {
     render(
       <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}?turn=${turn.turn_id}`]}>
@@ -474,4 +519,20 @@ describe("ConversationPage", () => {
 function MemoryLocation() {
   const location = useLocation();
   return <div>{`memory-search=${location.search}`}</div>;
+}
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
 }
