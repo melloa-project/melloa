@@ -240,6 +240,7 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
   }
   const includedCoverage = report.coverage.filter((item) => item.included);
   const excludedCoverage = report.coverage.filter((item) => !item.included);
+  const implementedValidationChecks = report.validation_checks.filter((item) => item.implemented).length;
   const copyCommand = async (command: "export" | "validation", value: string) => {
     try {
       if (navigator.clipboard === undefined) {
@@ -262,9 +263,10 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
           <Badge tone={report.encrypted ? "positive" : "warning"}>{report.encrypted ? "Encrypted" : "Unencrypted preview"}</Badge>
         </div>
         <div className="export-capability-grid">
-          <div><span>SQL snapshot</span><strong>{report.includes_sql_snapshot ? "Included" : "Not included"}</strong></div>
-          <div><span>Blobs</span><strong>{report.includes_blobs ? "Included" : "Not included"}</strong></div>
-          <div><span>Validation</span><strong>Checksums and schemas</strong></div>
+          <div><span>Included groups</span><strong>{includedCoverage.length} of {report.coverage.length}</strong></div>
+          <div><span>Validation checks</span><strong>{implementedValidationChecks} of {report.validation_checks.length}</strong></div>
+          <div><span>Known gaps</span><strong>{excludedCoverage.length}</strong></div>
+          <div><span>Bundle encryption</span><strong>{report.encrypted ? "Enabled" : "Not encrypted"}</strong></div>
         </div>
         <div className="export-command-grid" aria-label="Export commands">
           <CommandBlock
@@ -324,7 +326,7 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
       <Card className="operations-panel">
         <div className="card-heading-row">
           <div><h2>Import validation scope</h2><p>Dry-run checks are separated from restore work that still remains pending.</p></div>
-          <Badge>{report.validation_checks.filter((item) => item.implemented).length} checks</Badge>
+          <Badge>{implementedValidationChecks} checks</Badge>
         </div>
         <div className="export-validation-list">
           {report.validation_checks.map((item) => (

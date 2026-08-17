@@ -212,6 +212,13 @@ describe("OperationsPage retention view", () => {
     const copyButtons = within(commands).getAllByRole("button", { name: "Copy" });
     expect(copyButtons).toHaveLength(2);
     expect(screen.getByText("Unencrypted preview")).toBeInTheDocument();
+    expect(screen.getByText("Included groups")).toBeInTheDocument();
+    expect(screen.getByText("4 of 6")).toBeInTheDocument();
+    expect(screen.getByText("Validation checks")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    expect(screen.getByText("Known gaps")).toBeInTheDocument();
+    expect(screen.getByText("Bundle encryption")).toBeInTheDocument();
+    expect(screen.getByText("Not encrypted")).toBeInTheDocument();
     expect(screen.getByText("Included artifacts")).toBeInTheDocument();
     expect(screen.getByText("Explicit gaps")).toBeInTheDocument();
     expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();

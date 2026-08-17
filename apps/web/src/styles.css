@@ -2422,7 +2422,7 @@ pre {
 .export-capability-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .export-capability-grid > div,
@@ -3638,7 +3638,7 @@ pre {
   }
 
   .export-capability-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .export-coverage-row {
