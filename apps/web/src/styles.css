@@ -2043,12 +2043,35 @@ pre {
   gap: 10px;
 }
 
+.export-command-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.export-command-header .button {
+  min-height: 30px;
+}
+
+.export-command-header span {
+  margin-bottom: 0;
+}
+
 .export-command-grid code {
   color: var(--ink-soft);
   display: block;
   font-size: 0.68rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.command-copy-status {
+  color: var(--accent-strong);
+  font-size: 0.64rem;
+  font-weight: 700;
+  margin-top: 6px;
 }
 
 .tab-list {

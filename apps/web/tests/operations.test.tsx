@@ -27,6 +27,12 @@ describe("OperationsPage retention view", () => {
     for (const mock of Object.values(mocks)) {
       mock.mockReset();
     }
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
     mocks.healthDetail.mockResolvedValue({
       generated_at: "2026-08-16T12:00:00Z",
       overall_state: "healthy",
@@ -203,6 +209,8 @@ describe("OperationsPage retention view", () => {
     const commands = screen.getByLabelText("Export commands");
     expect(within(commands).getByText("melloa export-mvp --output-dir <export-dir>")).toBeInTheDocument();
     expect(within(commands).getByText("melloa import-validate --bundle-dir <export-dir>")).toBeInTheDocument();
+    const copyButtons = within(commands).getAllByRole("button", { name: "Copy" });
+    expect(copyButtons).toHaveLength(2);
     expect(screen.getByText("Unencrypted preview")).toBeInTheDocument();
     expect(screen.getByText("Included artifacts")).toBeInTheDocument();
     expect(screen.getByText("Explicit gaps")).toBeInTheDocument();
@@ -228,5 +236,25 @@ describe("OperationsPage retention view", () => {
     expect(screen.getByText("Logical SQL snapshots remain pending.")).toBeInTheDocument();
     expect(screen.getByText("Attachment, media, and object-store blobs are not exported.")).toBeInTheDocument();
     expect(screen.getAllByText("Excluded")).toHaveLength(2);
+  });
+
+  it("copies export commands from the Operations view", async () => {
+    render(<OperationsPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
+    const commands = screen.getByLabelText("Export commands");
+    const [copyExport, copyValidation] = within(commands).getAllByRole("button", { name: "Copy" });
+
+    fireEvent.click(copyExport!);
+    await screen.findByText("Export command copied");
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
+      "melloa export-mvp --output-dir <export-dir>",
+    );
+
+    fireEvent.click(copyValidation!);
+    await screen.findByText("Validation command copied");
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
+      "melloa import-validate --bundle-dir <export-dir>",
+    );
   });
 });

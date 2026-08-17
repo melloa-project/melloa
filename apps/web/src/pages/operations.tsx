@@ -4,6 +4,7 @@ import {
   CameraOff,
   CheckCircle2,
   CircleAlert,
+  Copy,
   Database,
   Download,
   FileCheck2,
@@ -230,11 +231,26 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
 }
 
 function ExportView({ report }: { readonly report: OwnerExportReadinessReport | null }) {
+  const [copyState, setCopyState] = useState<{
+    readonly command: "export" | "validation";
+    readonly status: "copied" | "failed";
+  } | null>(null);
   if (report === null) {
     return <Card><EmptyState icon={Download} title="Export report unavailable" description="The private core did not return owner export readiness." /></Card>;
   }
   const includedCoverage = report.coverage.filter((item) => item.included);
   const excludedCoverage = report.coverage.filter((item) => !item.included);
+  const copyCommand = async (command: "export" | "validation", value: string) => {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(value);
+      setCopyState({ command, status: "copied" });
+    } catch {
+      setCopyState({ command, status: "failed" });
+    }
+  };
   return (
     <div className="operations-stack">
       <Card className="operations-panel export-summary-panel">
@@ -251,8 +267,18 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
           <div><span>Validation</span><strong>Checksums and schemas</strong></div>
         </div>
         <div className="export-command-grid" aria-label="Export commands">
-          <div><span>Export command</span><code>{report.cli_command}</code></div>
-          <div><span>Validation command</span><code>{report.validation_command}</code></div>
+          <CommandBlock
+            command={report.cli_command}
+            copied={copyState?.command === "export" ? copyState.status : null}
+            label="Export command"
+            onCopy={() => void copyCommand("export", report.cli_command)}
+          />
+          <CommandBlock
+            command={report.validation_command}
+            copied={copyState?.command === "validation" ? copyState.status : null}
+            label="Validation command"
+            onCopy={() => void copyCommand("validation", report.validation_command)}
+          />
         </div>
       </Card>
       <Card className="operations-panel">
@@ -320,6 +346,35 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
         <div><h2>Limitations</h2><p>{report.limitations.map(titleCase).join(" · ")}</p></div>
         <Badge tone="warning">Preview</Badge>
       </Card>
+    </div>
+  );
+}
+
+function CommandBlock({
+  command,
+  copied,
+  label,
+  onCopy,
+}: {
+  readonly command: string;
+  readonly copied: "copied" | "failed" | null;
+  readonly label: string;
+  readonly onCopy: () => void;
+}) {
+  return (
+    <div>
+      <div className="export-command-header">
+        <span>{label}</span>
+        <Button onClick={onCopy} size="sm" tone="ghost" type="button">
+          <Copy size={14} /> Copy
+        </Button>
+      </div>
+      <code>{command}</code>
+      {copied === null ? null : (
+        <p className="command-copy-status" role="status">
+          {copied === "copied" ? `${label} copied` : `${label} copy failed`}
+        </p>
+      )}
     </div>
   );
 }
