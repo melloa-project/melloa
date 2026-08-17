@@ -596,8 +596,21 @@ These checked-in references are generated from the same loopback MVP and contain
 |---|---|---|
 | Desktop login | [login desktop](assets/current-mvp/login-desktop.png) | calm private-access screen, application-authentication copy, independent Guardian boundary |
 | Desktop conversation | [conversation desktop](assets/current-mvp/conversation-desktop.png) | conversation-first layout, compact authority bar, route/provenance inspector, visible synthetic fallback when Ollama is absent |
+| Desktop activity | [activity desktop](assets/current-mvp/activity-desktop.png) | owner-readable model ledger with run totals, local/external filters, no-disclosure local route state, and route/turn actions |
+| Mobile activity | [activity mobile](assets/current-mvp/activity-mobile.png) | readable model-run ledger, disclosure filter state, run identifiers, and footer boundary without bottom-navigation overlap |
+| Desktop timeline | [timeline desktop](assets/current-mvp/timeline-desktop.png) | chronological content-free conversation, processing, delivery, model, and owner-export audit records with filter and aggregate-count disclosure |
+| Mobile timeline | [timeline mobile](assets/current-mvp/timeline-mobile.png) | timeline filters and newest content-free rows remain readable without horizontal overflow or bottom-navigation overlap |
+| Desktop timeline audit | [timeline audit desktop](assets/current-mvp/timeline-audit-desktop.png) | owner-export audit projection shows export ID, source event ID, aggregate counts, encryption/blob/SQL flags, and status without raw audit payloads |
+| Mobile timeline audit | [timeline audit mobile](assets/current-mvp/timeline-audit-mobile.png) | audit filter and owner-export audit row remain inspectable on narrow screens without exposing bundle paths, content hashes, prompt text, or message content |
+| Desktop memory | [memory desktop](assets/current-mvp/memory-desktop.png) | seed assertion lookup with value, status, provenance, metadata, state history, and owner mutation affordances |
+| Mobile memory | [memory mobile](assets/current-mvp/memory-mobile.png) | memory lookup and the seed assertion record collapse into a readable owner-authenticated inspection view |
 | Desktop providers | [providers desktop](assets/current-mvp/providers-desktop.png) | route health and ordering, privacy/retention constraints, local/external disclosure labels, bounded experimental Codex guidance, explicit synthetic fixture label |
 | Mobile providers | [providers mobile](assets/current-mvp/providers-mobile.png) | responsive navigation and readable provider, privacy/retention constraints, sandbox, disclosure, and fallback guidance without horizontal overflow |
+| Desktop operations export | [operations export desktop](assets/current-mvp/operations-export-desktop.png) | canonical export preview readiness, validation status, live ZIP download, encrypted-package commands, and explicit missing SQL/blob/signed-archive gaps |
+| Mobile operations export | [operations export mobile](assets/current-mvp/operations-export-mobile.png) | export format, validation, package readiness, command guidance, and deliberate limitations remain readable on narrow screens |
+| Mobile operations export download | [operations export download mobile](assets/current-mvp/operations-export-download-mobile.png) | live ZIP download command remains reachable after transient validation feedback clears |
+| Desktop operations retention | [operations retention desktop](assets/current-mvp/operations-retention-desktop.png) | aggregate retention inventory and backup-expiry disclosure for current canonical stores without content exposure |
+| Mobile operations retention | [operations retention mobile](assets/current-mvp/operations-retention-mobile.png) | retention inventory cards and backup-expiry status remain readable on narrow screens |
 | Desktop Telegram settings | [settings desktop](assets/current-mvp/settings-desktop.png) | owner and Guardian boundaries, explicit transport mode, polling/reply/delivery status, no credential or full identifier |
 | Mobile Telegram settings | [settings mobile](assets/current-mvp/settings-mobile.png) | responsive channel status, pairing empty state, and readable authority copy without horizontal overflow |
 

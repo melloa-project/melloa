@@ -33,6 +33,28 @@ async function scrollPageShell(top) {
   }, top);
 }
 
+async function assertPageClearsMobileNavigation(subjectSelector, label) {
+  await page.locator(".page-shell").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const subjectBox = await page.locator(subjectSelector).last().boundingBox();
+  const mobileNavBox = await page.locator(".mobile-nav").boundingBox();
+  if (
+    subjectBox === null ||
+    mobileNavBox === null ||
+    subjectBox.y + subjectBox.height > mobileNavBox.y - 8
+  ) {
+    throw new Error(`${label} mobile content does not clear the bottom navigation`);
+  }
+  await scrollPageShell(0);
+}
+
+async function scrollIntoPageView(subjectSelector, block = "start") {
+  await page.locator(subjectSelector).first().evaluate((element, scrollBlock) => {
+    element.scrollIntoView({ block: scrollBlock });
+  }, block);
+}
+
 try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Your conversation with Melli/ }).waitFor();
@@ -59,6 +81,29 @@ try {
   await page.getByText("deterministic-fixture-v1", { exact: true }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/conversation-desktop.png`,
+    fullPage: true,
+  });
+
+  await page.getByRole("link", { name: "Activity" }).click();
+  await page.getByRole("heading", { name: "Activity" }).waitFor();
+  await page.getByRole("heading", { name: "Run ledger" }).waitFor();
+  await page.getByText("deterministic-fixture-v1", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Local \d+$/ }).waitFor();
+  await page.getByText("No external disclosure", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/activity-desktop.png`,
+    fullPage: true,
+  });
+
+  await page.getByRole("link", { name: "Memory" }).click();
+  await page.getByRole("heading", { name: "Memory", exact: true }).waitFor();
+  await page.getByLabel("Assertion ID").fill("assertion_00000000000000000000000000000001");
+  await page.getByRole("button", { name: "Inspect memory" }).click();
+  await page.getByText("assertion_00000000000000000000000000000001", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Provenance" }).waitFor();
+  await page.getByRole("heading", { name: "State history" }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/memory-desktop.png`,
     fullPage: true,
   });
 
@@ -102,10 +147,51 @@ try {
     path: `${outputDirectory}/operations-export-desktop.png`,
     fullPage: true,
   });
+  await page.getByText("Validated unencrypted export downloaded.", { exact: true }).waitFor({
+    state: "hidden",
+    timeout: 7_000,
+  });
 
+  await page.getByRole("link", { name: "Timeline" }).click();
+  await page.getByRole("heading", { name: "Timeline", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Canonical timeline" }).waitFor();
+  await page.getByRole("button", { name: /^Audit \d+$/ }).click();
+  await page.getByText("Owner export preview generated and audited.", { exact: true }).waitFor();
+  await page.getByText("Plaintext preview", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/timeline-audit-desktop.png`,
+    fullPage: true,
+  });
+
+  await page.getByRole("button", { name: /^All \d+$/ }).click();
+  await page.getByText("Structured reply turn recorded with decision evidence.", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/timeline-desktop.png`,
+    fullPage: true,
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await scrollIntoPageView(".timeline-card");
+  await page.screenshot({
+    path: `${outputDirectory}/timeline-mobile.png`,
+  });
+  await assertPageClearsMobileNavigation(".timeline-disclosure-panel", "Timeline");
+
+  await page.getByRole("button", { name: /^Audit \d+$/ }).click();
+  await page.getByText("Owner export preview generated and audited.", { exact: true }).waitFor();
+  await scrollIntoPageView(".timeline-card");
+  await page.screenshot({
+    path: `${outputDirectory}/timeline-audit-mobile.png`,
+  });
+  await assertPageClearsMobileNavigation(".timeline-disclosure-panel", "Timeline audit");
+
+  await page.getByRole("link", { name: "Operations" }).click();
+  await page.getByRole("heading", { name: "Operations" }).waitFor();
   await page.getByRole("tab", { name: "Retention" }).click();
   await page.getByText("Backup expiry", { exact: true }).waitFor();
   await page.getByText("0 objects", { exact: true }).first().waitFor();
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await scrollPageShell(0);
   await page.screenshot({
     path: `${outputDirectory}/operations-retention-desktop.png`,
     fullPage: true,
@@ -133,24 +219,30 @@ try {
     path: `${outputDirectory}/operations-export-download-mobile.png`,
   });
 
+  await page.getByRole("link", { name: "Activity" }).click();
+  await page.getByRole("heading", { name: "Activity" }).waitFor();
+  await page.getByText("deterministic-fixture-v1", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/activity-mobile.png`,
+  });
+  await assertPageClearsMobileNavigation(".activity-row", "Activity");
+
+  await page.getByRole("link", { name: "Memory" }).click();
+  await page.getByRole("heading", { name: "Memory", exact: true }).waitFor();
+  await page.getByLabel("Assertion ID").fill("assertion_00000000000000000000000000000001");
+  await page.getByRole("button", { name: "Inspect memory" }).click();
+  await page.getByText("assertion_00000000000000000000000000000001", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/memory-mobile.png`,
+  });
+  await assertPageClearsMobileNavigation(".memory-history-column", "Memory");
+
   await page.getByRole("link", { name: "Providers" }).click();
   await page.getByRole("heading", { name: "Providers" }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/providers-mobile.png`,
   });
-  await page.locator(".page-shell").evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  const providerGuidanceBox = await page.locator(".provider-guidance").boundingBox();
-  const mobileNavBox = await page.locator(".mobile-nav").boundingBox();
-  if (
-    providerGuidanceBox === null ||
-    mobileNavBox === null ||
-    providerGuidanceBox.y + providerGuidanceBox.height > mobileNavBox.y - 8
-  ) {
-    throw new Error("Provider mobile content does not clear the bottom navigation");
-  }
-  await scrollPageShell(0);
+  await assertPageClearsMobileNavigation(".provider-guidance", "Provider");
 
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("heading", { name: "Settings" }).waitFor();
