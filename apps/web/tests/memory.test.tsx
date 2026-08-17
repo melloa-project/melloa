@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -238,6 +238,46 @@ describe("MemoryPage", () => {
     ));
   });
 
+  it("keeps the latest memory inspection when an older assertion response resolves last", async () => {
+    const staleInspection = deferred<MemoryInspection>();
+    mocks.inspectMemory.mockImplementation((assertionId: string) => (
+      assertionId === retainedInspection.assertion.assertion_id
+        ? staleInspection.promise
+        : Promise.resolve(updatedInspection)
+    ));
+
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <Routes>
+          <Route
+            path="/memory"
+            element={(
+              <>
+                <MemoryQuerySwitcher assertionId={updatedInspection.assertion.assertion_id} />
+                <MemoryPage />
+              </>
+            )}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Reading memory provenance")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open alternate memory" }));
+
+    expect(await screen.findByText("walking")).toBeInTheDocument();
+
+    await act(async () => {
+      staleInspection.resolve(retainedInspection);
+      await staleInspection.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("reading")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("walking")).toBeInTheDocument();
+  });
+
   it("opens related assertion inspections from provenance edges", async () => {
     mocks.inspectMemory.mockImplementation((assertionId: string) => Promise.resolve(
       assertionId === updatedInspection.assertion.assertion_id ? updatedInspection : retainedInspectionWithProvenance,
@@ -273,4 +313,20 @@ function MemoryQuerySwitcher({ assertionId }: { readonly assertionId: string }) 
       Open alternate memory
     </button>
   );
+}
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
 }

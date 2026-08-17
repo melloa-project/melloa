@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Brain,
@@ -30,29 +30,43 @@ export function MemoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [action, setAction] = useState<MemoryAction | null>(null);
   const [mutating, setMutating] = useState(false);
+  const inspectRequestRef = useRef(0);
 
   const inspect = useCallback(async (assertionId: string) => {
     const normalized = assertionId.trim();
     if (normalized.length === 0) {
       return;
     }
+    const requestId = inspectRequestRef.current + 1;
+    inspectRequestRef.current = requestId;
     setLoading(true);
     try {
-      setInspection(await api.inspectMemory(normalized));
+      const nextInspection = await api.inspectMemory(normalized);
+      if (requestId !== inspectRequestRef.current) {
+        return;
+      }
+      setInspection(nextInspection);
       setError(null);
     } catch (caught) {
+      if (requestId !== inspectRequestRef.current) {
+        return;
+      }
       setInspection(null);
       setError(errorMessage(caught));
     } finally {
-      setLoading(false);
+      if (requestId === inspectRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [api]);
 
   useEffect(() => {
     if (assertionQuery.length === 0) {
+      inspectRequestRef.current += 1;
       setQuery("");
       setInspection(null);
       setError(null);
+      setLoading(false);
       return;
     }
     setQuery(assertionQuery);
