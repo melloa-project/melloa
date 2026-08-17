@@ -110,11 +110,12 @@ describe("OperationsPage retention view", () => {
         {
           policy_id: "retention.audit-ledger",
           coverage: "complete",
-          retained_objects: 0,
-          retained_bytes: 0,
+          retained_objects: 3,
+          retained_bytes: 2048,
           overdue_objects: 0,
           pending_deletions: 0,
           deletion_receipts: 0,
+          oldest_retained_at: "2026-08-16T11:50:00Z",
           status_reason: "retention.inventory.audit_event_store",
         },
         {
@@ -218,12 +219,15 @@ describe("OperationsPage retention view", () => {
     const retention = screen.getByLabelText("Retention policies");
     expect(within(retention).getAllByText("Retained bytes")).toHaveLength(2);
     expect(within(retention).getByText("12.0 KiB")).toBeInTheDocument();
-    expect(within(retention).getByText("0 objects")).toBeInTheDocument();
-    expect(within(retention).getByText("0 B")).toBeInTheDocument();
-    expect(within(retention).getAllByText("Not available")).toHaveLength(3);
+    expect(within(retention).getByText("3 objects")).toBeInTheDocument();
+    expect(within(retention).getByText("2.0 KiB")).toBeInTheDocument();
+    expect(within(retention).getAllByText("Not available")).toHaveLength(2);
     expect(within(retention).getAllByText("Deletion receipts")).toHaveLength(2);
     expect(within(retention).getByText("Owner Request")).toBeInTheDocument();
     expect(within(retention).getAllByText("Oldest retained")).toHaveLength(2);
+    expect(screen.getByText("Content-free audit ledger")).toBeInTheDocument();
+    expect(screen.getByText("Audit records")).toBeInTheDocument();
+    expect(screen.getByText("Security events are exposed here only as aggregate counts; credentials, cookies, tokens, prompts, and raw model output are not shown.")).toBeInTheDocument();
   });
 
   it("renders export coverage and validation commands without claiming backup coverage", async () => {

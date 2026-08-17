@@ -197,6 +197,8 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
   if (report === null) {
     return <Card><EmptyState icon={TimerReset} title="Retention report unavailable" description="The private core did not return policy coverage." /></Card>;
   }
+  const auditPolicy = report.policies.find((policy) => policy.policy_id === "retention.audit-ledger");
+  const auditInventory = report.inventory.find((item) => item.policy_id === "retention.audit-ledger");
   return (
     <div className="operations-stack">
       <Card className="backup-disclosure">
@@ -204,6 +206,24 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
         <div><h2>Backup expiry</h2><p>{report.backup_expiry.status_reason}</p></div>
         <Badge tone={report.backup_expiry.state === "configured" ? "positive" : "warning"}>{titleCase(report.backup_expiry.state)}</Badge>
       </Card>
+      {auditPolicy === undefined && auditInventory === undefined ? null : (
+        <Card className="operations-panel">
+          <div className="card-heading-row">
+            <div>
+              <h2>Content-free audit ledger</h2>
+              <p>{auditPolicy?.summary ?? "Security and action evidence is counted without exposing audit payloads."}</p>
+            </div>
+            <Badge tone={auditInventory?.coverage === "complete" ? "positive" : "warning"}>{titleCase(auditInventory?.coverage ?? "unknown")}</Badge>
+          </div>
+          <dl className="detail-list">
+            <div><dt>Audit records</dt><dd>{formatInventoryObjects(auditInventory?.retained_objects)}</dd></div>
+            <div><dt>Retained bytes</dt><dd>{formatInventoryBytes(auditInventory?.retained_bytes)}</dd></div>
+            <div><dt>Oldest retained</dt><dd>{formatInstant(auditInventory?.oldest_retained_at)}</dd></div>
+            <div><dt>Deletion control</dt><dd>{titleCase(auditPolicy?.deletion_control ?? "unknown")}</dd></div>
+          </dl>
+          <p className="retention-reason"><ShieldCheck size={14} /> Security events are exposed here only as aggregate counts; credentials, cookies, tokens, prompts, and raw model output are not shown.</p>
+        </Card>
+      )}
       <section className="retention-grid" aria-label="Retention policies">
         {report.policies.map((policy) => {
           const inventory = report.inventory.find((item) => item.policy_id === policy.policy_id);

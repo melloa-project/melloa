@@ -3500,9 +3500,9 @@ pre {
   }
 
   .page-shell {
-    height: auto;
-    min-height: calc(100svh - 58px);
-    overflow: visible;
+    height: calc(100svh - 124px);
+    min-height: 0;
+    overflow: auto;
   }
 
   .page-shell-conversation {
