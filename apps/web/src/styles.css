@@ -1488,6 +1488,13 @@ pre {
   flex: 0 0 auto;
 }
 
+.delivery-attempt-id-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
 .evidence-item,
 .attempt-row {
   align-items: center;

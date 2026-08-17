@@ -388,16 +388,25 @@ export function ConversationPage() {
     }
   }
 
-  async function copyTurnLedgerId(label: string, id: string) {
+  async function copyClipboardValue(value: string, successMessage: string, failureMessage: string) {
     try {
       if (navigator.clipboard === undefined) {
         throw new Error("Clipboard API unavailable");
       }
-      await navigator.clipboard.writeText(id);
-      notify(`${label} ID copied.`, "success");
+      await navigator.clipboard.writeText(value);
+      notify(successMessage, "success");
     } catch {
-      notify(`${label} ID copy failed.`, "error");
+      notify(failureMessage, "error");
     }
+  }
+
+  async function copyTurnLedgerId(label: string, id: string) {
+    await copyClipboardValue(id, `${label} ID copied.`, `${label} ID copy failed.`);
+  }
+
+  async function copyDeliveryAuthorityValue(label: string, value: string, valueKind: DeliveryCopyValueKind = "ID") {
+    const noun = valueKind === "ID" ? "ID" : "hash";
+    await copyClipboardValue(value, `${label} ${noun} copied.`, `${label} ${noun} copy failed.`);
   }
 
   function clearTurnQuery() {
@@ -616,7 +625,12 @@ export function ConversationPage() {
             <ProcessingInspector canMutate={canMutate} status={selectedProcessing} onResume={() => void resumeMessage(selectedProcessing)} />
           ) : null}
           {!inspectionLoading && selectedDelivery !== null ? (
-            <DeliveryInspector canMutate={canMutate} delivery={selectedDelivery} onResume={() => void resumeDelivery(selectedDelivery)} />
+            <DeliveryInspector
+              canMutate={canMutate}
+              delivery={selectedDelivery}
+              onCopyDeliveryValue={(label, value, valueKind) => void copyDeliveryAuthorityValue(label, value, valueKind)}
+              onResume={() => void resumeDelivery(selectedDelivery)}
+            />
           ) : null}
           {!inspectionLoading && inspection === null && selectedProcessing === null && selectedDelivery === null ? (
             <div className="inspector-placeholder"><Info size={20} /><p>Select a message to inspect its durable record.</p></div>
@@ -860,10 +874,12 @@ export function TurnInspector({
 function DeliveryInspector({
   canMutate,
   delivery,
+  onCopyDeliveryValue,
   onResume,
 }: {
   readonly canMutate: boolean;
   readonly delivery: DeliveryWorkStatus;
+  readonly onCopyDeliveryValue: (label: string, value: string, valueKind?: DeliveryCopyValueKind) => void;
   readonly onResume: () => void;
 }) {
   const completed = delivery.state === "completed";
@@ -878,12 +894,12 @@ function DeliveryInspector({
       <section className="inspector-section">
         <h3>Exact authority</h3>
         <dl className="detail-list">
-          <div><dt>Work</dt><dd>{shortId(delivery.work_id)}</dd></div>
-          <div><dt>Message</dt><dd>{shortId(delivery.message_id)}</dd></div>
+          <div><dt>Work</dt><dd><CopyableDeliveryValue label="Delivery work" onCopy={onCopyDeliveryValue} value={delivery.work_id} /></dd></div>
+          <div><dt>Message</dt><dd><CopyableDeliveryValue label="Delivery message" onCopy={onCopyDeliveryValue} value={delivery.message_id} /></dd></div>
           <div><dt>Adapter</dt><dd>{delivery.client_adapter}</dd></div>
           <div><dt>Destination</dt><dd>{delivery.destination_ref}</dd></div>
-          <div><dt>Policy decision</dt><dd>{shortId(delivery.current_policy_decision_id)}</dd></div>
-          <div><dt>Action hash</dt><dd>{shortId(delivery.action_hash)}</dd></div>
+          <div><dt>Policy decision</dt><dd><CopyableDeliveryValue label="Delivery policy decision" onCopy={onCopyDeliveryValue} value={delivery.current_policy_decision_id} /></dd></div>
+          <div><dt>Action hash</dt><dd><CopyableDeliveryValue label="Delivery action" onCopy={onCopyDeliveryValue} value={delivery.action_hash} valueKind="hash" /></dd></div>
           <div><dt>Available</dt><dd>{formatInstant(delivery.available_at)}</dd></div>
           <div><dt>Completed</dt><dd>{formatInstant(delivery.completed_at)}</dd></div>
         </dl>
@@ -897,6 +913,7 @@ function DeliveryInspector({
             <span>
               <strong>Attempt {attempt.attempt} · {titleCase(attempt.outcome)}</strong>
               <small>{attempt.error_code === null || attempt.error_code === undefined ? deliveryAttemptReceiptSummary(attempt.adapter_receipt, attempt.execution_receipt) : titleCase(attempt.error_code)}</small>
+              <DeliveryAttemptCopyList attempt={attempt} onCopy={onCopyDeliveryValue} />
             </span>
           </div>
         ))}
@@ -906,12 +923,78 @@ function DeliveryInspector({
         {delivery.resumptions.length === 0 ? <p className="muted-copy">No owner resumption has been recorded.</p> : delivery.resumptions.map((resumption) => (
           <div className="attempt-row" key={resumption.resumption_id}>
             <RotateCcw size={15} />
-            <span><strong>{shortId(resumption.resumption_id)}</strong><small>{resumption.added_attempts} attempts added · {formatInstant(resumption.requested_at)}</small></span>
+            <span>
+              <strong>
+                <CopyableDeliveryValue label="Delivery resumption" onCopy={onCopyDeliveryValue} value={resumption.resumption_id} />
+              </strong>
+              <small>{resumption.added_attempts} attempts added · {formatInstant(resumption.requested_at)}</small>
+            </span>
           </div>
         ))}
       </section>
       <details className="raw-details"><summary>Raw redacted delivery status</summary><pre>{safeJson(delivery)}</pre></details>
     </div>
+  );
+}
+
+type DeliveryCopyValueKind = "ID" | "hash";
+
+function CopyableDeliveryValue({
+  label,
+  onCopy,
+  value,
+  valueKind = "ID",
+}: {
+  readonly label: string;
+  readonly onCopy: (label: string, value: string, valueKind?: DeliveryCopyValueKind) => void;
+  readonly value: string;
+  readonly valueKind?: DeliveryCopyValueKind;
+}) {
+  const noun = valueKind === "ID" ? "ID" : "hash";
+  return (
+    <button
+      aria-label={`Copy ${label} ${noun} ${value}`}
+      className="ledger-id-copy"
+      onClick={() => onCopy(label, value, valueKind)}
+      title={value}
+      type="button"
+    >
+      <code>{shortId(value)}</code>
+      <Copy aria-hidden="true" size={12} />
+    </button>
+  );
+}
+
+function DeliveryAttemptCopyList({
+  attempt,
+  onCopy,
+}: {
+  readonly attempt: DeliveryWorkStatus["attempts"][number];
+  readonly onCopy: (label: string, value: string, valueKind?: DeliveryCopyValueKind) => void;
+}) {
+  const adapterReceipt = asObject(attempt.adapter_receipt);
+  const executionReceipt = asObject(attempt.execution_receipt);
+  const copyValues = [
+    { label: "Delivery attempt", value: attempt.attempt_id, valueKind: "ID" as const },
+    { label: "Delivery authorization", value: attempt.authorization_request_id, valueKind: "ID" as const },
+    { label: "Delivery attempt policy decision", value: attempt.policy_decision_id, valueKind: "ID" as const },
+    { label: "Delivery attempt action", value: attempt.action_hash, valueKind: "hash" as const },
+    { label: "Adapter receipt", value: adapterReceipt === null ? "" : readString(adapterReceipt, "delivery_id"), valueKind: "ID" as const },
+    { label: "Execution receipt action", value: executionReceipt === null ? "" : readString(executionReceipt, "action_id"), valueKind: "ID" as const },
+  ].filter((item) => item.value.length > 0);
+
+  return (
+    <span className="delivery-attempt-id-list">
+      {copyValues.map((item) => (
+        <CopyableDeliveryValue
+          key={`${item.label}-${item.value}`}
+          label={item.label}
+          onCopy={onCopy}
+          value={item.value}
+          valueKind={item.valueKind}
+        />
+      ))}
+    </span>
   );
 }
 

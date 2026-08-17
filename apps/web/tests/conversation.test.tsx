@@ -585,6 +585,13 @@ describe("ConversationPage", () => {
     expect(screen.getByText("client.telegram.synthetic")).toBeInTheDocument();
     expect(screen.getByText("telegram:pairing:pairing_000000000000000000000001")).toBeInTheDocument();
     expect(screen.getByText(/adapter delivery_.*execution action_/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Copy Delivery work ID ${completedDelivery.work_id}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(completedDelivery.work_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Delivery work ID copied.", "success");
+    fireEvent.click(screen.getByRole("button", { name: "Copy Adapter receipt ID delivery_000000000000000000000000000001" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("delivery_000000000000000000000000000001"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Execution receipt action ID action_000000000000000000000000000001" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("action_000000000000000000000000000001"));
 
     fireEvent.click(screen.getByText("Delivery failed · inspect"));
     expect(await screen.findByText("Telegram Delivery Outcome Unknown")).toBeInTheDocument();
