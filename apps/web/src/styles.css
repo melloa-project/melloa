@@ -2769,6 +2769,32 @@ pre {
   margin-top: 10px;
 }
 
+.provenance-edge-id-row {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 10px 10px 0;
+  padding: 7px 8px;
+}
+
+.provenance-edge-id-row > span {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.provenance-edge-id-row code {
+  color: var(--ink-soft);
+  font-size: 0.62rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .provenance-relation {
   align-items: center;
   color: var(--muted);
@@ -2808,6 +2834,13 @@ pre {
   min-width: 0;
 }
 
+.provenance-endpoint-id {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .provenance-endpoint strong {
   color: var(--ink);
   font-size: 0.68rem;
@@ -2841,6 +2874,12 @@ pre {
 
 .provenance-endpoint button svg {
   flex: 0 0 auto;
+}
+
+.provenance-endpoint .provenance-copy-button {
+  height: 24px;
+  min-height: 24px;
+  width: 24px;
 }
 
 .history-empty,

@@ -95,16 +95,20 @@ export function MemoryPage() {
     setSearchParams({ assertion: normalized });
   }
 
-  async function copyAssertionId(assertionId: string) {
+  async function copyMemoryIdentifier(label: string, value: string) {
     try {
       if (navigator.clipboard === undefined) {
         throw new Error("Clipboard API unavailable");
       }
-      await navigator.clipboard.writeText(assertionId);
-      notify("Assertion ID copied.", "success");
+      await navigator.clipboard.writeText(value);
+      notify(`${label} ID copied.`, "success");
     } catch {
-      notify("Assertion ID copy failed.", "error");
+      notify(`${label} ID copy failed.`, "error");
     }
+  }
+
+  async function copyAssertionId(assertionId: string) {
+    await copyMemoryIdentifier("Assertion", assertionId);
   }
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
@@ -254,6 +258,7 @@ export function MemoryPage() {
                   edge={edge}
                   index={index}
                   key={`${readString(edge, "edge_id")}-${index}`}
+                  onCopyIdentifier={(label, value) => void copyMemoryIdentifier(label, value)}
                   onInspectAssertion={inspectRelatedAssertion}
                 />
               ))}
@@ -376,11 +381,13 @@ function ProvenanceEdgeDetails({
   currentAssertionId,
   edge,
   index,
+  onCopyIdentifier,
   onInspectAssertion,
 }: {
   readonly currentAssertionId: string;
   readonly edge: JsonObject;
   readonly index: number;
+  readonly onCopyIdentifier: (label: string, value: string) => void;
   readonly onInspectAssertion: (assertionId: string) => void;
 }) {
   const edgeId = readString(edge, "edge_id");
@@ -390,10 +397,26 @@ function ProvenanceEdgeDetails({
   return (
     <details className="record-details" key={`${edgeId}-${index}`}>
       <summary><span>{titleCase(relation)}</span><code>{shortId(edgeId)}</code></summary>
+      <div className="provenance-edge-id-row">
+        <span>Edge ID</span>
+        <code title={edgeId}>{edgeId}</code>
+        {edgeId === "unknown" ? null : (
+          <Button
+            aria-label={`Copy provenance edge ID ${edgeId}`}
+            onClick={() => onCopyIdentifier("Provenance edge", edgeId)}
+            size="icon"
+            tone="ghost"
+            type="button"
+          >
+            <Copy aria-hidden="true" size={14} />
+          </Button>
+        )}
+      </div>
       <div className="provenance-edge-summary">
         <ProvenanceEndpoint
           currentAssertionId={currentAssertionId}
           label="From"
+          onCopyIdentifier={onCopyIdentifier}
           onInspectAssertion={onInspectAssertion}
           value={fromId}
         />
@@ -401,6 +424,7 @@ function ProvenanceEdgeDetails({
         <ProvenanceEndpoint
           currentAssertionId={currentAssertionId}
           label="To"
+          onCopyIdentifier={onCopyIdentifier}
           onInspectAssertion={onInspectAssertion}
           value={toId}
         />
@@ -413,11 +437,13 @@ function ProvenanceEdgeDetails({
 function ProvenanceEndpoint({
   currentAssertionId,
   label,
+  onCopyIdentifier,
   onInspectAssertion,
   value,
 }: {
   readonly currentAssertionId: string;
   readonly label: string;
+  readonly onCopyIdentifier: (label: string, value: string) => void;
   readonly onInspectAssertion: (assertionId: string) => void;
   readonly value: string;
 }) {
@@ -426,18 +452,34 @@ function ProvenanceEndpoint({
   return (
     <div className={`provenance-endpoint ${current ? "current" : ""}`}>
       <span>{label}</span>
-      {navigable ? (
-        <button
-          aria-label={`Inspect related memory assertion ${value}`}
-          onClick={() => onInspectAssertion(value)}
-          type="button"
-        >
-          <strong>{shortId(value)}</strong>
-          <ExternalLink size={13} />
-        </button>
-      ) : (
-        <strong>{current ? "Current assertion" : shortId(value)}</strong>
-      )}
+      <div className="provenance-endpoint-id">
+        {navigable ? (
+          <button
+            aria-label={`Inspect related memory assertion ${value}`}
+            onClick={() => onInspectAssertion(value)}
+            title={value}
+            type="button"
+          >
+            <strong>{shortId(value)}</strong>
+            <ExternalLink size={13} />
+          </button>
+        ) : (
+          <strong title={value}>{current ? "Current assertion" : shortId(value)}</strong>
+        )}
+        {value === "unknown" ? null : (
+          <Button
+            aria-label={`Copy ${label} assertion ID ${value}`}
+            className="provenance-copy-button"
+            onClick={() => onCopyIdentifier(`${label} assertion`, value)}
+            size="icon"
+            tone="ghost"
+            title={`Copy ${label.toLowerCase()} assertion ID`}
+            type="button"
+          >
+            <Copy aria-hidden="true" size={13} />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

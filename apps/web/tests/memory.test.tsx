@@ -362,6 +362,25 @@ describe("MemoryPage", () => {
     const edgeSummary = screen.getAllByText("Corrects")[0] as HTMLElement;
     fireEvent.click(edgeSummary);
     expect(screen.getByText("Current assertion")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {
+      name: "Copy provenance edge ID edge_00000000000000000000000000000001",
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      "edge_00000000000000000000000000000001",
+    ));
+    expect(mocks.notify).toHaveBeenCalledWith("Provenance edge ID copied.", "success");
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy From assertion ID ${updatedInspection.assertion.assertion_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      updatedInspection.assertion.assertion_id,
+    ));
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy To assertion ID ${retainedInspection.assertion.assertion_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      retainedInspection.assertion.assertion_id,
+    ));
 
     fireEvent.click(screen.getByRole("button", {
       name: `Inspect related memory assertion ${updatedInspection.assertion.assertion_id}`,
