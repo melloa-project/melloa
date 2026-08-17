@@ -15,6 +15,7 @@ import {
   SquareTerminal,
   WifiOff,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 import type { ModelRouteStatus, OwnerModelRouteReport } from "../api";
 import { errorMessage, useMelloa } from "../app";
@@ -23,9 +24,11 @@ import { formatDurationMs, formatGbp, formatInstant, titleCase } from "../lib/fo
 
 export function ProvidersPage() {
   const { api } = useMelloa();
+  const [searchParams] = useSearchParams();
   const [report, setReport] = useState<OwnerModelRouteReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const selectedRouteId = searchParams.get("route");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,6 +45,15 @@ export function ProvidersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (report === null || selectedRouteId === null) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      document.getElementById(providerRouteElementId(selectedRouteId))?.scrollIntoView({ block: "center" });
+    });
+  }, [report, selectedRouteId]);
 
   const activeRoutes = report?.routes.filter((route) => route.health.state === "healthy").length ?? 0;
   const externalRoutes = report?.routes.filter((route) => route.external_disclosure).length ?? 0;
@@ -92,7 +104,13 @@ export function ProvidersPage() {
             </Card>
           ) : (
             <section className="provider-grid" aria-label="Configured model routes">
-              {report.routes.map((route) => <ProviderCard key={route.route_id} route={route} />)}
+              {report.routes.map((route) => (
+                <ProviderCard
+                  key={route.route_id}
+                  route={route}
+                  selected={route.route_id === selectedRouteId}
+                />
+              ))}
             </section>
           )}
 
@@ -166,7 +184,13 @@ function routeCountLabel(count: number): string {
   return `${count} healthy ${count === 1 ? "route" : "routes"}`;
 }
 
-function ProviderCard({ route }: { readonly route: ModelRouteStatus }) {
+function ProviderCard({
+  route,
+  selected,
+}: {
+  readonly route: ModelRouteStatus;
+  readonly selected: boolean;
+}) {
   const synthetic = route.route_kind === "synthetic";
   const cliAgent = route.route_kind === "cli_agent";
   const codexCli = cliAgent && route.provider_id === "provider.openai-codex-subscription";
@@ -181,13 +205,18 @@ function ProviderCard({ route }: { readonly route: ModelRouteStatus }) {
   const HealthIcon = route.health.state === "healthy" ? CheckCircle2 : route.health.state === "degraded" ? CircleAlert : WifiOff;
   const RouteIcon = cliAgent ? SquareTerminal : Bot;
   return (
-    <Card className={`provider-card ${synthetic ? "synthetic" : ""} ${cliAgent ? "cli-agent" : ""}`}>
+    <Card
+      aria-current={selected ? "true" : undefined}
+      className={`provider-card ${synthetic ? "synthetic" : ""} ${cliAgent ? "cli-agent" : ""} ${selected ? "selected" : ""}`}
+      id={providerRouteElementId(route.route_id)}
+    >
       <div className="provider-card-header">
         <span className={`provider-mark ${synthetic ? "synthetic" : ""} ${cliAgent ? "cli-agent" : ""}`}><RouteIcon size={20} /></span>
         <div><h2>{route.display_name}</h2><p>{route.model_id}</p></div>
         <Badge tone={healthTone}><HealthIcon size={13} /> {titleCase(route.health.state)}</Badge>
       </div>
       <div className="provider-labels">
+        {selected ? <Badge tone="violet">Selected route</Badge> : null}
         <Badge tone={synthetic ? "violet" : cliAgent ? "warning" : "info"}>{routeKindLabel}</Badge>
         <Badge tone={route.external_disclosure ? "warning" : "positive"}>{route.external_disclosure ? "External disclosure" : "No external disclosure"}</Badge>
       </div>
@@ -231,4 +260,8 @@ function ProviderCard({ route }: { readonly route: ModelRouteStatus }) {
 
 function formatRouteList(values: readonly string[]): string {
   return values.map(titleCase).join(" · ");
+}
+
+function providerRouteElementId(routeId: string): string {
+  return `provider-route-${routeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }

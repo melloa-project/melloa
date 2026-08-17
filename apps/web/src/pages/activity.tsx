@@ -7,6 +7,7 @@ import {
   FileSearch,
   Fingerprint,
   MessageSquare,
+  Network,
   RefreshCw,
   ShieldCheck,
   Timer,
@@ -155,6 +156,7 @@ export function ActivityPage() {
                       entry={entry}
                       key={entry.result_id}
                       onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
+                      onOpenRoute={(routeId) => navigate(`/providers?route=${encodeURIComponent(routeId)}`)}
                       onOpenThread={navigate}
                     />
                   ))}
@@ -175,10 +177,12 @@ export function ActivityPage() {
 function ActivityRow({
   entry,
   onInspectMemory,
+  onOpenRoute,
   onOpenThread,
 }: {
   readonly entry: ModelActivityEntry;
   readonly onInspectMemory: (assertionId: string) => void;
+  readonly onOpenRoute: (routeId: string) => void;
   readonly onOpenThread: (path: string) => void;
 }) {
   const started = Date.parse(entry.started_at);
@@ -204,14 +208,24 @@ function ActivityRow({
         <strong>{formatInstant(entry.completed_at)}</strong>
         <span>Turn {shortId(entry.turn_id)}</span>
       </div>
-      <Button
-        aria-label={`Open turn inspection for ${entry.model_id}`}
-        onClick={() => onOpenThread(`/conversation/${entry.thread_id}?turn=${encodeURIComponent(entry.turn_id)}`)}
-        size="icon"
-        tone="ghost"
-      >
-        <ArrowUpRight size={17} />
-      </Button>
+      <div className="activity-actions">
+        <Button
+          aria-label={`Open route contract for ${entry.route_id}`}
+          onClick={() => onOpenRoute(entry.route_id)}
+          size="icon"
+          tone="ghost"
+        >
+          <Network size={17} />
+        </Button>
+        <Button
+          aria-label={`Open turn inspection for ${entry.model_id}`}
+          onClick={() => onOpenThread(`/conversation/${entry.thread_id}?turn=${encodeURIComponent(entry.turn_id)}`)}
+          size="icon"
+          tone="ghost"
+        >
+          <ArrowUpRight size={17} />
+        </Button>
+      </div>
       <ActivityDisclosure entry={entry} onInspectMemory={onInspectMemory} />
     </article>
   );

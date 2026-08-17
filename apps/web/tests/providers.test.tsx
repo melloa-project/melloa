@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { OwnerModelRouteReport } from "../src/api";
@@ -86,7 +87,11 @@ describe("ProvidersPage", () => {
   });
 
   it("shows real route metadata and visibly labels synthetic fallback", async () => {
-    render(<ProvidersPage />);
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    );
 
     expect(await screen.findAllByText("Local Qwen through Ollama")).not.toHaveLength(0);
     expect(screen.getByText("qwen3:8b")).toBeInTheDocument();
@@ -115,5 +120,19 @@ describe("ProvidersPage", () => {
     expect(eligibility.getByText("2 healthy routes")).toBeInTheDocument();
     expect(eligibility.getByText("Local Qwen through Ollama")).toBeInTheDocument();
     expect(eligibility.getByText("Codex subscription route")).toBeInTheDocument();
+  });
+
+  it("highlights a provider route from a route query", async () => {
+    render(
+      <MemoryRouter initialEntries={["/providers?route=model.codex.subscription"]}>
+        <ProvidersPage />
+      </MemoryRouter>,
+    );
+
+    const selectedBadge = await screen.findByText("Selected route");
+    const selectedCard = selectedBadge.closest(".provider-card");
+    expect(selectedCard).toBeInstanceOf(HTMLElement);
+    expect(selectedCard).toHaveAttribute("aria-current", "true");
+    expect(within(selectedCard as HTMLElement).getByText("model.codex.subscription")).toBeInTheDocument();
   });
 });

@@ -1597,7 +1597,7 @@ pre {
   border-bottom: 1px solid #edf0ed;
   display: grid;
   gap: 12px;
-  grid-template-columns: 38px minmax(160px, 1.4fr) minmax(190px, 1fr) auto minmax(125px, 0.7fr) 36px;
+  grid-template-columns: 38px minmax(160px, 1.4fr) minmax(190px, 1fr) auto minmax(125px, 0.7fr) auto;
   min-height: 72px;
   padding: 10px 1px;
 }
@@ -1726,6 +1726,13 @@ pre {
 
 .activity-facts svg {
   color: var(--muted);
+}
+
+.activity-actions {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
 }
 
 .provider-summary {
@@ -1918,6 +1925,11 @@ pre {
 
 .provider-card.cli-agent {
   border-color: #e4cfae;
+}
+
+.provider-card.selected {
+  border-color: #bba7e3;
+  box-shadow: 0 0 0 2px var(--violet-soft), var(--shadow-sm);
 }
 
 .provider-card-header {
@@ -3596,7 +3608,7 @@ pre {
   }
 
   .activity-row {
-    grid-template-columns: 36px minmax(0, 1fr) auto 36px;
+    grid-template-columns: 36px minmax(0, 1fr) auto auto;
   }
 
   .activity-facts {

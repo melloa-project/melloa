@@ -103,6 +103,7 @@ describe("ActivityPage", () => {
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/memory" element={<MemoryLocation />} />
           <Route path="/conversation/:threadId" element={<ConversationLocation />} />
+          <Route path="/providers" element={<ProviderLocation />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -126,6 +127,22 @@ describe("ActivityPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: `Open turn inspection for ${externalEntry.model_id}` }));
     expect(screen.getByText(`conversation-search=?turn=${externalEntry.turn_id}`)).toBeInTheDocument();
+  });
+
+  it("opens the exact provider route contract from a model run", async () => {
+    render(
+      <MemoryRouter initialEntries={["/activity"]}>
+        <Routes>
+          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/providers" element={<ProviderLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Open route contract for ${externalEntry.route_id}` }));
+
+    expect(screen.getByText(`providers-search=?route=${encodeURIComponent(externalEntry.route_id)}`)).toBeInTheDocument();
   });
 
   it("opens disclosed memories from external activity evidence", async () => {
@@ -190,4 +207,9 @@ function MemoryLocation() {
 function ConversationLocation() {
   const location = useLocation();
   return <div>{`conversation-search=${location.search}`}</div>;
+}
+
+function ProviderLocation() {
+  const location = useLocation();
+  return <div>{`providers-search=${location.search}`}</div>;
 }
