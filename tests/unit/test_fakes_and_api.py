@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from io import BytesIO
+from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +19,11 @@ from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.core import create_app
 from melloa.domain.classification import Sensitivity
+from melloa.domain.exports import (
+    CanonicalExportManifest,
+    ExportFileEntry,
+    ExportFileKind,
+)
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.models import ModelRouteRequest, ProcessingLocation
 from tests.conftest import record_id
@@ -421,6 +429,135 @@ def test_owner_session_denials_append_content_free_security_audits(fixed_time) -
     assert all("synthetic-bootstrap-token-value-0001" not in document for document in documents)
     assert all("session-token" not in document for document in documents)
     assert all("csrf-token" not in document for document in documents)
+
+
+def test_owner_export_preview_appends_content_free_generation_audit(fixed_time) -> None:
+    class StubExportService:
+        def write_validated_zip(self, archive_path, *, schema_root, principal):
+            assert schema_root == Path("schemas")
+            assert principal.owner_id == record_id("owner", 1)
+            with ZipFile(archive_path, "x") as archive:
+                archive.writestr("manifest.json", "{}\n")
+            return CanonicalExportManifest(
+                export_id=record_id("export", 1),
+                owner_id=record_id("owner", 1),
+                intelligence_id=record_id("intelligence", 1),
+                created_at=fixed_time,
+                source_runtime="melloa-core/0.1.0-export-preview",
+                encrypted=False,
+                includes_sql_snapshot=False,
+                includes_blobs=False,
+                files=(
+                    ExportFileEntry(
+                        path="conversations/messages.jsonl",
+                        kind=ExportFileKind.DATA,
+                        record_type="export.conversation-message",
+                        schema_path="schemas/conversation/message-v1.json",
+                        content_hash="sha256:" + "a" * 64,
+                        size_bytes=12,
+                        record_count=2,
+                    ),
+                    ExportFileEntry(
+                        path="schemas/conversation/message-v1.json",
+                        kind=ExportFileKind.SCHEMA,
+                        content_hash="sha256:" + "b" * 64,
+                        size_bytes=24,
+                    ),
+                ),
+                limitations=(
+                    "export.preview-unencrypted",
+                    "export.sql-snapshot-not-included",
+                    "export.blobs-not-included",
+                ),
+            )
+
+    ids = iter((record_id("event", 1), record_id("audit", 1)))
+    tokens = iter(("session-token", "csrf-token"))
+    audit_store = InMemoryEventAuditStore()
+    sessions = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(tokens),
+    )
+    client = TestClient(
+        create_app(
+            guardian_reader(fixed_time),
+            sessions,
+            owner_id=record_id("owner", 1),
+            event_audit_store=audit_store,
+            security_event_clock=lambda: fixed_time,
+            security_event_id_factory=lambda prefix: next(ids),
+            export_service=StubExportService(),
+            export_schema_root=Path("schemas"),
+        ),
+        base_url="https://testserver",
+    )
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    assert login.status_code == 200
+
+    archive_response = client.post(
+        "/api/v1/exports/preview",
+        headers={"X-Melloa-CSRF": login.json()["csrf_token"]},
+    )
+
+    assert archive_response.status_code == 200
+    assert archive_response.headers["content-type"] == "application/zip"
+    with ZipFile(BytesIO(archive_response.content)) as archive:
+        assert archive.testzip() is None
+    assert len(audit_store.events) == 1
+    assert len(audit_store.audit_records) == 1
+    event = audit_store.events[0]
+    assert event.event_type == "export.owner-preview-generated.v1"
+    assert event.subject_ids == (record_id("owner", 1), record_id("export", 1))
+    assert event.source.capability_id == "export.owner-preview"
+    assert event.producer.component == "export.private-core"
+    assert event.payload == {
+        "export_id": record_id("export", 1),
+        "format_id": "melloa.canonical-owner-export",
+        "format_version": "1.0.0",
+        "encrypted": False,
+        "includes_sql_snapshot": False,
+        "includes_blobs": False,
+        "file_count": 2,
+        "data_file_count": 1,
+        "exported_record_count": 2,
+        "limitation_ids": (
+            "export.preview-unencrypted",
+            "export.sql-snapshot-not-included",
+            "export.blobs-not-included",
+        ),
+        "limitation_count": 3,
+        "reason_code": "export.owner-preview.generated",
+        "result": "generated",
+    }
+    audit = audit_store.audit_records[0].content
+    assert audit.actor_id == record_id("owner", 1)
+    assert audit.action == "export.owner-preview.generate"
+    assert audit.object_ids == (record_id("event", 1), record_id("export", 1))
+    assert audit.metadata == {
+        "event_id": record_id("event", 1),
+        "export_id": record_id("export", 1),
+        "format_id": "melloa.canonical-owner-export",
+        "reason_code": "export.owner-preview.generated",
+        "result": "generated",
+        "file_count": 2,
+        "data_file_count": 1,
+        "exported_record_count": 2,
+        "limitation_count": 3,
+    }
+    documents = tuple(event.model_dump_json() for event in audit_store.events) + tuple(
+        record.model_dump_json() for record in audit_store.audit_records
+    )
+    assert all("synthetic-bootstrap-token-value-0001" not in document for document in documents)
+    assert all("session-token" not in document for document in documents)
+    assert all("csrf-token" not in document for document in documents)
+    assert all("owner-export.zip" not in document for document in documents)
+    assert all("manifest.json" not in document for document in documents)
+    assert all(("sha256:" + "a" * 64) not in document for document in documents)
 
 
 def test_owner_lists_sessions_and_recently_revokes_others(fixed_time) -> None:

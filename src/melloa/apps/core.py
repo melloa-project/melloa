@@ -82,6 +82,7 @@ from melloa.domain.conversation import (
 )
 from melloa.domain.delivery import DeliveryWorkState, DeliveryWorkStatus
 from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
+from melloa.domain.exports import CanonicalExportManifest
 from melloa.domain.inspection import OwnerModelActivityReport, OwnerTimelineReport
 from melloa.domain.memory import (
     AssertionContentDeletionResult,
@@ -462,6 +463,83 @@ def _append_auth_security_audit(
             "event_id": event_id,
             "reason_code": payload["reason_code"],
             "result": payload["result"],
+        },
+    )
+    event_audit_store.append_event(event, audit)
+
+
+def _append_owner_export_preview_audit(
+    event_audit_store: EventAuditStore,
+    *,
+    owner_id: RecordId,
+    principal: AuthenticatedOwner,
+    manifest: CanonicalExportManifest,
+    occurred_at: datetime,
+    id_factory: Callable[[str], str],
+) -> None:
+    data_file_count = sum(1 for entry in manifest.files if entry.record_count is not None)
+    exported_record_count = sum(
+        entry.record_count for entry in manifest.files if entry.record_count is not None
+    )
+    payload: JsonObject = {
+        "export_id": manifest.export_id,
+        "format_id": manifest.format_id,
+        "format_version": manifest.format_version,
+        "encrypted": manifest.encrypted,
+        "includes_sql_snapshot": manifest.includes_sql_snapshot,
+        "includes_blobs": manifest.includes_blobs,
+        "file_count": len(manifest.files),
+        "data_file_count": data_file_count,
+        "exported_record_count": exported_record_count,
+        "limitation_ids": tuple(manifest.limitations),
+        "limitation_count": len(manifest.limitations),
+        "reason_code": "export.owner-preview.generated",
+        "result": "generated",
+    }
+    event_id = id_factory("event")
+    audit_id = id_factory("audit")
+    event = EventEnvelope(
+        event_id=event_id,
+        event_type="export.owner-preview-generated.v1",
+        schema_version="1.0.0",
+        occurred_at=occurred_at,
+        recorded_at=occurred_at,
+        subject_ids=(owner_id, manifest.export_id),
+        source=EventSource(
+            capability_id="export.owner-preview",
+            execution_id=event_id,
+        ),
+        producer=EventProducer(
+            component="export.private-core",
+            version="0.1.0",
+        ),
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        sensitivity=Sensitivity.INTERNAL,
+        trust=TrustLabel.TRUSTED_SYSTEM,
+        retention_policy="retention.audit-ledger",
+        correlation_id=event_id,
+        payload=payload,
+        integrity=EventIntegrity(
+            payload_hash=sha256_digest(canonical_json_bytes(payload))
+        ),
+    )
+    audit = AuditContent(
+        audit_id=audit_id,
+        event_type="audit.event-appended.v1",
+        occurred_at=occurred_at,
+        actor_id=principal.owner_id,
+        action="export.owner-preview.generate",
+        object_ids=(event_id, manifest.export_id),
+        metadata={
+            "event_id": event_id,
+            "export_id": manifest.export_id,
+            "format_id": manifest.format_id,
+            "reason_code": payload["reason_code"],
+            "result": payload["result"],
+            "file_count": payload["file_count"],
+            "data_file_count": data_file_count,
+            "exported_record_count": exported_record_count,
+            "limitation_count": payload["limitation_count"],
         },
     )
     event_audit_store.append_event(event, audit)
@@ -1666,6 +1744,19 @@ def create_app(
                 schema_root=schema_root,
                 principal=principal,
             )
+            event_audit_store: EventAuditStore | None = (
+                request.app.state.event_audit_store
+            )
+            owner_id: RecordId | None = request.app.state.owner_id
+            if event_audit_store is not None and owner_id is not None:
+                _append_owner_export_preview_audit(
+                    event_audit_store,
+                    owner_id=owner_id,
+                    principal=principal,
+                    manifest=manifest,
+                    occurred_at=request.app.state.security_event_clock(),
+                    id_factory=request.app.state.security_event_id_factory,
+                )
             return FileResponse(
                 path=archive_path,
                 media_type="application/zip",

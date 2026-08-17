@@ -436,6 +436,33 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         assert csrf not in archive_text
     assert export_workspaces
     assert all(not workspace.exists() for workspace in export_workspaces)
+    export_audit_event = runtime.event_audit_store.events[-1]
+    assert export_audit_event.event_type == "export.owner-preview-generated.v1"
+    assert export_audit_event.payload["export_id"].startswith("export_")
+    assert export_audit_event.payload["format_id"] == "melloa.canonical-owner-export"
+    assert export_audit_event.payload["result"] == "generated"
+    assert export_audit_event.payload["encrypted"] is False
+    assert export_audit_event.payload["includes_sql_snapshot"] is False
+    assert export_audit_event.payload["includes_blobs"] is False
+    assert export_audit_event.payload["file_count"] > 0
+    assert export_audit_event.payload["data_file_count"] > 0
+    assert export_audit_event.payload["exported_record_count"] > 0
+    export_audit = runtime.event_audit_store.audit_records[-1].content
+    assert export_audit.action == "export.owner-preview.generate"
+    assert export_audit.actor_id == runtime.owner_id
+    assert export_audit.metadata["export_id"] == export_audit_event.payload["export_id"]
+    export_audit_documents = (
+        export_audit_event.model_dump_json(),
+        runtime.event_audit_store.audit_records[-1].model_dump_json(),
+    )
+    assert all(_BOOTSTRAP_TOKEN not in document for document in export_audit_documents)
+    assert all(csrf not in document for document in export_audit_documents)
+    assert all(
+        "Please use my reading preference." not in document
+        for document in export_audit_documents
+    )
+    assert all("No external model" not in document for document in export_audit_documents)
+    assert all("manifest.json" not in document for document in export_audit_documents)
 
     correction = client.post(
         f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",
@@ -464,7 +491,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     }
     audit_after_deletion = inventory_after_deletion["retention.audit-ledger"]
     assert audit_after_deletion["coverage"] == "complete"
-    assert audit_after_deletion["retained_objects"] == 4
+    assert audit_after_deletion["retained_objects"] == 5
     assert audit_after_deletion["retained_bytes"] > 0
     assert audit_after_deletion["oldest_retained_at"] is not None
     memory_after_deletion = inventory_after_deletion["retention.owner-memory"]
