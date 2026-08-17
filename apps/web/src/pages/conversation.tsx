@@ -35,6 +35,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import type {
   ConversationMessage,
+  DeliveryWorkStatus,
   ConversationProcessingStatus,
   ConversationThread,
   ConversationTurn,
@@ -43,6 +44,7 @@ import type {
 import { errorMessage, useMelloa } from "../app";
 import { Badge, Button, EmptyState, ErrorState, LoadingState, Modal } from "../components/ui";
 import {
+  asObject,
   asObjectArray,
   formatDurationMs,
   formatGbp,
@@ -65,6 +67,7 @@ export function ConversationPage() {
   const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([]);
   const [processing, setProcessing] = useState<readonly ConversationProcessingStatus[]>([]);
+  const [deliveries, setDeliveries] = useState<readonly DeliveryWorkStatus[]>([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export function ConversationPage() {
   const [sending, setSending] = useState(false);
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [selectedDeliveryWorkId, setSelectedDeliveryWorkId] = useState<string | null>(null);
   const [inspection, setInspection] = useState<ConversationTurnInspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
   const listEnd = useRef<HTMLDivElement | null>(null);
@@ -84,6 +88,18 @@ export function ConversationPage() {
     () => new Map(processing.map((status) => [status.message_id, status])),
     [processing],
   );
+  const deliveriesByMessage = useMemo(() => {
+    const result = new Map<string, DeliveryWorkStatus[]>();
+    for (const delivery of deliveries) {
+      const group = result.get(delivery.message_id);
+      if (group === undefined) {
+        result.set(delivery.message_id, [delivery]);
+      } else {
+        group.push(delivery);
+      }
+    }
+    return result;
+  }, [deliveries]);
   const turnByOutputMessage = useMemo(() => {
     const result = new Map<string, ConversationTurn>();
     for (const turn of turns) {
@@ -96,7 +112,11 @@ export function ConversationPage() {
   const selectedProcessing = selectedMessageId === null
     ? null
     : processingByMessage.get(selectedMessageId) ?? null;
-  const pending = processing.some((status) => !TERMINAL_PROCESSING_STATES.has(status.state));
+  const selectedDelivery = selectedDeliveryWorkId === null
+    ? null
+    : deliveries.find((delivery) => delivery.work_id === selectedDeliveryWorkId) ?? null;
+  const pending = processing.some((status) => !TERMINAL_PROCESSING_STATES.has(status.state))
+    || deliveries.some((status) => !TERMINAL_PROCESSING_STATES.has(status.state));
 
   const loadThreads = useCallback(async () => {
     setLoadingThreads(true);
@@ -118,14 +138,16 @@ export function ConversationPage() {
       setLoadingConversation(true);
     }
     try {
-      const [nextMessages, nextTurns, nextProcessing] = await Promise.all([
+      const [nextMessages, nextTurns, nextProcessing, nextDeliveries] = await Promise.all([
         api.listMessages(selectedId),
         api.listTurns(selectedId),
         api.listProcessing(selectedId),
+        api.listDeliveries(selectedId),
       ]);
       setMessages(nextMessages);
       setTurns(nextTurns);
       setProcessing(nextProcessing);
+      setDeliveries(nextDeliveries);
       setError(null);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -153,6 +175,7 @@ export function ConversationPage() {
     }
     setSelectedTurnId(null);
     setSelectedMessageId(null);
+    setSelectedDeliveryWorkId(null);
     setInspection(null);
     void loadConversation(threadId);
   }, [loadConversation, loadingThreads, navigate, threadId, threads]);
@@ -273,18 +296,44 @@ export function ConversationPage() {
     }
   }
 
+  async function resumeDelivery(status: DeliveryWorkStatus) {
+    if (threadId === undefined) {
+      return;
+    }
+    if (!canMutate) {
+      notify("Unlock owner changes before resuming delivery work.", "error");
+      return;
+    }
+    try {
+      const delivery = await api.resumeDelivery(threadId, status.work_id);
+      setSelectedDeliveryWorkId(delivery.work_id);
+      await loadConversation(threadId, true);
+      notify("A new bounded delivery retry budget was added.", "success");
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    }
+  }
+
   function inspectMessage(message: ConversationMessage) {
     const turn = turnByOutputMessage.get(message.message_id);
     if (turn !== undefined) {
       setSelectedTurnId(turn.turn_id);
       setSelectedMessageId(null);
+      setSelectedDeliveryWorkId(null);
       return;
     }
     setSelectedTurnId(null);
     setSelectedMessageId(message.message_id);
+    setSelectedDeliveryWorkId(null);
   }
 
-  const inspectorOpen = selectedTurnId !== null || selectedMessageId !== null;
+  function inspectDelivery(delivery: DeliveryWorkStatus) {
+    setSelectedTurnId(null);
+    setSelectedMessageId(null);
+    setSelectedDeliveryWorkId(delivery.work_id);
+  }
+
+  const inspectorOpen = selectedTurnId !== null || selectedMessageId !== null || selectedDeliveryWorkId !== null;
 
   return (
     <div className={`conversation-page ${inspectorOpen ? "inspector-open" : ""}`}>
@@ -354,6 +403,7 @@ export function ConversationPage() {
                   const isOwner = message.author_principal_id === principal.owner_id;
                   const status = processingByMessage.get(message.message_id);
                   const turn = turnByOutputMessage.get(message.message_id);
+                  const messageDeliveries = deliveriesByMessage.get(message.message_id) ?? [];
                   return (
                     <article className={`message-row ${isOwner ? "owner" : "melli"}`} key={message.message_id}>
                       <div className="message-avatar">
@@ -372,6 +422,13 @@ export function ConversationPage() {
                       </button>
                       {status === undefined ? null : (
                         <ProcessingPill status={status} onResume={() => void resumeMessage(status)} />
+                      )}
+                      {messageDeliveries.length === 0 ? null : (
+                        <div className="delivery-pill-list" aria-label={`Deliveries for message ${message.message_id}`}>
+                          {messageDeliveries.map((delivery) => (
+                            <DeliveryPill delivery={delivery} key={delivery.work_id} onInspect={() => inspectDelivery(delivery)} />
+                          ))}
+                        </div>
                       )}
                     </article>
                   );
@@ -411,8 +468,8 @@ export function ConversationPage() {
 
       <aside className={`inspector ${inspectorOpen ? "visible" : ""}`} aria-label="Turn inspector">
         <div className="inspector-header">
-          <div><p className="eyebrow">Inspectable record</p><h2>{selectedTurnId === null ? "Processing" : "Turn details"}</h2></div>
-          <Button onClick={() => { setSelectedTurnId(null); setSelectedMessageId(null); }} size="icon" tone="ghost"><PanelRightClose size={18} /><span className="sr-only">Close inspector</span></Button>
+          <div><p className="eyebrow">Inspectable record</p><h2>{selectedDeliveryWorkId !== null ? "Delivery" : selectedTurnId === null ? "Processing" : "Turn details"}</h2></div>
+          <Button onClick={() => { setSelectedTurnId(null); setSelectedMessageId(null); setSelectedDeliveryWorkId(null); }} size="icon" tone="ghost"><PanelRightClose size={18} /><span className="sr-only">Close inspector</span></Button>
         </div>
         <div className="inspector-body">
           {inspectionLoading ? <LoadingState label="Loading turn evidence" /> : null}
@@ -425,7 +482,10 @@ export function ConversationPage() {
           {!inspectionLoading && selectedProcessing !== null ? (
             <ProcessingInspector status={selectedProcessing} onResume={() => void resumeMessage(selectedProcessing)} />
           ) : null}
-          {!inspectionLoading && inspection === null && selectedProcessing === null ? (
+          {!inspectionLoading && selectedDelivery !== null ? (
+            <DeliveryInspector delivery={selectedDelivery} onResume={() => void resumeDelivery(selectedDelivery)} />
+          ) : null}
+          {!inspectionLoading && inspection === null && selectedProcessing === null && selectedDelivery === null ? (
             <div className="inspector-placeholder"><Info size={20} /><p>Select a message to inspect its durable record.</p></div>
           ) : null}
         </div>
@@ -448,7 +508,7 @@ export function ConversationPage() {
         </form>
       </Modal>
 
-      {inspectorOpen ? <button aria-label="Close inspector" className="inspector-scrim" onClick={() => { setSelectedTurnId(null); setSelectedMessageId(null); }} type="button" /> : null}
+      {inspectorOpen ? <button aria-label="Close inspector" className="inspector-scrim" onClick={() => { setSelectedTurnId(null); setSelectedMessageId(null); setSelectedDeliveryWorkId(null); }} type="button" /> : null}
     </div>
   );
 }
@@ -471,6 +531,29 @@ function ProcessingPill({
     );
   }
   return <span className="processing-pill"><LoaderCircle className="spin" size={13} /> {titleCase(status.state)}</span>;
+}
+
+function DeliveryPill({
+  delivery,
+  onInspect,
+}: {
+  readonly delivery: DeliveryWorkStatus;
+  readonly onInspect: () => void;
+}) {
+  const completed = delivery.state === "completed";
+  const dead = delivery.state === "dead";
+  const label = completed ? "Delivered" : dead ? "Delivery failed" : titleCase(delivery.state);
+  const Icon = completed ? ShieldCheck : dead ? CircleAlert : LoaderCircle;
+  return (
+    <button
+      className={`delivery-pill ${completed ? "completed" : dead ? "failed" : "pending"}`}
+      onClick={onInspect}
+      type="button"
+    >
+      <Icon className={completed || dead ? undefined : "spin"} size={13} />
+      {label} · inspect
+    </button>
+  );
 }
 
 export function TurnInspector({
@@ -556,6 +639,73 @@ export function TurnInspector({
       </section>
     </div>
   );
+}
+
+function DeliveryInspector({
+  delivery,
+  onResume,
+}: {
+  readonly delivery: DeliveryWorkStatus;
+  readonly onResume: () => void;
+}) {
+  const completed = delivery.state === "completed";
+  const dead = delivery.state === "dead";
+  const Icon = completed ? ShieldCheck : dead ? CircleAlert : LoaderCircle;
+  return (
+    <div className="inspector-sections">
+      <section className={`processing-summary ${completed ? "completed" : ""} ${dead ? "failed" : ""}`}>
+        <Icon className={completed || dead ? undefined : "spin"} size={20} />
+        <div><strong>{titleCase(delivery.state)}</strong><span>{delivery.attempt_count} of {delivery.max_attempts} attempts used</span></div>
+      </section>
+      <section className="inspector-section">
+        <h3>Exact authority</h3>
+        <dl className="detail-list">
+          <div><dt>Work</dt><dd>{shortId(delivery.work_id)}</dd></div>
+          <div><dt>Message</dt><dd>{shortId(delivery.message_id)}</dd></div>
+          <div><dt>Adapter</dt><dd>{delivery.client_adapter}</dd></div>
+          <div><dt>Destination</dt><dd>{delivery.destination_ref}</dd></div>
+          <div><dt>Policy decision</dt><dd>{shortId(delivery.current_policy_decision_id)}</dd></div>
+          <div><dt>Action hash</dt><dd>{shortId(delivery.action_hash)}</dd></div>
+          <div><dt>Available</dt><dd>{formatInstant(delivery.available_at)}</dd></div>
+          <div><dt>Completed</dt><dd>{formatInstant(delivery.completed_at)}</dd></div>
+        </dl>
+        {dead ? <Button onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume delivery with bounded retries</Button> : null}
+      </section>
+      <section className="inspector-section">
+        <div className="inspector-section-title"><h3>Attempts</h3><Badge>{delivery.attempts.length}</Badge></div>
+        {delivery.attempts.length === 0 ? <p className="muted-copy">No delivery attempt has started yet.</p> : delivery.attempts.map((attempt) => (
+          <div className="attempt-row" key={attempt.attempt_id}>
+            {attempt.outcome === "succeeded" ? <ShieldCheck size={15} /> : <Clock3 size={15} />}
+            <span>
+              <strong>Attempt {attempt.attempt} · {titleCase(attempt.outcome)}</strong>
+              <small>{attempt.error_code === null || attempt.error_code === undefined ? deliveryAttemptReceiptSummary(attempt.adapter_receipt, attempt.execution_receipt) : titleCase(attempt.error_code)}</small>
+            </span>
+          </div>
+        ))}
+      </section>
+      <section className="inspector-section">
+        <h3>Resumptions</h3>
+        {delivery.resumptions.length === 0 ? <p className="muted-copy">No owner resumption has been recorded.</p> : delivery.resumptions.map((resumption) => (
+          <div className="attempt-row" key={resumption.resumption_id}>
+            <RotateCcw size={15} />
+            <span><strong>{shortId(resumption.resumption_id)}</strong><small>{resumption.added_attempts} attempts added · {formatInstant(resumption.requested_at)}</small></span>
+          </div>
+        ))}
+      </section>
+      <details className="raw-details"><summary>Raw redacted delivery status</summary><pre>{safeJson(delivery)}</pre></details>
+    </div>
+  );
+}
+
+function deliveryAttemptReceiptSummary(adapterReceipt: unknown, executionReceipt: unknown): string {
+  const adapter = asObject(adapterReceipt);
+  const execution = asObject(executionReceipt);
+  if (adapter === null && execution === null) {
+    return "No receipt";
+  }
+  const adapterId = adapter === null ? "no adapter receipt" : `adapter ${shortId(readString(adapter, "delivery_id"))}`;
+  const executionId = execution === null ? "no execution receipt" : `execution ${shortId(readString(execution, "action_id"))}`;
+  return `${adapterId} · ${executionId}`;
 }
 
 function ProcessingInspector({

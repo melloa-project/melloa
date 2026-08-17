@@ -1133,6 +1133,51 @@ pre {
   min-height: 25px;
 }
 
+.delivery-pill-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: 2;
+  justify-self: start;
+  margin-top: -15px;
+}
+
+.delivery-pill {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.69rem;
+  gap: 7px;
+  min-height: 31px;
+  padding: 7px 9px;
+}
+
+.delivery-pill.completed {
+  background: var(--accent-soft);
+  border-color: #cce5d8;
+  color: var(--accent-strong);
+}
+
+.delivery-pill.pending {
+  background: var(--warning-soft);
+  border-color: #edd6b8;
+  color: var(--warning);
+}
+
+.delivery-pill.failed {
+  background: var(--danger-soft);
+  border-color: #edcaca;
+  color: var(--danger);
+}
+
+.delivery-pill:hover {
+  box-shadow: 0 1px 6px rgb(23 32 29 / 10%);
+}
+
 .composer {
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -1389,6 +1434,12 @@ pre {
   background: var(--danger-soft);
   border-color: #edcaca;
   color: var(--danger);
+}
+
+.processing-summary.completed {
+  background: var(--accent-soft);
+  border-color: #cce5d8;
+  color: var(--accent-strong);
 }
 
 .processing-summary > div {

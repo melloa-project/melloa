@@ -9,6 +9,7 @@ import type {
   ConversationThread,
   ConversationTurn,
   ConversationTurnInspection,
+  DeliveryWorkStatus,
 } from "../src/api";
 import { ConversationPage } from "../src/pages/conversation";
 
@@ -17,8 +18,10 @@ const mocks = vi.hoisted(() => ({
   listMessages: vi.fn(),
   listTurns: vi.fn(),
   listProcessing: vi.fn(),
+  listDeliveries: vi.fn(),
   inspectTurn: vi.fn(),
   postMessage: vi.fn(),
+  resumeDelivery: vi.fn(),
   notify: vi.fn(),
 }));
 
@@ -29,8 +32,10 @@ vi.mock("../src/app", () => {
       listMessages: mocks.listMessages,
       listTurns: mocks.listTurns,
       listProcessing: mocks.listProcessing,
+      listDeliveries: mocks.listDeliveries,
       inspectTurn: mocks.inspectTurn,
       postMessage: mocks.postMessage,
+      resumeDelivery: mocks.resumeDelivery,
     },
     principal: { owner_id: "owner_01" },
     canMutate: true,
@@ -130,6 +135,81 @@ const inspection: ConversationTurnInspection = {
   output_message: outputMessage,
 };
 
+const completedDelivery: DeliveryWorkStatus = {
+  work_id: "work_delivery_01",
+  thread_id: thread.thread_id,
+  message_id: outputMessage.message_id,
+  requested_by: "melli_01",
+  client_adapter: "client.telegram.synthetic",
+  destination_ref: "telegram:pairing:pairing_000000000000000000000001",
+  action_hash: "sha256:" + "a".repeat(64),
+  current_policy_decision_id: "decision_0000000000000000000000000001",
+  state: "completed",
+  attempt_count: 1,
+  max_attempts: 3,
+  available_at: "2026-08-16T12:00:02Z",
+  completed_at: "2026-08-16T12:00:03Z",
+  attempts: [
+    {
+      attempt_id: "deliveryattempt_000000000000000000000001",
+      work_id: "work_delivery_01",
+      message_id: outputMessage.message_id,
+      attempt: 1,
+      authorization_request_id: "authorization_000000000000000000000001",
+      policy_decision_id: "decision_0000000000000000000000000001",
+      action_hash: "sha256:" + "a".repeat(64),
+      outcome: "succeeded",
+      started_at: "2026-08-16T12:00:02Z",
+      completed_at: "2026-08-16T12:00:03Z",
+      adapter_receipt: {
+        delivery_id: "delivery_000000000000000000000000000001",
+        message_id: outputMessage.message_id,
+        client_adapter: "client.telegram.synthetic",
+        destination_ref: "telegram:pairing:pairing_000000000000000000000001",
+        attempt: 1,
+        state: "delivered",
+        attempted_at: "2026-08-16T12:00:03Z",
+      },
+      execution_receipt: {
+        action_id: "action_000000000000000000000000000001",
+        decision_id: "decision_0000000000000000000000000001",
+        action_hash: "sha256:" + "a".repeat(64),
+        capability_id: "client.telegram.synthetic",
+        operation: "messages.send",
+        delivery_id: "delivery_000000000000000000000000000001",
+        executed_at: "2026-08-16T12:00:03Z",
+      },
+    },
+  ],
+  resumptions: [],
+};
+
+const deadDelivery: DeliveryWorkStatus = {
+  ...completedDelivery,
+  work_id: "work_delivery_dead_01",
+  state: "dead",
+  attempt_count: 3,
+  completed_at: null,
+  last_error_code: "telegram.delivery.outcome_unknown",
+  attempts: [
+    {
+      attempt_id: "deliveryattempt_000000000000000000000002",
+      work_id: "work_delivery_dead_01",
+      message_id: outputMessage.message_id,
+      attempt: 3,
+      authorization_request_id: "authorization_000000000000000000000001",
+      policy_decision_id: "decision_0000000000000000000000000001",
+      action_hash: "sha256:" + "a".repeat(64),
+      outcome: "dead",
+      error_code: "telegram.delivery.outcome_unknown",
+      started_at: "2026-08-16T12:00:02Z",
+      completed_at: "2026-08-16T12:00:03Z",
+      adapter_receipt: null,
+      execution_receipt: null,
+    },
+  ],
+};
+
 describe("ConversationPage", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) {
@@ -139,9 +219,11 @@ describe("ConversationPage", () => {
     mocks.listMessages.mockResolvedValue([ownerMessage, outputMessage]);
     mocks.listTurns.mockResolvedValue([turn]);
     mocks.listProcessing.mockResolvedValue([processing]);
+    mocks.listDeliveries.mockResolvedValue([]);
     mocks.inspectTurn.mockResolvedValue(inspection);
     const reply: ConversationReply = { inbound_message: ownerMessage, output_message: outputMessage, turn, processing, duplicate: false };
     mocks.postMessage.mockResolvedValue(reply);
+    mocks.resumeDelivery.mockResolvedValue({ ...deadDelivery, state: "queued", attempt_count: 3 });
   });
 
   it("supports send and exposes route, cost, disclosure, and provenance", async () => {
@@ -204,6 +286,30 @@ describe("ConversationPage", () => {
     expect(await screen.findByText("codex-subscription-model")).toBeInTheDocument();
     expect(screen.getAllByText("Unreported")).toHaveLength(2);
     expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
+  });
+
+  it("shows outbound delivery authority and resumes dead delivery work", async () => {
+    mocks.listDeliveries.mockResolvedValue([completedDelivery, deadDelivery]);
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Delivered · inspect")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Delivered · inspect"));
+
+    expect(await screen.findByRole("heading", { name: "Delivery" })).toBeInTheDocument();
+    expect(screen.getByText("client.telegram.synthetic")).toBeInTheDocument();
+    expect(screen.getByText("telegram:pairing:pairing_000000000000000000000001")).toBeInTheDocument();
+    expect(screen.getByText(/adapter delivery_.*execution action_/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Delivery failed · inspect"));
+    expect(await screen.findByText("Telegram Delivery Outcome Unknown")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Resume delivery with bounded retries/i }));
+
+    await waitFor(() => expect(mocks.resumeDelivery).toHaveBeenCalledWith(thread.thread_id, deadDelivery.work_id));
+    expect(mocks.notify).toHaveBeenCalledWith("A new bounded delivery retry budget was added.", "success");
   });
 });
 
