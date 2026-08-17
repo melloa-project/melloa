@@ -5,6 +5,7 @@ import {
   CircleAlert,
   Clock3,
   Coins,
+  Copy,
   Cpu,
   HardDrive,
   KeyRound,
@@ -19,11 +20,11 @@ import { useSearchParams } from "react-router-dom";
 
 import type { ModelRouteStatus, OwnerModelRouteReport } from "../api";
 import { errorMessage, useMelloa } from "../app";
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, SectionHeader } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, IconButton, LoadingState, SectionHeader } from "../components/ui";
 import { formatDurationMs, formatGbp, formatInstant, titleCase } from "../lib/format";
 
 export function ProvidersPage() {
-  const { api } = useMelloa();
+  const { api, notify } = useMelloa();
   const [searchParams] = useSearchParams();
   const [report, setReport] = useState<OwnerModelRouteReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +71,18 @@ export function ProvidersPage() {
   const activeRoutes = report?.routes.filter((route) => isOwnerUsableRoute(route) && route.health.state === "healthy").length ?? 0;
   const externalRoutes = report?.routes.filter((route) => route.external_disclosure).length ?? 0;
   const eligibility = report === null ? [] : providerEligibility(report.routes);
+
+  async function copyRouteId(routeId: string) {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable.");
+      }
+      await navigator.clipboard.writeText(routeId);
+      notify("Route ID copied.", "success");
+    } catch {
+      notify("Route ID copy failed.", "error");
+    }
+  }
 
   return (
     <div className="standard-page providers-page">
@@ -119,6 +132,7 @@ export function ProvidersPage() {
               {report.routes.map((route) => (
                 <ProviderCard
                   key={route.route_id}
+                  onCopyRouteId={(routeId) => void copyRouteId(routeId)}
                   route={route}
                   selected={route.route_id === selectedRouteId}
                 />
@@ -201,9 +215,11 @@ function isOwnerUsableRoute(route: ModelRouteStatus): boolean {
 }
 
 function ProviderCard({
+  onCopyRouteId,
   route,
   selected,
 }: {
+  readonly onCopyRouteId: (routeId: string) => void;
   readonly route: ModelRouteStatus;
   readonly selected: boolean;
 }) {
@@ -255,7 +271,19 @@ function ProviderCard({
       ) : null}
       <dl className="provider-details">
         <div><dt>Provider</dt><dd>{route.provider_id}</dd></div>
-        <div><dt>Route ID</dt><dd>{route.route_id}</dd></div>
+        <div>
+          <dt>Route ID</dt>
+          <dd className="provider-route-id">
+            <code title={route.route_id}>{route.route_id}</code>
+            <IconButton
+              className="provider-route-copy"
+              icon={Copy}
+              label={`Copy route ID ${route.route_id}`}
+              onClick={() => onCopyRouteId(route.route_id)}
+              tone="ghost"
+            />
+          </dd>
+        </div>
         <div><dt>Processing</dt><dd>{titleCase(route.processing_location)}</dd></div>
         <div><dt>Privacy scope</dt><dd>{formatRouteList(route.allowed_sensitivities)}</dd></div>
         <div><dt>Retention policy</dt><dd>{formatRouteList(route.provider_retention_policies)}</dd></div>

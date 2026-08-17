@@ -5,10 +5,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OwnerModelRouteReport } from "../src/api";
 import { ProvidersPage } from "../src/pages/providers";
 
-const mocks = vi.hoisted(() => ({ modelRoutes: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  modelRoutes: vi.fn(),
+  notify: vi.fn(),
+}));
 
 vi.mock("../src/app", () => {
-  const context = { api: { modelRoutes: mocks.modelRoutes } };
+  const context = {
+    api: { modelRoutes: mocks.modelRoutes },
+    notify: mocks.notify,
+  };
   return {
     errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
     useMelloa: () => context,
@@ -83,7 +89,14 @@ const report: OwnerModelRouteReport = {
 describe("ProvidersPage", () => {
   beforeEach(() => {
     mocks.modelRoutes.mockReset();
+    mocks.notify.mockReset();
     mocks.modelRoutes.mockResolvedValue(report);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("shows real route metadata and visibly labels synthetic fallback", async () => {
@@ -136,6 +149,40 @@ describe("ProvidersPage", () => {
     expect(selectedCard).toBeInstanceOf(HTMLElement);
     expect(selectedCard).toHaveAttribute("aria-current", "true");
     expect(within(selectedCard as HTMLElement).getByText("model.codex.subscription")).toBeInTheDocument();
+  });
+
+  it("copies exact provider route ids from route cards", async () => {
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findAllByText("Local Qwen through Ollama");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy route ID model.codex.subscription" }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("model.codex.subscription"));
+    expect(mocks.notify).toHaveBeenCalledWith("Route ID copied.", "success");
+  });
+
+  it("reports when provider route id copy is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+
+    render(
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findAllByText("Local Qwen through Ollama");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy route ID model.local.qwen" }));
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Route ID copy failed.", "error"));
   });
 
   it("keeps the latest provider refresh when an older request resolves last", async () => {

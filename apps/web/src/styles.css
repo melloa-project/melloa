@@ -2328,6 +2328,31 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.provider-details .provider-route-id {
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.provider-route-id code {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  flex: 1 1 auto;
+  font-size: 0.64rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 3px 5px;
+  text-overflow: ellipsis;
+}
+
+.provider-route-copy.button-icon {
+  flex: 0 0 auto;
+  height: 25px;
+  width: 25px;
+}
+
 .provider-health-note {
   align-items: center;
   background: var(--accent-faint);
