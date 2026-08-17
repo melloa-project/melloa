@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Bot,
   Coins,
+  Copy,
   Eye,
   FileSearch,
   Fingerprint,
@@ -36,7 +37,7 @@ const disclosureFilters: ReadonlyArray<{ readonly value: DisclosureFilter; reado
 ];
 
 export function ActivityPage() {
-  const { api } = useMelloa();
+  const { api, notify } = useMelloa();
   const navigate = useNavigate();
   const [windowOption, setWindowOption] = useState<WindowOption>("7d");
   const [disclosureFilter, setDisclosureFilter] = useState<DisclosureFilter>("all");
@@ -94,6 +95,18 @@ export function ActivityPage() {
     }
     return entries.length;
   };
+
+  async function copyResultId(resultId: string) {
+    try {
+      if (navigator.clipboard === undefined) {
+        throw new Error("Clipboard API unavailable.");
+      }
+      await navigator.clipboard.writeText(resultId);
+      notify("Result ID copied.", "success");
+    } catch {
+      notify("Result ID copy failed.", "error");
+    }
+  }
 
   return (
     <div className="standard-page activity-page">
@@ -167,6 +180,7 @@ export function ActivityPage() {
                     <ActivityRow
                       entry={entry}
                       key={entry.result_id}
+                      onCopyResultId={(resultId) => void copyResultId(resultId)}
                       onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
                       onOpenRoute={(routeId) => navigate(`/providers?route=${encodeURIComponent(routeId)}`)}
                       onOpenThread={navigate}
@@ -188,11 +202,13 @@ export function ActivityPage() {
 
 function ActivityRow({
   entry,
+  onCopyResultId,
   onInspectMemory,
   onOpenRoute,
   onOpenThread,
 }: {
   readonly entry: ModelActivityEntry;
+  readonly onCopyResultId: (resultId: string) => void;
   readonly onInspectMemory: (assertionId: string) => void;
   readonly onOpenRoute: (routeId: string) => void;
   readonly onOpenThread: (path: string) => void;
@@ -225,6 +241,15 @@ function ActivityRow({
         <span>Turn {shortId(entry.turn_id)}</span>
       </div>
       <div className="activity-actions">
+        <Button
+          aria-label={`Copy result ID ${entry.result_id}`}
+          onClick={() => onCopyResultId(entry.result_id)}
+          size="icon"
+          title="Copy result ID"
+          tone="ghost"
+        >
+          <Copy size={17} />
+        </Button>
         <Button
           aria-label={`Open route contract for ${entry.route_id}`}
           onClick={() => onOpenRoute(entry.route_id)}

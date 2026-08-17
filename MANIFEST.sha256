@@ -24,7 +24,7 @@ c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/ser
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
-af69ac5cf2b49cc46f4ba63e5eede94d294f5d6941225d00635f9a38f4221681  ./apps/web/src/pages/activity.tsx
+d6f80be21c85b97fcf22b96fd1f71ce0b5c254eb2a69f89b489cc6d9009b282c  ./apps/web/src/pages/activity.tsx
 a99da5879d60287576a434313ff370b30e080133d4412460196aaeb72b1bde46  ./apps/web/src/pages/conversation.tsx
 43a0807292b01c143547ff56bb4718ef06f21b1d2ab418f05e375ec021c41b0b  ./apps/web/src/pages/login.tsx
 f416711c029d78b3d5d9c9c74d670819abe8d475b429103077426e3c9211b8c0  ./apps/web/src/pages/memory.tsx
@@ -33,7 +33,7 @@ f0c0073329d6bb73341437befc516fab3b00fcf164657fc79a8e1e60951119cb  ./apps/web/src
 424ecc932c0d414a885fe3e83229482fa89c027270b9b3b3b113a117a859051d  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
 2cee8f455d455752c8b324eab510bd7dc43a53d183dfc316de135016ec783a39  ./apps/web/src/styles.css
-238f989d336b90f783a4cbf991ceab03b621e47480ae30694f20b92f1859d606  ./apps/web/tests/activity.test.tsx
+55d282e48d557fc1483a2a46fdbdc00206df98395c069a504222a8500060c70f  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
 f2e50c769ba0f00babd2a200e78a88114073071d60b81b5a29065beb0854af86  ./apps/web/tests/conversation.test.tsx

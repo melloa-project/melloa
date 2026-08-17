@@ -5,10 +5,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelActivityEntry, ModelActivityReport } from "../src/api";
 import { ActivityPage } from "../src/pages/activity";
 
-const mocks = vi.hoisted(() => ({ modelActivity: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  modelActivity: vi.fn(),
+  notify: vi.fn(),
+}));
 
 vi.mock("../src/app", () => {
-  const context = { api: { modelActivity: mocks.modelActivity } };
+  const context = {
+    api: { modelActivity: mocks.modelActivity },
+    notify: mocks.notify,
+  };
   return {
     errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
     useMelloa: () => context,
@@ -109,7 +115,14 @@ const report: ModelActivityReport = {
 describe("ActivityPage", () => {
   beforeEach(() => {
     mocks.modelActivity.mockReset();
+    mocks.notify.mockReset();
     mocks.modelActivity.mockResolvedValue(report);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("filters the run ledger by disclosure state", async () => {
@@ -161,6 +174,40 @@ describe("ActivityPage", () => {
     fireEvent.click(screen.getByRole("button", { name: `Open route contract for ${externalEntry.route_id}` }));
 
     expect(screen.getByText(`providers-search=?route=${encodeURIComponent(externalEntry.route_id)}`)).toBeInTheDocument();
+  });
+
+  it("copies exact result ids from the activity run ledger", async () => {
+    render(
+      <MemoryRouter>
+        <ActivityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("qwen3:8b");
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy result ID ${externalEntry.result_id}` }));
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.result_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Result ID copied.", "success");
+  });
+
+  it("reports when activity result id copy is unavailable", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+
+    render(
+      <MemoryRouter>
+        <ActivityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("qwen3:8b");
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy result ID ${localEntry.result_id}` }));
+
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Result ID copy failed.", "error"));
   });
 
   it("opens disclosed memories from external activity evidence", async () => {
