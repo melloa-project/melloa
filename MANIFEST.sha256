@@ -30,7 +30,7 @@ e45c27982115452bc7d6a187d158a97ea3a7c19af29ac134d8fb9bfc12e82d96  ./apps/web/src
 61b6fed8328e0c9e95088417b1feff606f8d973befad8146ec4f6762d38fcf2d  ./apps/web/src/pages/memory.tsx
 edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src/pages/operations.tsx
 529a522a3d0662674f1617d3d3b636e30f882838834f48d90d125e498d25c3d2  ./apps/web/src/pages/providers.tsx
-8fc34e04b3ac31f835e84b9dea8bef044fd8e9123fa277a15b7446304eaaaa9d  ./apps/web/src/pages/settings.tsx
+424ecc932c0d414a885fe3e83229482fa89c027270b9b3b3b113a117a859051d  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
 5abcc14fb5a6caeebec74afe46477e6de0cfa901b4a27a4775fbe223db191bad  ./apps/web/src/styles.css
 e174510afa84b6c9d3776fa154f14db1b240f175281e76f18d50120ada4d8df0  ./apps/web/tests/activity.test.tsx
@@ -43,10 +43,10 @@ d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tes
 b364b6ee5fb73a9f31783bbbf325ac17ec8d7feeb3e52de9f706fac92e000c7a  ./apps/web/tests/memory.test.tsx
 0a18d03ce451081e7edc4eea1cfb286f2c85cc99dfebda599ff4001ce75d3762  ./apps/web/tests/operations.test.tsx
 2fadad01615672d43f137a49e83b6e599d70511f938ec47acd00766bccfc03ab  ./apps/web/tests/providers.test.tsx
-2caed0bbb30a6c71e71ece7592715ab550b591cac2dccf0a0efd98751bf039fc  ./apps/web/tests/settings.test.tsx
+841689a3c1ca7b23fcbd056729eaf817381590a983ea470311b9e88946f2c456  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
-c113a3f1cc58986f49701bb149957f1cccbb0eb1d264b40545f85344153a985e  ./apps/web/tests/visual/current-mvp.mjs
+30c065dbbb53b70a328677ea33c73f4e5d1ec59212df156d38231658b697f76d  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml

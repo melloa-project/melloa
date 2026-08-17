@@ -165,6 +165,19 @@ describe("SettingsPage Telegram inspection", () => {
     expect(input).toHaveAttribute("pattern", "[A-Za-z0-9_-]{20,128}");
   });
 
+  it("does not show real Bot API pairing instructions for the synthetic fixture", async () => {
+    mocks.inspectTelegramStatus.mockResolvedValue(telegramStatus("disabled", false));
+    mocks.listTelegramPairingCandidates.mockResolvedValue([]);
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText(/Synthetic fixture · Disabled/i)).toBeInTheDocument();
+    expect(screen.getByText("Bot API pairing inactive")).toBeInTheDocument();
+    expect(screen.getByText("Synthetic no-network mode cannot receive /start updates.")).toBeInTheDocument();
+    expect(screen.getByText("Enable Bot API before pairing.")).toBeInTheDocument();
+    expect(screen.queryByText(/send \/start to the configured bot/i)).not.toBeInTheDocument();
+  });
+
   it("inspects active sessions and confirms signing out other browsers", async () => {
     let revoked = false;
     mocks.activeSessions.mockImplementation(() => Promise.resolve(

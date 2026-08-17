@@ -267,11 +267,14 @@ try {
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("heading", { name: "Settings" }).waitFor();
   await page.getByText("Synthetic, no network", { exact: true }).waitFor();
+  await page.getByText("Bot API pairing inactive", { exact: true }).waitFor();
+  await page.getByText("Enable Bot API before pairing.", { exact: true }).waitFor();
   const telegramCard = page.locator(".telegram-card");
   await telegramCard.evaluate((element) => element.scrollIntoView({ block: "start" }));
   await page.screenshot({
     path: `${outputDirectory}/settings-mobile.png`,
   });
+  await assertPageClearsMobileNavigation(".candidate-empty", "Settings Telegram");
 
   await page.setViewportSize({ width: 1440, height: 1100 });
   await scrollPageShell(0);

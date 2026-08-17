@@ -265,11 +265,13 @@ export function SettingsPage() {
           <div className="telegram-unpaired">
             <EmptyState
               icon={Smartphone}
-              title="No owner account paired"
-              description="Start the Telegram adapter, send /start to the configured bot in a private chat, then confirm the candidate here using the short-lived code returned by the bot."
+              title={realTransport ? "No owner account paired" : "Bot API pairing inactive"}
+              description={realTransport
+                ? "Start the Telegram adapter, send /start to the configured bot in a private chat, then confirm the candidate here using the short-lived code returned by the bot."
+                : "Synthetic no-network mode cannot receive /start updates."}
             />
             {telegram.candidates.length === 0 ? (
-              <div className="candidate-empty"><Clock3 size={16} /><span>No unexpired pairing candidates are waiting.</span></div>
+              <div className="candidate-empty"><Clock3 size={16} /><span>{realTransport ? "No unexpired pairing candidates are waiting." : "Enable Bot API before pairing."}</span></div>
             ) : (
               <div className="candidate-list">
                 {telegram.candidates.map((candidate) => (
