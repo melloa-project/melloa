@@ -320,7 +320,8 @@ export function SettingsPage() {
             <dl className="paired-channel-meta">
               <div><dt>Pairing</dt><dd><CopyableAuthorityId label="Telegram pairing" id={telegram.pairing.pairing_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
               <div><dt>Candidate</dt><dd><CopyableAuthorityId label="Telegram candidate" id={telegram.pairing.candidate_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-              <div><dt>Confirmed by</dt><dd>{shortId(telegram.pairing.confirmed_by_owner_id)}</dd></div>
+              <div><dt>Owner</dt><dd><CopyableAuthorityId label="Telegram owner" id={telegram.pairing.owner_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
+              <div><dt>Confirmed by</dt><dd><CopyableAuthorityId label="Telegram confirmed-by owner" id={telegram.pairing.confirmed_by_owner_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
             </dl>
             <Button disabled={!canMutate} onClick={() => setRevokeOpen(true)} tone="danger"><Unlink size={15} /> Revoke pairing</Button>
           </div>

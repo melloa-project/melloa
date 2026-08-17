@@ -345,6 +345,12 @@ describe("SettingsPage Telegram inspection", () => {
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("tgpairing_01"));
     fireEvent.click(screen.getByRole("button", { name: "Copy Telegram candidate ID tgcandidate_01" }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("tgcandidate_01"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram owner ID owner_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("owner_01"));
+    expect(mocks.notify).toHaveBeenCalledWith("Telegram owner ID copied.", "success");
+    fireEvent.click(screen.getByRole("button", { name: "Copy Telegram confirmed-by owner ID owner_01" }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("owner_01"));
+    expect(mocks.notify).toHaveBeenCalledWith("Telegram confirmed-by owner ID copied.", "success");
     fireEvent.click(screen.getByRole("button", { name: "Revoke pairing" }));
     expect(screen.getByRole("heading", { name: "Revoke Telegram pairing?" })).toBeInTheDocument();
 
