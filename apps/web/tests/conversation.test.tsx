@@ -382,6 +382,51 @@ describe("ConversationPage", () => {
     expect(screen.getByText("No external disclosure")).toBeInTheDocument();
   });
 
+  it("labels transcript replies from loaded processing route summaries", async () => {
+    mocks.listProcessing.mockResolvedValue([{
+      ...processing,
+      attempts: [{
+        attempt_id: "attempt_synthetic_01",
+        work_id: processing.work_id,
+        message_id: ownerMessage.message_id,
+        attempt: 1,
+        request_id: "request_synthetic_01",
+        outcome: "succeeded",
+        started_at: "2026-08-16T12:00:01Z",
+        completed_at: "2026-08-16T12:00:02Z",
+        retrieval_manifest_id: null,
+        model_result_summary: {
+          result_id: "result_synthetic_01",
+          request_id: "request_synthetic_01",
+          route_id: "model.fake.deterministic",
+          provider_id: "provider.synthetic",
+          model_id: "deterministic-fixture-v1",
+          input_tokens: 0,
+          output_tokens: 0,
+          cost_gbp: 0,
+          started_at: "2026-08-16T12:00:01Z",
+          completed_at: "2026-08-16T12:00:02Z",
+          external_disclosure: false,
+          attempts: [{ route_id: "model.fake.deterministic", outcome: "succeeded", processing_location: "device" }],
+        },
+        model_route_attempts: [{ route_id: "model.fake.deterministic", outcome: "succeeded", processing_location: "device" }],
+        disclosed_memory_ids: [],
+        external_disclosure: false,
+      }],
+    }]);
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const response = await screen.findByText("A grounded response.");
+    const row = response.closest("article");
+    expect(row).toBeInstanceOf(HTMLElement);
+    expect(within(row as HTMLElement).getByText("Synthetic fixture")).toBeInTheDocument();
+    expect(mocks.inspectTurn).not.toHaveBeenCalled();
+  });
+
   it("offers privacy-safe starter prompts without auto-sending", async () => {
     mocks.listMessages.mockResolvedValue([]);
     mocks.listTurns.mockResolvedValue([]);

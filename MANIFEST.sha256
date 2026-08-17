@@ -25,7 +25,7 @@ c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/ser
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
 af69ac5cf2b49cc46f4ba63e5eede94d294f5d6941225d00635f9a38f4221681  ./apps/web/src/pages/activity.tsx
-1265d8a4087ebbff4366d3a395aad5f6912572495429907238ad4e95c6199379  ./apps/web/src/pages/conversation.tsx
+2e671e35a14f07141db09b68d98e7d84402ac9da345b60588c3ca91ceced420b  ./apps/web/src/pages/conversation.tsx
 43a0807292b01c143547ff56bb4718ef06f21b1d2ab418f05e375ec021c41b0b  ./apps/web/src/pages/login.tsx
 f416711c029d78b3d5d9c9c74d670819abe8d475b429103077426e3c9211b8c0  ./apps/web/src/pages/memory.tsx
 edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src/pages/operations.tsx
@@ -36,7 +36,7 @@ edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src
 238f989d336b90f783a4cbf991ceab03b621e47480ae30694f20b92f1859d606  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
-63161a5dec9c9d60e6981d7e34b0a94bbca37dbada20b03358dbbd01aecab1f0  ./apps/web/tests/conversation.test.tsx
+ec39da45fbb57438c4019ce85970d2762593a5c25158c05e2840d1c8ab08f72c  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
 d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
 89837ff5211508d1917a26bcb5a2d14c5bc4aaa85c1f236bf1cc5ada21496a81  ./apps/web/tests/login.test.tsx
@@ -46,7 +46,7 @@ dd389a229112ca15e4936e0e3d7f1fbedb9843a6b8d53cdbd05dbfad080bed07  ./apps/web/tes
 841689a3c1ca7b23fcbd056729eaf817381590a983ea470311b9e88946f2c456  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
-0714920f870e25b3d92c04705c3b865ebb246f65823713acebd103372e28c1e2  ./apps/web/tests/visual/current-mvp.mjs
+bc0f44272ebcd7ad5541097a846f64ae60f027db4861fbcb648995670965eafc  ./apps/web/tests/visual/current-mvp.mjs
 6f0f0f396b51f7b859d539c011da7db45f0037dc02a91debfe1d3eebbfc7c92a  ./apps/web/tsconfig.json
 9356cd3cc05e5b144b513211c1454095e84692cfeba3929607e6bbe59ec5995a  ./apps/web/vite.config.ts
 340c6c438635d548254f792dcb90a436efa6d7855e2fe7a3028a9916ad956164  ./compose.yaml

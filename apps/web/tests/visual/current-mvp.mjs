@@ -93,6 +93,7 @@ try {
   await page.getByRole("button", { name: "Send message" }).click();
   const response = page.getByText(/^Synthetic local reply\./);
   await response.waitFor({ timeout: 20_000 });
+  await page.locator(".message-row.melli").getByText("Synthetic fixture", { exact: true }).waitFor();
   await response.click();
   await page.getByRole("heading", { name: "Turn details" }).waitFor();
   await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();

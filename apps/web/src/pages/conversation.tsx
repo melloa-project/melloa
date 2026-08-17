@@ -517,6 +517,7 @@ export function ConversationPage() {
                   const isOwner = message.author_principal_id === principal.owner_id;
                   const status = processingByMessage.get(message.message_id);
                   const turn = turnByOutputMessage.get(message.message_id);
+                  const routeBadge = isOwner || turn === undefined ? null : transcriptRouteBadge(turn, processingByMessage);
                   const messageDeliveries = deliveriesByMessage.get(message.message_id) ?? [];
                   return (
                     <article className={`message-row ${isOwner ? "owner" : "melli"}`} key={message.message_id}>
@@ -528,6 +529,7 @@ export function ConversationPage() {
                           <strong>{isOwner ? "You" : "Melli"}</strong>
                           <span>{formatInstant(message.created_at)}</span>
                           {!isOwner && message.citation_ids.length > 0 ? <Badge tone="violet"><BookOpenCheck size={12} /> {message.citation_ids.length} cited</Badge> : null}
+                          {routeBadge === null ? null : <Badge tone={routeBadge.tone}>{routeBadge.label}</Badge>}
                         </div>
                         <p>{messageBody(message)}</p>
                         {turn === undefined ? null : (
@@ -628,6 +630,39 @@ export function ConversationPage() {
       {inspectorOpen ? <button aria-label="Close inspector" className="inspector-scrim" onClick={closeInspector} type="button" /> : null}
     </div>
   );
+}
+
+type TranscriptRouteBadge = {
+  readonly label: string;
+  readonly tone: "positive" | "warning" | "violet";
+};
+
+function transcriptRouteBadge(
+  turn: ConversationTurn,
+  processingByMessage: ReadonlyMap<string, ConversationProcessingStatus>,
+): TranscriptRouteBadge | null {
+  for (const messageId of turn.triggering_message_ids) {
+    const status = processingByMessage.get(messageId);
+    if (status === undefined) {
+      continue;
+    }
+    for (let index = status.attempts.length - 1; index >= 0; index -= 1) {
+      const summary = asObject(status.attempts[index]?.model_result_summary);
+      if (summary === null) {
+        continue;
+      }
+      const routeId = readString(summary, "route_id");
+      const providerId = readString(summary, "provider_id");
+      if (providerId === "provider.synthetic" || routeId.startsWith("model.fake.")) {
+        return { label: "Synthetic fixture", tone: "violet" };
+      }
+      if (summary.external_disclosure === true) {
+        return { label: "External route", tone: "warning" };
+      }
+      return { label: "Private route", tone: "positive" };
+    }
+  }
+  return null;
 }
 
 function ProcessingPill({
