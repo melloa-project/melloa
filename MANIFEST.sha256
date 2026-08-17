@@ -1,6 +1,6 @@
 a2e88b55fef4ff9a86bc4671425dadcdbbb0d50f0f2e3212d05936c7c4232038  ./.env.example
 4b4c4dc2ecf6ce2dd16d1293c55582e0fae0071420dbe717b76dd19b54cb6b0b  ./.github/CODEOWNERS
-7a4b0c57d4572bdfc3db445fe52aff887297d7c700928bcf93f73ecfc73b034c  ./.github/workflows/ci.yml
+26b2f04d4315d05b8f571096c0d8b4de38a778c305a662bc30dd5305480dccfb  ./.github/workflows/ci.yml
 12234036bfc31d8d48f7b7886cac0f3ea0e8cb8c844231d4b57a3e2cf194cf44  ./.gitignore
 f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56  ./.nvmrc
 02e735b3dfe1c32833eb550b7ff8ffa17f5f2bc3fa1e7bae61a8f5a3883ce398  ./.python-version
