@@ -233,6 +233,8 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
   if (report === null) {
     return <Card><EmptyState icon={Download} title="Export report unavailable" description="The private core did not return owner export readiness." /></Card>;
   }
+  const includedCoverage = report.coverage.filter((item) => item.included);
+  const excludedCoverage = report.coverage.filter((item) => !item.included);
   return (
     <div className="operations-stack">
       <Card className="operations-panel export-summary-panel">
@@ -254,12 +256,12 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
         </div>
       </Card>
       <Card className="operations-panel">
-        <div className="card-heading-row"><div><h2>Coverage</h2><p>Included records and explicit gaps stay visible before a bundle is created.</p></div><Badge>{report.coverage.filter((item) => item.included).length} included</Badge></div>
+        <div className="card-heading-row"><div><h2>Included artifacts</h2><p>Records that the current preview writes into the bundle.</p></div><Badge>{includedCoverage.length} included</Badge></div>
         <div className="export-coverage-list">
-          {report.coverage.map((item) => (
+          {includedCoverage.map((item) => (
             <article className="export-coverage-row" key={item.group_id}>
-              <span className={`component-state ${item.included ? "healthy" : "disabled"}`}>
-                {item.included ? <FileCheck2 size={17} /> : <WifiOff size={17} />}
+              <span className="component-state healthy">
+                <FileCheck2 size={17} />
               </span>
               <div>
                 <strong>{titleCase(item.group_id.replace(/^export[.-]/, ""))}</strong>
@@ -271,7 +273,24 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
                   <code>{item.artifact_path}</code>
                 )}
               </div>
-              <Badge tone={item.included ? "positive" : "neutral"}>{item.included ? "Included" : "Excluded"}</Badge>
+              <Badge tone="positive">Included</Badge>
+            </article>
+          ))}
+        </div>
+      </Card>
+      <Card className="operations-panel">
+        <div className="card-heading-row"><div><h2>Explicit gaps</h2><p>Export capabilities that remain deliberately unavailable in this preview.</p></div><Badge tone="warning">{excludedCoverage.length} gaps</Badge></div>
+        <div className="export-coverage-list">
+          {excludedCoverage.map((item) => (
+            <article className="export-coverage-row" key={item.group_id}>
+              <span className="component-state disabled">
+                <WifiOff size={17} />
+              </span>
+              <div>
+                <strong>{titleCase(item.group_id.replace(/^export[.-]/, ""))}</strong>
+                <p>{item.summary}</p>
+              </div>
+              <Badge tone="neutral">Excluded</Badge>
             </article>
           ))}
         </div>

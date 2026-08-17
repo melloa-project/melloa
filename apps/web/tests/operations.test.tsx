@@ -119,6 +119,37 @@ describe("OperationsPage retention view", () => {
           status_reason: "export.coverage.conversation-jsonl",
         },
         {
+          group_id: "export.delivery-records",
+          included: true,
+          estimated_records: 1,
+          artifact_path: "conversations/deliveries.jsonl",
+          summary: "Redacted outbound delivery work status.",
+          status_reason: "export.coverage.delivery-jsonl",
+        },
+        {
+          group_id: "export.model-activity",
+          included: true,
+          estimated_records: 1,
+          artifact_path: "inspection/model-activity.jsonl",
+          summary: "Redacted model activity report.",
+          status_reason: "export.coverage.model-activity",
+        },
+        {
+          group_id: "export.retention-report",
+          included: true,
+          estimated_records: 1,
+          artifact_path: "inspection/retention.jsonl",
+          summary: "Owner-visible retention policy and aggregate inventory disclosure.",
+          status_reason: "export.coverage.retention-report",
+        },
+        {
+          group_id: "export.blobs",
+          included: false,
+          artifact_path: null,
+          summary: "Attachment, media, and object-store blobs are not exported.",
+          status_reason: "export.coverage.blobs-not-included",
+        },
+        {
           group_id: "export.logical-sql",
           included: false,
           artifact_path: null,
@@ -173,18 +204,29 @@ describe("OperationsPage retention view", () => {
     expect(within(commands).getByText("melloa export-mvp --output-dir <export-dir>")).toBeInTheDocument();
     expect(within(commands).getByText("melloa import-validate --bundle-dir <export-dir>")).toBeInTheDocument();
     expect(screen.getByText("Unencrypted preview")).toBeInTheDocument();
+    expect(screen.getByText("Included artifacts")).toBeInTheDocument();
+    expect(screen.getByText("Explicit gaps")).toBeInTheDocument();
     expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();
+    expect(screen.getByText("conversations/deliveries.jsonl")).toBeInTheDocument();
+    expect(screen.getByText("inspection/model-activity.jsonl")).toBeInTheDocument();
+    expect(screen.getByText("inspection/retention.jsonl")).toBeInTheDocument();
     const conversationCoverage = screen
       .getByText("conversations/*.jsonl")
       .closest(".export-coverage-row");
     expect(conversationCoverage).toBeInstanceOf(HTMLElement);
     expect(within(conversationCoverage as HTMLElement).getByText("7 estimated records")).toBeInTheDocument();
+    const retentionCoverage = screen
+      .getByText("inspection/retention.jsonl")
+      .closest(".export-coverage-row");
+    expect(retentionCoverage).toBeInstanceOf(HTMLElement);
+    expect(within(retentionCoverage as HTMLElement).getByText("1 estimated record")).toBeInTheDocument();
     expect(screen.getByText("Import validation scope")).toBeInTheDocument();
     expect(screen.getByText("Every bundled file is verified against checksums.sha256 before records are trusted.")).toBeInTheDocument();
     expect(screen.getByText("Validation is a dry run and does not import into a database or execute migrations.")).toBeInTheDocument();
     expect(screen.getByText("Checked")).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Logical SQL snapshots remain pending.")).toBeInTheDocument();
-    expect(screen.getByText("Excluded")).toBeInTheDocument();
+    expect(screen.getByText("Attachment, media, and object-store blobs are not exported.")).toBeInTheDocument();
+    expect(screen.getAllByText("Excluded")).toHaveLength(2);
   });
 });
