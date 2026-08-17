@@ -229,6 +229,106 @@ def test_failed_owner_login_appends_content_free_security_audit(fixed_time) -> N
     assert len(audit_store.events) == 1
 
 
+def test_owner_mutation_boundary_denials_append_content_free_security_audits(
+    fixed_time,
+) -> None:
+    now = fixed_time
+    ids = iter(
+        (
+            record_id("event", 1),
+            record_id("audit", 1),
+            record_id("event", 2),
+            record_id("audit", 2),
+        )
+    )
+    tokens = iter(("session-token", "csrf-token"))
+    audit_store = InMemoryEventAuditStore()
+    sessions = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+    )
+    client = TestClient(
+        create_app(
+            guardian_reader(fixed_time),
+            sessions,
+            owner_id=record_id("owner", 1),
+            event_audit_store=audit_store,
+            security_event_clock=lambda: now,
+            security_event_id_factory=lambda prefix: next(ids),
+        ),
+        base_url="https://testserver",
+    )
+
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    assert login.status_code == 200
+    missing_csrf = client.delete("/api/v1/auth/session")
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.json()["code"] == "csrf_validation_failed"
+
+    now = fixed_time + timedelta(minutes=5)
+    stale_recent = client.delete(
+        "/api/v1/auth/sessions/others",
+        headers={"X-Melloa-CSRF": login.json()["csrf_token"]},
+    )
+    assert stale_recent.status_code == 403
+    assert stale_recent.json()["code"] == "recent_authentication_required"
+
+    assert [event.event_type for event in audit_store.events] == [
+        "auth.owner-mutation-denied.v1",
+        "auth.owner-mutation-denied.v1",
+    ]
+    assert [event.payload for event in audit_store.events] == [
+        {
+            "boundary": "csrf",
+            "mutation_authorized": False,
+            "reason_code": "auth.csrf.invalid",
+            "result": "denied",
+        },
+        {
+            "boundary": "recent-auth",
+            "mutation_authorized": False,
+            "reason_code": "auth.recent-auth.required",
+            "result": "denied",
+        },
+    ]
+    assert [record.content.action for record in audit_store.audit_records] == [
+        "auth.owner-mutation.deny",
+        "auth.owner-mutation.deny",
+    ]
+    assert [record.content.object_ids for record in audit_store.audit_records] == [
+        (record_id("event", 1),),
+        (record_id("event", 2),),
+    ]
+    assert all(
+        record.content.actor_id.startswith("actor_")
+        and record.content.actor_id != record_id("owner", 1)
+        for record in audit_store.audit_records
+    )
+    assert [record.content.metadata for record in audit_store.audit_records] == [
+        {
+            "event_id": record_id("event", 1),
+            "reason_code": "auth.csrf.invalid",
+            "result": "denied",
+        },
+        {
+            "event_id": record_id("event", 2),
+            "reason_code": "auth.recent-auth.required",
+            "result": "denied",
+        },
+    ]
+    documents = tuple(event.model_dump_json() for event in audit_store.events) + tuple(
+        record.model_dump_json() for record in audit_store.audit_records
+    )
+    assert all("synthetic-bootstrap-token-value-0001" not in document for document in documents)
+    assert all("session-token" not in document for document in documents)
+    assert all("csrf-token" not in document for document in documents)
+
+
 def test_owner_lists_sessions_and_recently_revokes_others(fixed_time) -> None:
     now = fixed_time
     tokens = iter(

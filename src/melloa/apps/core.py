@@ -410,30 +410,29 @@ def _create_export_workspace() -> Path:
     return Path(tempfile.mkdtemp(prefix="melloa-owner-export-"))
 
 
-def _append_failed_login_audit(
+def _append_auth_security_audit(
     event_audit_store: EventAuditStore,
     *,
     owner_id: RecordId,
     occurred_at: datetime,
     id_factory: Callable[[str], str],
+    event_type: QualifiedName,
+    capability_id: QualifiedName,
+    action: QualifiedName,
+    actor_id: RecordId,
+    payload: JsonObject,
 ) -> None:
     event_id = id_factory("event")
     audit_id = id_factory("audit")
-    payload: JsonObject = {
-        "authentication_method": "auth.local-opaque-token",
-        "reason_code": "auth.owner-credential.invalid",
-        "result": "denied",
-        "session_issued": False,
-    }
     event = EventEnvelope(
         event_id=event_id,
-        event_type="auth.owner-login-denied.v1",
+        event_type=event_type,
         schema_version="1.0.0",
         occurred_at=occurred_at,
         recorded_at=occurred_at,
         subject_ids=(owner_id,),
         source=EventSource(
-            capability_id="auth.owner-login",
+            capability_id=capability_id,
             execution_id=event_id,
         ),
         producer=EventProducer(
@@ -454,23 +453,107 @@ def _append_failed_login_audit(
         audit_id=audit_id,
         event_type="audit.event-appended.v1",
         occurred_at=occurred_at,
-        actor_id=_unauthenticated_actor_id(owner_id),
-        action="auth.owner-login.deny",
+        actor_id=actor_id,
+        action=action,
         object_ids=(event_id,),
         metadata={
             "event_id": event_id,
-            "reason_code": "auth.owner-credential.invalid",
-            "result": "denied",
+            "reason_code": payload["reason_code"],
+            "result": payload["result"],
         },
     )
     event_audit_store.append_event(event, audit)
 
 
+def _append_failed_login_audit(
+    event_audit_store: EventAuditStore,
+    *,
+    owner_id: RecordId,
+    occurred_at: datetime,
+    id_factory: Callable[[str], str],
+) -> None:
+    payload: JsonObject = {
+        "authentication_method": "auth.local-opaque-token",
+        "reason_code": "auth.owner-credential.invalid",
+        "result": "denied",
+        "session_issued": False,
+    }
+    _append_auth_security_audit(
+        event_audit_store,
+        owner_id=owner_id,
+        occurred_at=occurred_at,
+        id_factory=id_factory,
+        event_type="auth.owner-login-denied.v1",
+        capability_id="auth.owner-login",
+        action="auth.owner-login.deny",
+        actor_id=_unauthenticated_actor_id(owner_id),
+        payload=payload,
+    )
+
+
+def _append_owner_mutation_denial_audit(
+    event_audit_store: EventAuditStore,
+    *,
+    owner_id: RecordId,
+    occurred_at: datetime,
+    id_factory: Callable[[str], str],
+    boundary: str,
+    reason_code: QualifiedName,
+) -> None:
+    payload: JsonObject = {
+        "boundary": boundary,
+        "mutation_authorized": False,
+        "reason_code": reason_code,
+        "result": "denied",
+    }
+    _append_auth_security_audit(
+        event_audit_store,
+        owner_id=owner_id,
+        occurred_at=occurred_at,
+        id_factory=id_factory,
+        event_type="auth.owner-mutation-denied.v1",
+        capability_id="auth.owner-mutation-boundary",
+        action="auth.owner-mutation.deny",
+        actor_id=_derived_auth_actor_id(owner_id, "session-boundary-request"),
+        payload=payload,
+    )
+
+
+def _append_owner_mutation_denial_audit_from_error(
+    request: Request,
+    error: AuthenticationError,
+) -> None:
+    event_audit_store: EventAuditStore | None = request.app.state.event_audit_store
+    owner_id: RecordId | None = request.app.state.owner_id
+    if event_audit_store is None or owner_id is None:
+        return
+    if isinstance(error, CsrfValidationError):
+        boundary = "csrf"
+        reason_code = "auth.csrf.invalid"
+    elif isinstance(error, RecentAuthenticationRequired):
+        boundary = "recent-auth"
+        reason_code = "auth.recent-auth.required"
+    else:
+        return
+    _append_owner_mutation_denial_audit(
+        event_audit_store,
+        owner_id=owner_id,
+        occurred_at=request.app.state.security_event_clock(),
+        id_factory=request.app.state.security_event_id_factory,
+        boundary=boundary,
+        reason_code=reason_code,
+    )
+
+
 def _unauthenticated_actor_id(owner_id: RecordId) -> RecordId:
+    return _derived_auth_actor_id(owner_id, "unauthenticated-request")
+
+
+def _derived_auth_actor_id(owner_id: RecordId, actor: str) -> RecordId:
     digest = sha256_digest(
         canonical_json_bytes(
             {
-                "actor": "unauthenticated-request",
+                "actor": actor,
                 "owner_id": owner_id,
             }
         )
@@ -631,6 +714,10 @@ def create_app(
     app.state.retention_service = retention_service
     app.state.model_route_service = model_route_service
     app.state.delivery_service = delivery_service
+    app.state.owner_id = owner_id
+    app.state.event_audit_store = event_audit_store
+    app.state.security_event_clock = security_event_clock
+    app.state.security_event_id_factory = security_event_id_factory
     app.state.telegram_worker = telegram_worker
     app.state.telegram_pairing_service = telegram_pairing_service
     app.state.telegram_retention_worker = telegram_retention_worker
@@ -668,7 +755,7 @@ def create_app(
 
     @app.exception_handler(AuthenticationError)
     async def authentication_failed(
-        _request: Request,
+        request: Request,
         error: AuthenticationError,
     ) -> JSONResponse:
         if isinstance(error, CsrfValidationError):
@@ -683,6 +770,7 @@ def create_app(
             response_status = status.HTTP_401_UNAUTHORIZED
             code = "owner_authentication_failed"
             message = "Owner authentication failed."
+        _append_owner_mutation_denial_audit_from_error(request, error)
         return JSONResponse(
             status_code=response_status,
             content={"code": code, "message": message},

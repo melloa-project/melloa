@@ -73,7 +73,7 @@ afde7c16ec2b3582a3497aef8b95a34fcd1192eb739a41a4d6b1b21b199ed165  ./docs/21-revi
 5852f70ce8cf8e58ed5034cbdc1062aa50c73a66029470eb90c2c84d8c853c95  ./docs/22-final-synthesis.md
 44a3db513e0454571ab58ba1cd330327664e02dc30e572ebaf4f6a18210031f7  ./docs/23-v0.2-decisions.md
 a98b2657cf236c2c0b16d0a85611fd2566cff6448d68d74932fd0c275f133758  ./docs/24-m0-implementation.md
-0a8468353300e402971ae6f2853aadedbf67bf3554bfcdc5d74585ab978cec43  ./docs/25-m1-implementation.md
+7d2297f244257525b55b57702d646d8a638f0b32786f17d2b3b0fca447cf883c  ./docs/25-m1-implementation.md
 926510904a18d0f582bc498e6d7a780e1aa9c61d2e67e94d380622b751e68260  ./docs/adr/ADR-001-event-oriented-provenance-ledger.md
 725fd9f2048fa570db36387aeae26d5821a549cd2a56af09659037ff018562aa  ./docs/adr/ADR-002-postgresql-primary-store-and-jobs.md
 31517d8fc1cb8bb74ae96a6222e839322b398da126d1aa89d9df63089eb6ca78  ./docs/adr/ADR-003-policy-aware-model-routing.md
@@ -221,7 +221,7 @@ f6fb42e0905a5a8664e7fbb57e95307dd03b9c2042ac439e4a15c59c78608de9  ./src/melloa/a
 1cf3a6ee08880d98c6c86bd0ff247f5756cbf4f36e3a85ef280f0a4176ea7816  ./src/melloa/application/telegram.py
 3542c2f8d214f641e19a0c42c02d607b9be7627200a66f451a7947f4632984f8  ./src/melloa/apps/__init__.py
 04dcb30031a7dce4fc713251e0e5cfbe1edfee4529762a12a1961160c4833f51  ./src/melloa/apps/cli.py
-aed3c9f6248435a4d8ad5b8838cc6666a1fc7274e5d431a48992e77c7c5cc0ac  ./src/melloa/apps/core.py
+506291c0b88ea46de997909b43fc04cd5b6586296952b4cbf580a31e72b06585  ./src/melloa/apps/core.py
 f69f77cb917da49f776e671d1b57fd4396e07cd59b8a6e84bd6fe96fc70d70b1  ./src/melloa/apps/mvp.py
 121d872c56740fe1a113341d10fcaafd801b6a2d2b2d821da31780911526d4b1  ./src/melloa/apps/postgres_mvp.py
 c43b26c57fabcfb418c4ce1752efd4a6e600a41d53e25a4ea78f9d1578b6cbdd  ./src/melloa/apps/synthetic.py
@@ -271,7 +271,7 @@ df4717f6aac97cfd51e9af58f09c8bccbadd136c0efaa93ab4503f2cda81f1ac  ./tests/unit/t
 fc22a5151aa9b1572696901f96ee2f1dcdc50cf6a16dff284daeb15b740f0043  ./tests/unit/test_dependency_sources.py
 c98373dc5d30d956f9f73da55877469facc1cc6810eb9d9a654858f6d7a1b24e  ./tests/unit/test_event_audit_store.py
 8abb2797cd02fad22859bc87a21e0238385be51bd36fe98543bb72b051280857  ./tests/unit/test_exports.py
-e62b054d40c7225666e4807df6c715d197f4d5428b0d6431d25942cf0d2a2840  ./tests/unit/test_fakes_and_api.py
+67f2a4bfea3bac57ce39ccb86827d0bdd4af495ad26675fb4d6c7962ffdb2141  ./tests/unit/test_fakes_and_api.py
 db70da99f1576a292c6a0ee6a5e41baaa12173ccf4d2c614f7ae62e3701d3647  ./tests/unit/test_guardian_adapter.py
 38dc79f6b3076904d5ad86d5c3ad6c35e762f2485e7baf3bd0cf07cd041af91a  ./tests/unit/test_inspection.py
 d5355204c7c50cbf350ad115db4cdfe9236b8a364a4cf0da27b9ce0ff3a039c9  ./tests/unit/test_memory.py
@@ -288,7 +288,7 @@ e66fc1eeda7cc7774eec8fc90b3464f12f5f1a940a9c1b47eddfa597d4dd5e81  ./tests/unit/t
 0117b58bb8114cb0fdaac96543f6e7d7e3909b2096428955aeab68fbb3046a48  ./tests/unit/test_retention_inspection.py
 df9f042f5f1ab73857823f5b72b46742b4e649e486625f4982bc0f8bb5f61085  ./tests/unit/test_retrieval.py
 d968b63148413b91f3637a0bfb102e5dad76dfbb0df201cd5ea8b21dbd0dd04c  ./tests/unit/test_schemas.py
-05808f44ab04e785a5c44b925a756d1bd80b8d0f652d694c06ce2132c08388d7  ./tests/unit/test_synthetic_runtime.py
+8d958e02c19a9e321f97eee7b2eacd3c6c217e4d50bc9846178667d52d28bc36  ./tests/unit/test_synthetic_runtime.py
 4c90f83989da76ba43fcaecb34172c3a2c0cf5145820d58472ac55d6d63897cb  ./tests/unit/test_telegram.py
 a399dc1858557bdcb494e4ce77f4b068b93ecffaf9492184744af80ff600f404  ./tests/unit/test_telegram_attachments.py
 b00c84a5013ec594b6c390c4a4cadc8baadb69cff720f39f6df800592816305a  ./tests/unit/test_telegram_bot_api.py

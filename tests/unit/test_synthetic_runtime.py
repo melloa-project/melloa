@@ -382,7 +382,17 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert export_after_coverage["export.model-activity"]["estimated_records"] == 1
     assert export_after_coverage["export.retention-report"]["estimated_records"] == 1
     assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 13
-    assert client.post("/api/v1/exports/preview").status_code == 403
+    csrf_denied_export = client.post("/api/v1/exports/preview")
+    assert csrf_denied_export.status_code == 403
+    assert runtime.event_audit_store.events[-1].event_type == (
+        "auth.owner-mutation-denied.v1"
+    )
+    assert runtime.event_audit_store.events[-1].payload == {
+        "boundary": "csrf",
+        "mutation_authorized": False,
+        "reason_code": "auth.csrf.invalid",
+        "result": "denied",
+    }
     archive_response = client.post("/api/v1/exports/preview", headers=headers)
     assert archive_response.status_code == 200
     assert archive_response.headers["content-type"] == "application/zip"
@@ -429,7 +439,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     }
     audit_after_deletion = inventory_after_deletion["retention.audit-ledger"]
     assert audit_after_deletion["coverage"] == "complete"
-    assert audit_after_deletion["retained_objects"] == 2
+    assert audit_after_deletion["retained_objects"] == 3
     assert audit_after_deletion["retained_bytes"] > 0
     assert audit_after_deletion["oldest_retained_at"] is not None
     memory_after_deletion = inventory_after_deletion["retention.owner-memory"]
