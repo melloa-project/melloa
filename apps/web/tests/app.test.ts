@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canUseMutationProof } from "../src/app";
+import { canUseMutationProof, isLatestRequest } from "../src/app";
 import type { AuthenticatedOwner } from "../src/api";
 
 const principal: AuthenticatedOwner = {
@@ -28,5 +28,12 @@ describe("canUseMutationProof", () => {
       true,
       Date.parse("2026-08-16T12:01:00Z"),
     )).toBe(false);
+  });
+});
+
+describe("isLatestRequest", () => {
+  it("accepts only the newest app-level refresh request", () => {
+    expect(isLatestRequest(3, 3)).toBe(true);
+    expect(isLatestRequest(2, 3)).toBe(false);
   });
 });

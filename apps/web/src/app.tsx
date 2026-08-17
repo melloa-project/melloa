@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -62,6 +63,7 @@ export function App() {
   const [booting, setBooting] = useState(true);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const statusRefreshRequestRef = useRef(0);
 
   const notify = useCallback((message: string, tone: Notice["tone"] = "info") => {
     const id = Date.now() + Math.floor(Math.random() * 1_000);
@@ -76,9 +78,18 @@ export function App() {
   }, []);
 
   const refreshStatus = useCallback(async () => {
+    const requestId = statusRefreshRequestRef.current + 1;
+    statusRefreshRequestRef.current = requestId;
     try {
-      setStatus(await api.systemStatus());
+      const nextStatus = await api.systemStatus();
+      if (!isLatestRequest(requestId, statusRefreshRequestRef.current)) {
+        return;
+      }
+      setStatus(nextStatus);
     } catch (error) {
+      if (!isLatestRequest(requestId, statusRefreshRequestRef.current)) {
+        return;
+      }
       setStatus(null);
       if (!(error instanceof ApiError && error.status === 503)) {
         notify(errorMessage(error), "error");
@@ -202,6 +213,10 @@ export function errorMessage(error: unknown): string {
 
 export function PageBoundary({ children }: { readonly children: ReactNode }) {
   return <>{children}</>;
+}
+
+export function isLatestRequest(requestId: number, latestRequestId: number): boolean {
+  return requestId === latestRequestId;
 }
 
 export function canUseMutationProof(
