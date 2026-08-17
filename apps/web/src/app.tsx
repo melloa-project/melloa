@@ -61,6 +61,7 @@ export function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [booting, setBooting] = useState(true);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const notify = useCallback((message: string, tone: Notice["tone"] = "info") => {
     const id = Date.now() + Math.floor(Math.random() * 1_000);
@@ -113,6 +114,15 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [principal, refreshStatus]);
 
+  useEffect(() => {
+    if (principal === null) {
+      return;
+    }
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [principal]);
+
   const login = useCallback(async (credential: string) => {
     const nextPrincipal = await api.login(credential);
     setPrincipal(nextPrincipal);
@@ -136,7 +146,7 @@ export function App() {
       api,
       principal,
       status,
-      canMutate: api.hasMutationProof,
+      canMutate: canUseMutationProof(principal, api.hasMutationProof, nowMs),
       notices,
       login,
       logout,
@@ -144,7 +154,7 @@ export function App() {
       notify,
       dismissNotice,
     };
-  }, [dismissNotice, login, logout, notices, notify, principal, refreshStatus, status]);
+  }, [dismissNotice, login, logout, notices, notify, nowMs, principal, refreshStatus, status]);
 
   if (booting) {
     return <div className="boot-screen"><LoadingState label="Opening the private console" /></div>;
@@ -192,4 +202,16 @@ export function errorMessage(error: unknown): string {
 
 export function PageBoundary({ children }: { readonly children: ReactNode }) {
   return <>{children}</>;
+}
+
+export function canUseMutationProof(
+  principal: AuthenticatedOwner,
+  hasMutationProof: boolean,
+  nowMs: number,
+): boolean {
+  if (!hasMutationProof) {
+    return false;
+  }
+  const reauthenticatedUntil = Date.parse(principal.reauthenticated_until);
+  return Number.isFinite(reauthenticatedUntil) && reauthenticatedUntil > nowMs;
 }

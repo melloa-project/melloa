@@ -19,7 +19,7 @@ a6d6c1d19d09c0ae8f496e56d6343445aacd16177893758cb22f1c2fd177ce63  ./apps/web/pac
 b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/package.json
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
 55b30e1f7637c2ca2e955340d7d9e413a55069566ac66a9fd20dbfef4fda39b4  ./apps/web/src/api.ts
-dac5c70dc428d046375e99711fb6c16b630110b878fe35a0948864893c01dfb1  ./apps/web/src/app.tsx
+48b9e58718fa6afacd92d5d8a400c0a9a46e5c17e6accd1087b1e2dff8123085  ./apps/web/src/app.tsx
 3d7c05c9c702aa3dbb5466943fe8135db8de85e050a2dd93c0c50c618a586bf1  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
@@ -35,6 +35,7 @@ edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src
 5abcc14fb5a6caeebec74afe46477e6de0cfa901b4a27a4775fbe223db191bad  ./apps/web/src/styles.css
 6dc2498aef30d11ecbd4aa5bad5ec7f003b6835d02ddae5b83874af351582bf6  ./apps/web/tests/activity.test.tsx
 640edaa925f13870f1d6a38ca83882ba8c6ae317c624153ad07c4af84117c5db  ./apps/web/tests/api.test.ts
+a570169cf196c7b278d12049b072378cb1f47064203adf4e4d78413479fce6d6  ./apps/web/tests/app.test.ts
 e3fecab1ddb2ed5bbfa06013b5c04628a62cb7bcbd6ad16ff278feda8efc5fb6  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
 86ccb01e06f688517a28b54b714205a8c70b5f8e73ef526c49cfbdc241e8e1a2  ./apps/web/tests/login.test.tsx
