@@ -356,6 +356,32 @@ describe("ConversationPage", () => {
     expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
   });
 
+  it("labels deterministic synthetic turn inspection as a fixture", async () => {
+    mocks.inspectTurn.mockResolvedValue({
+      ...inspection,
+      model_result: {
+        ...inspection.model_result,
+        route_id: "model.fake.deterministic",
+        provider_id: "provider.synthetic",
+        model_id: "deterministic-fixture-v1",
+        external_disclosure: false,
+        attempts: [{ route_id: "model.fake.deterministic", outcome: "succeeded", processing_location: "device" }],
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const response = await screen.findByText("A grounded response.");
+    fireEvent.click(response.closest("button") as HTMLButtonElement);
+
+    expect(await screen.findByText("deterministic-fixture-v1")).toBeInTheDocument();
+    expect(screen.getByText("Synthetic fixture")).toBeInTheDocument();
+    expect(screen.getByText("No external disclosure")).toBeInTheDocument();
+  });
+
   it("offers privacy-safe starter prompts without auto-sending", async () => {
     mocks.listMessages.mockResolvedValue([]);
     mocks.listTurns.mockResolvedValue([]);

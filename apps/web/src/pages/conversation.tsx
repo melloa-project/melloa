@@ -713,7 +713,7 @@ export function TurnInspector({
         <div className="route-icon"><Bot size={19} /></div>
         <div><strong>{metadata.modelId}</strong><span>{metadata.providerId}</span></div>
         <Badge tone={synthetic ? "violet" : metadata.externalDisclosure ? "warning" : "positive"}>
-          {synthetic ? "Synthetic" : metadata.externalDisclosure ? "External" : "Local"}
+          {synthetic ? "Synthetic fixture" : metadata.externalDisclosure ? "External" : "Local"}
         </Badge>
       </section>
 

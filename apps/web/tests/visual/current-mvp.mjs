@@ -96,6 +96,7 @@ try {
   await response.click();
   await page.getByRole("heading", { name: "Turn details" }).waitFor();
   await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
+  await page.getByText("Synthetic fixture", { exact: true }).first().waitFor();
   await page.screenshot({
     path: `${outputDirectory}/conversation-desktop.png`,
     fullPage: true,
