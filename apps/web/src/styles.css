@@ -1515,6 +1515,17 @@ pre {
   font-size: 0.77rem;
 }
 
+.route-contract-action {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.route-contract-action > span {
+  overflow-wrap: anywhere;
+}
+
 .evidence-list,
 .attempt-row + .attempt-row {
   border-top: 1px solid #edf0ed;

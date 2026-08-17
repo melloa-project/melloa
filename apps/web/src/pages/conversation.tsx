@@ -20,6 +20,7 @@ import {
   Info,
   LoaderCircle,
   MessageCircleMore,
+  Network,
   PanelRightClose,
   Plus,
   RefreshCw,
@@ -698,6 +699,7 @@ export function ConversationPage() {
               inspection={inspection}
               onCopyLedgerId={(label, id) => void copyTurnLedgerId(label, id)}
               onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
+              onOpenRoute={(routeId) => navigate(`/providers?route=${encodeURIComponent(routeId)}`)}
             />
           ) : null}
           {!inspectionLoading && selectedProcessing !== null ? (
@@ -844,10 +846,12 @@ export function TurnInspector({
   inspection,
   onCopyLedgerId,
   onInspectMemory,
+  onOpenRoute,
 }: {
   readonly inspection: ConversationTurnInspection;
   readonly onCopyLedgerId: (label: string, id: string) => void;
   readonly onInspectMemory: (assertionId: string) => void;
+  readonly onOpenRoute: (routeId: string) => void;
 }) {
   const metadata = turnMetadata(inspection);
   const citations = asObjectArray(inspection.retrieval_manifest.citations);
@@ -869,7 +873,23 @@ export function TurnInspector({
       <section className="inspector-section">
         <h3>Route</h3>
         <dl className="detail-list">
-          <div><dt>Route</dt><dd>{metadata.routeId}</dd></div>
+          <div>
+            <dt>Route</dt>
+            <dd>
+              <span className="route-contract-action">
+                <span>{metadata.routeId}</span>
+                <Button
+                  aria-label={`Open route contract for ${metadata.routeId}`}
+                  onClick={() => onOpenRoute(metadata.routeId)}
+                  size="icon"
+                  tone="ghost"
+                  title="Open route contract"
+                >
+                  <Network aria-hidden="true" size={14} />
+                </Button>
+              </span>
+            </dd>
+          </div>
           <div><dt>Location</dt><dd>{titleCase(metadata.location)}</dd></div>
           <div><dt>Disclosure</dt><dd>{metadata.externalDisclosure ? "Recorded external disclosure" : "No external disclosure"}</dd></div>
           <div><dt>Latency</dt><dd>{formatDurationMs(metadata.latencyMs)}</dd></div>
@@ -948,6 +968,15 @@ export function TurnInspector({
           <div className="attempt-row" key={`${readString(attempt, "route_id")}-${index}`}>
             {readString(attempt, "outcome") === "succeeded" ? <ShieldCheck size={15} /> : <WifiOff size={15} />}
             <span><strong>{readString(attempt, "route_id")}</strong><small>{titleCase(readString(attempt, "outcome"))} · {titleCase(readString(attempt, "processing_location"))}</small></span>
+            <Button
+              aria-label={`Open route contract for route attempt ${readString(attempt, "route_id")}`}
+              onClick={() => onOpenRoute(readString(attempt, "route_id"))}
+              size="icon"
+              tone="ghost"
+              title="Open route contract"
+            >
+              <Network aria-hidden="true" size={14} />
+            </Button>
           </div>
         ))}
       </section>

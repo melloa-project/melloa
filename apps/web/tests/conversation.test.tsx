@@ -338,6 +338,36 @@ describe("ConversationPage", () => {
     expect(screen.getByText("memory-search=?assertion=assertion_01")).toBeInTheDocument();
   });
 
+  it("opens the exact provider route contract from turn inspection route controls", async () => {
+    const renderConversation = () => render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes>
+          <Route path="/conversation/:threadId" element={<ConversationPage />} />
+          <Route path="/providers" element={<ProviderLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const firstRender = renderConversation();
+    const firstResponse = await screen.findByText("A grounded response.");
+    fireEvent.click(firstResponse.closest("button") as HTMLButtonElement);
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open route contract for model.local.qwen" }));
+
+    expect(screen.getByText("providers-search=?route=model.local.qwen")).toBeInTheDocument();
+    firstRender.unmount();
+
+    renderConversation();
+    const secondResponse = await screen.findByText("A grounded response.");
+    fireEvent.click(secondResponse.closest("button") as HTMLButtonElement);
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open route contract for route attempt model.local.qwen" }));
+
+    expect(screen.getByText("providers-search=?route=model.local.qwen")).toBeInTheDocument();
+  });
+
   it("reports when turn ledger id copy is unavailable", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -719,6 +749,11 @@ describe("ConversationPage", () => {
 function MemoryLocation() {
   const location = useLocation();
   return <div>{`memory-search=${location.search}`}</div>;
+}
+
+function ProviderLocation() {
+  const location = useLocation();
+  return <div>{`providers-search=${location.search}`}</div>;
 }
 
 function ConversationWithLocation() {
