@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -175,6 +175,36 @@ describe("MemoryPage", () => {
     expect(await screen.findByText("reading")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Correct" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete content" })).toBeDisabled();
+  });
+
+  it("keeps memory modal mutations disabled when recent owner authentication lapses", async () => {
+    const rendered = render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("reading")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete content" }));
+    expect(screen.getByRole("heading", { name: "Delete memory content" })).toBeInTheDocument();
+
+    mocks.canMutate = false;
+    rendered.rerender(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const deleteButton = within(dialog).getByRole("button", { name: "Delete content" });
+    expect(deleteButton).toBeDisabled();
+    fireEvent.submit(deleteButton.closest("form") as HTMLFormElement);
+
+    expect(mocks.deleteMemoryContent).not.toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "Unlock owner changes before changing memory.",
+      "error",
+    );
   });
 
   it("reloads inspection when the assertion query changes on the mounted page", async () => {

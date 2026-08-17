@@ -85,6 +85,10 @@ export function MemoryPage() {
     if (action === null || inspection === null) {
       return;
     }
+    if (!canMutate) {
+      notify("Unlock owner changes before changing memory.", "error");
+      return;
+    }
     setMutating(true);
     try {
       const assertionId = inspection.assertion.assertion_id;
@@ -261,7 +265,7 @@ export function MemoryPage() {
           )}
           <div className="modal-actions">
             <Button onClick={() => setAction(null)} type="button">Cancel</Button>
-            <Button loading={mutating} tone={action === "retract" || action === "delete_content" ? "danger" : "primary"} type="submit">{confirmLabel(action)}</Button>
+            <Button disabled={!canMutate} loading={mutating} tone={action === "retract" || action === "delete_content" ? "danger" : "primary"} type="submit">{confirmLabel(action)}</Button>
           </div>
         </form>
       </Modal>

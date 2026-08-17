@@ -27,7 +27,7 @@ f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src
 e834f43726bd40821ba3cf6cee83c80a95fe1090d017ca207a9a7011c9e258cb  ./apps/web/src/pages/activity.tsx
 95bbe1a543038368960e376f0901863f6284db5e3ffd731446f7c0f19082f117  ./apps/web/src/pages/conversation.tsx
 fe5acd1e584f66388dd3d95f2471a8067621d8895f78ef563a2b507a9d5a9d2d  ./apps/web/src/pages/login.tsx
-cd4b0e25e5583fa0f10893e58c4f25de85c294eb849493ab4e3426f37d07832a  ./apps/web/src/pages/memory.tsx
+0b0cc2dca5b1ede55835edb58f5865fa8b268207fd96f016b822dd5bfd323c5f  ./apps/web/src/pages/memory.tsx
 6673ce55e9e45ed9c9265f0bf9d3f4a8dadf895ab6f655f0429db2581e7a6c06  ./apps/web/src/pages/operations.tsx
 18f5144fd827be68237a2dc301e285bf7abcb548f08416472fe39d1b2813688e  ./apps/web/src/pages/providers.tsx
 4f3c21b4e62fce2793a475b663335070bbaf8511fcc44fe704cae2f553816e57  ./apps/web/src/pages/settings.tsx
@@ -38,7 +38,7 @@ d477bd2ec0467e9e2c7889cbe227cfbce50a1c716c8cdb10224fe812be86c5f6  ./apps/web/tes
 7262d2915e355dedcbaf99ece270cb621ab246e1bc7b05d5af11930ce04eaf6b  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
 86ccb01e06f688517a28b54b714205a8c70b5f8e73ef526c49cfbdc241e8e1a2  ./apps/web/tests/login.test.tsx
-21f4383b3e39e1802e28555743e9d414d98c6f4d4fba28e0ccb2952d938c8393  ./apps/web/tests/memory.test.tsx
+d76639bbc67c918cf11134780fdeffd84260e7b0e4647e50afefdea0626ed00c  ./apps/web/tests/memory.test.tsx
 8e2b56f5cb8808562e5acdf115e1c7a16c7a36becf7e8aad4073c544f0a5437f  ./apps/web/tests/operations.test.tsx
 2396a3e4df0a450b066375d689e0bf30a1ea067b89ded88bce1dab04fdd26b61  ./apps/web/tests/providers.test.tsx
 5e78a8594c696f7eee6d61bdfd525c26f82672b5d68590ea0cd3d6b741d1b01e  ./apps/web/tests/settings.test.tsx
