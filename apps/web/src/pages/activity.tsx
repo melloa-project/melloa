@@ -194,7 +194,10 @@ function ActivityRow({
       <div className="activity-route-icon"><Bot size={18} /></div>
       <div className="activity-identity">
         <strong>{entry.model_id}</strong>
-        <span>{entry.provider_id} · {entry.route_id}</span>
+        <span className="activity-route-label">{entry.provider_id} · {entry.route_id}</span>
+        <span className="activity-run-identifiers" title={`Request ${entry.request_id}; Result ${entry.result_id}`}>
+          Req {shortId(entry.request_id)} · Result {shortId(entry.result_id)}
+        </span>
       </div>
       <div className="activity-facts">
         <span><Zap size={14} /> {(entry.input_tokens + entry.output_tokens).toLocaleString()}</span>

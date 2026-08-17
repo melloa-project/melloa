@@ -3615,6 +3615,10 @@ pre {
     display: none;
   }
 
+  .activity-route-label {
+    display: none;
+  }
+
   .activity-disclosure {
     grid-column: 1 / -1;
   }

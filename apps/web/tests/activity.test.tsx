@@ -18,8 +18,8 @@ vi.mock("../src/app", () => {
 const localEntry: ModelActivityEntry = {
   turn_id: "turn_local_000000000000000000000000000001",
   thread_id: "thread_local_01",
-  result_id: "result_local_01",
-  request_id: "request_local_01",
+  result_id: "result_local_000000000000000000000001",
+  request_id: "request_local_000000000000000000000001",
   route_id: "model.local.qwen",
   provider_id: "provider.ollama",
   model_id: "qwen3:8b",
@@ -34,8 +34,8 @@ const localEntry: ModelActivityEntry = {
 const externalEntry: ModelActivityEntry = {
   turn_id: "turn_external_00000000000000000000000001",
   thread_id: "thread_external_01",
-  result_id: "result_external_01",
-  request_id: "request_external_01",
+  result_id: "result_external_000000000000000000000001",
+  request_id: "request_external_000000000000000000000001",
   route_id: "model.codex.subscription",
   provider_id: "provider.openai-codex-subscription",
   model_id: "gpt-5.3-codex",
@@ -110,6 +110,8 @@ describe("ActivityPage", () => {
 
     expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
     expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
+    expect(screen.getByText("Req request_l…000001 · Result result_lo…000001")).toBeInTheDocument();
+    expect(screen.getByText("Req request_e…000001 · Result result_ex…000001")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "All 2" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "External 1" }));
