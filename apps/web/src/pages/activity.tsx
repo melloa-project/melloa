@@ -14,9 +14,10 @@ import { useNavigate } from "react-router-dom";
 import type { ModelActivityReport } from "../api";
 import { errorMessage, useMelloa } from "../app";
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Metric, SectionHeader } from "../components/ui";
-import { formatDurationMs, formatGbp, formatInstant, shortId, titleCase } from "../lib/format";
+import { formatDurationMs, formatGbp, formatInstant, shortId } from "../lib/format";
 
 type WindowOption = "24h" | "7d" | "30d";
+type DisclosureFilter = "all" | "external" | "local";
 
 const windows: ReadonlyArray<{ readonly value: WindowOption; readonly label: string; readonly hours: number }> = [
   { value: "24h", label: "24 hours", hours: 24 },
@@ -24,10 +25,17 @@ const windows: ReadonlyArray<{ readonly value: WindowOption; readonly label: str
   { value: "30d", label: "30 days", hours: 24 * 30 },
 ];
 
+const disclosureFilters: ReadonlyArray<{ readonly value: DisclosureFilter; readonly label: string }> = [
+  { value: "all", label: "All" },
+  { value: "external", label: "External" },
+  { value: "local", label: "Local" },
+];
+
 export function ActivityPage() {
   const { api } = useMelloa();
   const navigate = useNavigate();
   const [windowOption, setWindowOption] = useState<WindowOption>("7d");
+  const [disclosureFilter, setDisclosureFilter] = useState<DisclosureFilter>("all");
   const [report, setReport] = useState<ModelActivityReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +60,24 @@ export function ActivityPage() {
   }, [load]);
 
   const totalTokens = (report?.total_input_tokens ?? 0) + (report?.total_output_tokens ?? 0);
+  const entries = report?.entries ?? [];
+  const externalEntries = entries.filter((entry) => entry.external_disclosure);
+  const localEntries = entries.filter((entry) => !entry.external_disclosure);
+  const visibleEntries = disclosureFilter === "external"
+    ? externalEntries
+    : disclosureFilter === "local"
+      ? localEntries
+      : entries;
+
+  const countForFilter = (filter: DisclosureFilter): number => {
+    if (filter === "external") {
+      return externalEntries.length;
+    }
+    if (filter === "local") {
+      return localEntries.length;
+    }
+    return entries.length;
+  };
 
   return (
     <div className="standard-page activity-page">
@@ -100,43 +126,63 @@ export function ActivityPage() {
                 description="Send Melli a message or choose a wider activity window."
                 action={<Button onClick={() => navigate("/conversation")} tone="primary">Open conversation</Button>}
               />
+            ) : visibleEntries.length === 0 ? (
+              <>
+                <ActivityFilter
+                  active={disclosureFilter}
+                  countForFilter={countForFilter}
+                  onChange={setDisclosureFilter}
+                />
+                <EmptyState
+                  icon={disclosureFilter === "external" ? Eye : ShieldCheck}
+                  title={`No ${disclosureFilter} runs in this window`}
+                  description="Choose a different disclosure filter or widen the activity window."
+                />
+              </>
             ) : (
-              <div className="activity-list">
-                {report.entries.map((entry) => {
-                  const started = Date.parse(entry.started_at);
-                  const completed = Date.parse(entry.completed_at);
-                  const latency = Number.isFinite(started) && Number.isFinite(completed) ? completed - started : 0;
-                  return (
-                    <article className="activity-row" key={entry.result_id}>
-                      <div className="activity-route-icon"><Bot size={18} /></div>
-                      <div className="activity-identity">
-                        <strong>{entry.model_id}</strong>
-                        <span>{entry.provider_id} · {entry.route_id}</span>
-                      </div>
-                      <div className="activity-facts">
-                        <span><Zap size={14} /> {(entry.input_tokens + entry.output_tokens).toLocaleString()}</span>
-                        <span><Coins size={14} /> {formatGbp(entry.cost_gbp)}</span>
-                        <span><Timer size={14} /> {formatDurationMs(latency)}</span>
-                      </div>
-                      <Badge tone={entry.external_disclosure ? "warning" : "positive"}>
-                        {entry.external_disclosure ? "External" : "Local"}
-                      </Badge>
-                      <div className="activity-time">
-                        <strong>{formatInstant(entry.completed_at)}</strong>
-                        <span>Turn {shortId(entry.turn_id)}</span>
-                      </div>
-                      <Button
-                        aria-label={`Open conversation for ${entry.model_id}`}
-                        onClick={() => navigate(`/conversation/${entry.thread_id}`)}
-                        size="icon"
-                        tone="ghost"
-                      >
-                        <ArrowUpRight size={17} />
-                      </Button>
-                    </article>
-                  );
-                })}
-              </div>
+              <>
+                <ActivityFilter
+                  active={disclosureFilter}
+                  countForFilter={countForFilter}
+                  onChange={setDisclosureFilter}
+                />
+                <div className="activity-list">
+                  {visibleEntries.map((entry) => {
+                    const started = Date.parse(entry.started_at);
+                    const completed = Date.parse(entry.completed_at);
+                    const latency = Number.isFinite(started) && Number.isFinite(completed) ? completed - started : 0;
+                    return (
+                      <article className="activity-row" key={entry.result_id}>
+                        <div className="activity-route-icon"><Bot size={18} /></div>
+                        <div className="activity-identity">
+                          <strong>{entry.model_id}</strong>
+                          <span>{entry.provider_id} · {entry.route_id}</span>
+                        </div>
+                        <div className="activity-facts">
+                          <span><Zap size={14} /> {(entry.input_tokens + entry.output_tokens).toLocaleString()}</span>
+                          <span><Coins size={14} /> {formatGbp(entry.cost_gbp)}</span>
+                          <span><Timer size={14} /> {formatDurationMs(latency)}</span>
+                        </div>
+                        <Badge tone={entry.external_disclosure ? "warning" : "positive"}>
+                          {entry.external_disclosure ? "External" : "Local"}
+                        </Badge>
+                        <div className="activity-time">
+                          <strong>{formatInstant(entry.completed_at)}</strong>
+                          <span>Turn {shortId(entry.turn_id)}</span>
+                        </div>
+                        <Button
+                          aria-label={`Open conversation for ${entry.model_id}`}
+                          onClick={() => navigate(`/conversation/${entry.thread_id}`)}
+                          size="icon"
+                          tone="ghost"
+                        >
+                          <ArrowUpRight size={17} />
+                        </Button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </Card>
 
@@ -145,6 +191,39 @@ export function ActivityPage() {
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+function ActivityFilter({
+  active,
+  countForFilter,
+  onChange,
+}: {
+  readonly active: DisclosureFilter;
+  readonly countForFilter: (filter: DisclosureFilter) => number;
+  readonly onChange: (filter: DisclosureFilter) => void;
+}) {
+  return (
+    <div className="activity-toolbar">
+      <div className="segmented-control" aria-label="Disclosure filter">
+        {disclosureFilters.map((filter) => {
+          const selected = active === filter.value;
+          return (
+            <Button
+              key={filter.value}
+              aria-pressed={selected}
+              className="segmented-option"
+              onClick={() => onChange(filter.value)}
+              size="sm"
+              tone={selected ? "primary" : "secondary"}
+            >
+              {filter.value === "external" ? <Eye size={14} /> : filter.value === "local" ? <ShieldCheck size={14} /> : <Zap size={14} />}
+              {filter.label} {countForFilter(filter.value)}
+            </Button>
+          );
+        })}
+      </div>
     </div>
   );
 }
