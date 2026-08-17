@@ -477,7 +477,7 @@ Do not browse directly to port `8000`: the console server keeps browser/API traf
 
 1. Paste the value printed from `$MELLOA_MVP_STATE/owner-credential` into **Owner credential**.
 2. Select **Open Owner Console**. The first authenticated screen is **Conversation**.
-3. Select the plus button beside **Conversations**, create a thread, and send a message.
+3. Select the plus button beside **Conversations**, create a thread, and send a message. Empty threads offer local starter prompts that fill the composer without sending automatically. The browser keeps each draft and retry idempotency key in page memory scoped to the selected canonical thread, so switching threads cannot send another thread's prepared text.
 4. Select Melli's reply to open **Turn details**.
 5. Verify route ID, provider, model, processing location, disclosure state, latency, available usage/cost metadata, evidence, decision record, and every route attempt. Codex turns explicitly say **Unreported** for tokens and cost.
 6. Open **Providers**. A healthy Ollama setup shows **Local Qwen via Ollama** with its privacy scope, provider-retention policy, modality, quality profile, token ceilings, and reliability. A configured Codex route is labelled **Experimental Codex CLI**, **External disclosure**, **Read-only sandbox**, **Ephemeral session**, **Approval policy: never**, and **No Melloa authority** with the same route constraints. **Deterministic synthetic fixture** remains explicitly marked as not being a real intelligence route.

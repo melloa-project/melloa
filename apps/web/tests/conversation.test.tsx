@@ -59,6 +59,14 @@ const thread: ConversationThread = {
   updated_at: "2026-08-16T12:00:02Z",
 };
 
+const otherThread: ConversationThread = {
+  ...thread,
+  thread_id: "thread_02",
+  title: "Follow-up thread",
+  created_at: "2026-08-16T12:30:00Z",
+  updated_at: "2026-08-16T12:30:02Z",
+};
+
 const ownerMessage: ConversationMessage = {
   message_id: "message_owner_01",
   thread_id: thread.thread_id,
@@ -321,6 +329,41 @@ describe("ConversationPage", () => {
     await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
       thread.thread_id,
       "What can you answer from the current seed memory, and what evidence will you cite?",
+      expect.any(String),
+    ));
+  });
+
+  it("keeps composer drafts and retry keys scoped to the selected thread", async () => {
+    mocks.listThreads.mockResolvedValue([thread, otherThread]);
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "First thread draft." } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Follow-up thread/i }));
+    expect(await screen.findByRole("heading", { name: otherThread.title })).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Melli")).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Second thread draft." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
+      otherThread.thread_id,
+      "Second thread draft.",
+      expect.any(String),
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: /Today with Melli/i }));
+    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Melli")).toHaveValue("First thread draft.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenLastCalledWith(
+      thread.thread_id,
+      "First thread draft.",
       expect.any(String),
     ));
   });

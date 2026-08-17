@@ -74,6 +74,16 @@ const starterPrompts = [
   },
 ] as const;
 
+type ComposerState = {
+  readonly draft: string;
+  readonly submissionKey: string | null;
+};
+
+const EMPTY_COMPOSER_STATE: ComposerState = {
+  draft: "",
+  submissionKey: null,
+};
+
 export function ConversationPage() {
   const { api, principal, canMutate, notify } = useMelloa();
   const navigate = useNavigate();
@@ -90,8 +100,7 @@ export function ConversationPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [submissionKey, setSubmissionKey] = useState<string | null>(null);
+  const [composerStateByThread, setComposerStateByThread] = useState<Record<string, ComposerState>>({});
   const [sending, setSending] = useState(false);
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
@@ -102,6 +111,9 @@ export function ConversationPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const selectedThread = threads.find((thread) => thread.thread_id === threadId) ?? null;
+  const composerState = threadId === undefined ? EMPTY_COMPOSER_STATE : composerStateByThread[threadId] ?? EMPTY_COMPOSER_STATE;
+  const draft = composerState.draft;
+  const submissionKey = composerState.submissionKey;
   const processingByMessage = useMemo(
     () => new Map(processing.map((status) => [status.message_id, status])),
     [processing],
@@ -250,6 +262,16 @@ export function ConversationPage() {
     };
   }, [api, notify, selectedTurnId, threadId]);
 
+  function setComposerStateForThread(
+    selectedId: string,
+    update: (current: ComposerState) => ComposerState,
+  ) {
+    setComposerStateByThread((current) => ({
+      ...current,
+      [selectedId]: update(current[selectedId] ?? EMPTY_COMPOSER_STATE),
+    }));
+  }
+
   async function createThread(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -289,14 +311,15 @@ export function ConversationPage() {
       notify("Unlock owner changes before sending a message.", "error");
       return;
     }
+    const selectedId = threadId;
+    const trimmedDraft = draft.trim();
     const key = submissionKey ?? crypto.randomUUID();
-    setSubmissionKey(key);
+    setComposerStateForThread(selectedId, (current) => ({ ...current, submissionKey: key }));
     setSending(true);
     try {
-      const reply = await api.postMessage(threadId, draft.trim(), key);
-      setDraft("");
-      setSubmissionKey(null);
-      await loadConversation(threadId, true);
+      const reply = await api.postMessage(selectedId, trimmedDraft, key);
+      setComposerStateForThread(selectedId, () => EMPTY_COMPOSER_STATE);
+      await loadConversation(selectedId, true);
       if (reply.processing.state === "dead") {
         notify("Melli could not complete this reply. The turn is ready to inspect or resume.", "error");
       } else if (reply.output_message === null || reply.output_message === undefined) {
@@ -382,8 +405,10 @@ export function ConversationPage() {
   }
 
   function selectStarterPrompt(prompt: string) {
-    setDraft(prompt);
-    setSubmissionKey(null);
+    if (threadId === undefined) {
+      return;
+    }
+    setComposerStateForThread(threadId, () => ({ draft: prompt, submissionKey: null }));
     window.requestAnimationFrame(() => composerRef.current?.focus());
   }
 
@@ -511,8 +536,10 @@ export function ConversationPage() {
                 aria-label="Message Melli"
                 maxLength={100_000}
                 onChange={(event) => {
-                  setDraft(event.target.value);
-                  setSubmissionKey(null);
+                  const nextDraft = event.target.value;
+                  if (threadId !== undefined) {
+                    setComposerStateForThread(threadId, () => ({ draft: nextDraft, submissionKey: null }));
+                  }
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
