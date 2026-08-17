@@ -8,10 +8,21 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TypeGuard
+from typing import Literal, TypeGuard
 
+from melloa.domain.audit import AuditContent
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import RecordId, new_record_id, utc_now
+from melloa.domain.base import (
+    JsonObject,
+    QualifiedName,
+    RecordId,
+    canonical_json_bytes,
+    new_record_id,
+    sha256_digest,
+    utc_now,
+)
+from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
+from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
 from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
@@ -21,6 +32,7 @@ from melloa.ports.auth import (
     OwnerSessionMissing,
     RecentAuthenticationRequired,
 )
+from melloa.ports.store import EventAuditStore
 
 _MAXIMUM_SECRET_LENGTH = 4096
 _MAXIMUM_CLEANUP_LIMIT = 10_000
@@ -48,6 +60,7 @@ class InMemoryOwnerSessionManager:
         owner_id: RecordId,
         bootstrap_token: str,
         *,
+        event_audit_store: EventAuditStore | None = None,
         clock: Callable[[], datetime] = utc_now,
         token_factory: Callable[[], str] = _secure_token,
         session_ttl: timedelta = timedelta(minutes=30),
@@ -61,6 +74,7 @@ class InMemoryOwnerSessionManager:
             raise ValueError("recent-authentication TTL must be positive and within session TTL")
         self._owner_id = owner_id
         self._bootstrap_digest = _digest(bootstrap_token)
+        self._event_audit_store = event_audit_store
         self._clock = clock
         self._token_factory = token_factory
         self._session_ttl = session_ttl
@@ -82,6 +96,12 @@ class InMemoryOwnerSessionManager:
             authenticated_at=authenticated_at,
             reauthenticated_until=authenticated_at + self._recent_auth_ttl,
             expires_at=authenticated_at + self._session_ttl,
+        )
+        self._append_session_audit(
+            session_id=principal.session_id,
+            authentication_method=principal.authentication_method,
+            occurred_at=principal.authenticated_at,
+            lifecycle="issued",
         )
         self._sessions[_digest(session_token)] = _SessionRecord(
             principal=principal,
@@ -122,7 +142,17 @@ class InMemoryOwnerSessionManager:
 
     def revoke(self, session_token: str) -> None:
         if self._valid_secret(session_token):
-            self._sessions.pop(_digest(session_token), None)
+            session_digest = _digest(session_token)
+            record = self._sessions.get(session_digest)
+            if record is None:
+                return
+            self._append_session_audit(
+                session_id=record.principal.session_id,
+                authentication_method=record.principal.authentication_method,
+                occurred_at=max(record.principal.authenticated_at, self._clock()),
+                lifecycle="revoked",
+            )
+            self._sessions.pop(session_digest, None)
 
     def active_sessions(self) -> tuple[AuthenticatedOwner, ...]:
         self.cleanup_expired_sessions()
@@ -151,6 +181,14 @@ class InMemoryOwnerSessionManager:
             if record.principal.session_id != current_session_id
         )
         for session_digest in revoked_digests:
+            principal = self._sessions[session_digest].principal
+            self._append_session_audit(
+                session_id=principal.session_id,
+                authentication_method=principal.authentication_method,
+                occurred_at=max(principal.authenticated_at, self._clock()),
+                lifecycle="revoked",
+            )
+        for session_digest in revoked_digests:
             self._sessions.pop(session_digest, None)
         return len(revoked_digests)
 
@@ -168,6 +206,84 @@ class InMemoryOwnerSessionManager:
         for session_digest in expired_digests:
             self._sessions.pop(session_digest, None)
         return OwnerSessionCleanupResult(expired_sessions=len(expired_digests))
+
+    def _append_session_audit(
+        self,
+        *,
+        session_id: RecordId,
+        authentication_method: QualifiedName,
+        occurred_at: datetime,
+        lifecycle: Literal["issued", "revoked"],
+    ) -> None:
+        event_audit_store = self._event_audit_store
+        if event_audit_store is None:
+            return
+        if lifecycle == "issued":
+            event_type: QualifiedName = "auth.owner-session-issued.v1"
+            action: QualifiedName = "auth.owner-session.issue"
+        else:
+            event_type = "auth.owner-session-revoked.v1"
+            action = "auth.owner-session.revoke"
+        payload: JsonObject = {
+            "authentication_method": authentication_method,
+            "session_id": session_id,
+            "state": lifecycle,
+        }
+        event = EventEnvelope(
+            event_id=self._derived_audit_id("event", session_id, event_type),
+            event_type=event_type,
+            schema_version="1.0.0",
+            occurred_at=occurred_at,
+            recorded_at=occurred_at,
+            subject_ids=(self._owner_id,),
+            source=EventSource(
+                capability_id="auth.owner-session",
+                execution_id=session_id,
+            ),
+            producer=EventProducer(
+                component="auth.owner-session-manager",
+                version="0.1.0",
+            ),
+            epistemic_status=EpistemicStatus.OBSERVATION,
+            sensitivity=Sensitivity.PERSONAL,
+            trust=TrustLabel.TRUSTED_SYSTEM,
+            retention_policy="retention.audit-ledger",
+            correlation_id=session_id,
+            payload=payload,
+            integrity=EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(payload))
+            ),
+        )
+        audit = AuditContent(
+            audit_id=self._derived_audit_id("audit", session_id, action),
+            event_type="audit.event-appended.v1",
+            occurred_at=occurred_at,
+            actor_id=self._owner_id,
+            action=action,
+            object_ids=(session_id,),
+            metadata={
+                "event_id": event.event_id,
+                "result": lifecycle,
+            },
+        )
+        event_audit_store.append_event(event, audit)
+
+    @staticmethod
+    def _derived_audit_id(
+        prefix: str,
+        session_id: RecordId,
+        purpose: QualifiedName,
+    ) -> str:
+        digest = sha256_digest(
+            canonical_json_bytes(
+                {
+                    "prefix": prefix,
+                    "purpose": purpose,
+                    "session_id": session_id,
+                }
+            )
+        ).removeprefix("sha256:")
+        return f"{prefix}_{digest[:32]}"
 
     def _new_unique_session_token(self) -> str:
         for _attempt in range(8):

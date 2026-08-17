@@ -225,6 +225,12 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         json={"credential": _BOOTSTRAP_TOKEN},
     )
     assert login.status_code == 200
+    assert runtime.event_audit_store.events[-1].event_type == (
+        "auth.owner-session-issued.v1"
+    )
+    assert runtime.event_audit_store.events[-1].payload["session_id"] == (
+        login.json()["principal"]["session_id"]
+    )
     csrf = login.json()["csrf_token"]
     headers = {"X-Melloa-CSRF": csrf}
 
@@ -249,7 +255,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         if item["policy_id"] == "retention.audit-ledger"
     )
     assert audit_inventory["coverage"] == "complete"
-    assert audit_inventory["retained_objects"] == 1
+    assert audit_inventory["retained_objects"] == 2
     assert audit_inventory["retained_bytes"] > 0
     assert audit_inventory["deletion_receipts"] == 0
     assert audit_inventory["status_reason"] == "retention.inventory.audit_event_store"
@@ -516,7 +522,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     }
     audit_after_deletion = inventory_after_deletion["retention.audit-ledger"]
     assert audit_after_deletion["coverage"] == "complete"
-    assert audit_after_deletion["retained_objects"] == 5
+    assert audit_after_deletion["retained_objects"] == 6
     assert audit_after_deletion["retained_bytes"] > 0
     assert audit_after_deletion["oldest_retained_at"] is not None
     memory_after_deletion = inventory_after_deletion["retention.owner-memory"]
@@ -558,6 +564,10 @@ def test_synthetic_runtime_counts_failed_login_security_audit(fixed_time) -> Non
         json={"credential": _BOOTSTRAP_TOKEN},
     )
     assert login.status_code == 200
+    assert tuple(event.event_type for event in runtime.event_audit_store.events) == (
+        "auth.owner-login-denied.v1",
+        "auth.owner-session-issued.v1",
+    )
     retention = client.get("/api/v1/retention")
     assert retention.status_code == 200
     audit_inventory = next(
@@ -566,7 +576,7 @@ def test_synthetic_runtime_counts_failed_login_security_audit(fixed_time) -> Non
         if item["policy_id"] == "retention.audit-ledger"
     )
     assert audit_inventory["coverage"] == "complete"
-    assert audit_inventory["retained_objects"] == 1
+    assert audit_inventory["retained_objects"] == 2
     assert audit_inventory["retained_bytes"] > 0
     assert audit_inventory["oldest_retained_at"] == fixed_time.isoformat().replace(
         "+00:00",

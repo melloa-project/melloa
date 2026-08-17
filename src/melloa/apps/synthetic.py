@@ -288,6 +288,7 @@ def build_synthetic_runtime(
         InMemoryOwnerSessionManager(
             SYNTHETIC_OWNER_ID,
             bootstrap_token,
+            event_audit_store=event_audit_store,
             clock=clock,
         )
         if durable_stores is None or durable_stores.owner_session_factory is None
