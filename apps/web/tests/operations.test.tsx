@@ -1,6 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type {
+  OwnerExportReadinessReport,
+  OwnerHealthReport,
+  OwnerMediaCatalog,
+  OwnerRetentionReport,
+} from "../src/api";
 import { OperationsPage } from "../src/pages/operations";
 
 const mocks = vi.hoisted(() => ({
@@ -318,6 +324,46 @@ describe("OperationsPage retention view", () => {
     expect(within(attention).queryByText("Backup Not Configured")).not.toBeInTheDocument();
   });
 
+  it("keeps the latest Operations refresh when an older request resolves last", async () => {
+    const staleHealth = deferred<OwnerHealthReport>();
+    mocks.healthDetail.mockReset();
+    mocks.mediaCatalog.mockReset();
+    mocks.retentionReport.mockReset();
+    mocks.exportReadiness.mockReset();
+    mocks.healthDetail
+      .mockReturnValueOnce(staleHealth.promise)
+      .mockResolvedValue(latestHealthReport());
+    mocks.mediaCatalog
+      .mockRejectedValueOnce(new Error("stale media unavailable"))
+      .mockResolvedValue(latestMediaReport());
+    mocks.retentionReport
+      .mockRejectedValueOnce(new Error("stale retention unavailable"))
+      .mockResolvedValue(latestRetentionReport());
+    mocks.exportReadiness
+      .mockRejectedValueOnce(new Error("stale export unavailable"))
+      .mockResolvedValue(latestExportReport());
+
+    render(<OperationsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh all/i }));
+    expect(mocks.healthDetail.mock.calls.length).toBeGreaterThan(1);
+
+    const attention = await screen.findByLabelText("Owner attention summary");
+    expect(within(attention).getByText("Required runtime checks are healthy")).toBeInTheDocument();
+    expect(within(attention).getByText("1 required component reported healthy.")).toBeInTheDocument();
+    expect(within(attention).getByText("0 action items")).toBeInTheDocument();
+    expect(screen.getByText("Fresh private core health.")).toBeInTheDocument();
+
+    staleHealth.resolve(staleHealthReport());
+    await staleHealth.promise;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Fresh private core health.")).toBeInTheDocument();
+    expect(within(attention).getByText("Required runtime checks are healthy")).toBeInTheDocument();
+  });
+
   it("renders export coverage and validation commands without claiming backup coverage", async () => {
     render(<OperationsPage />);
 
@@ -438,3 +484,121 @@ describe("OperationsPage retention view", () => {
     expect(mocks.downloadExportPreview).not.toHaveBeenCalled();
   });
 });
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function staleHealthReport(): OwnerHealthReport {
+  return {
+    owner_id: "owner_01",
+    generated_at: "2026-08-16T12:00:00Z",
+    overall_state: "unavailable",
+    components: [
+      {
+        component_id: "application.melloa-core",
+        category: "application",
+        state: "unavailable",
+        required: true,
+        observed_at: "2026-08-16T12:00:00Z",
+        summary: "Stale private core outage.",
+      },
+    ],
+  };
+}
+
+function latestHealthReport(): OwnerHealthReport {
+  return {
+    owner_id: "owner_01",
+    generated_at: "2026-08-16T12:01:00Z",
+    overall_state: "healthy",
+    components: [
+      {
+        component_id: "application.melloa-core",
+        category: "application",
+        state: "healthy",
+        required: true,
+        observed_at: "2026-08-16T12:01:00Z",
+        summary: "Fresh private core health.",
+        version: "0.1.0",
+      },
+    ],
+  };
+}
+
+function latestMediaReport(): OwnerMediaCatalog {
+  return {
+    owner_id: "owner_01",
+    generated_at: "2026-08-16T12:01:00Z",
+    capture_enabled: false,
+    content_endpoint_available: false,
+    sources: [],
+    items: [],
+  };
+}
+
+function latestRetentionReport(): OwnerRetentionReport {
+  return {
+    contract_version: "1.0.0",
+    owner_id: "owner_01",
+    generated_at: "2026-08-16T12:01:00Z",
+    backup_expiry: {
+      state: "configured",
+      status_reason: "retention.backup.configured",
+    },
+    policies: [],
+    inventory: [],
+  };
+}
+
+function latestExportReport(): OwnerExportReadinessReport {
+  return {
+    contract_version: "1.0.0",
+    owner_id: "owner_01",
+    generated_at: "2026-08-16T12:01:00Z",
+    format_id: "melloa.canonical-owner-export",
+    cli_command: "melloa export-mvp --output-dir <export-dir>",
+    validation_command: "melloa import-validate --bundle-dir <export-dir>",
+    encrypted: true,
+    includes_sql_snapshot: false,
+    includes_blobs: false,
+    encrypted_package: {
+      supported: false,
+      package_format_id: "melloa.encrypted-owner-export-package",
+      package_format_version: "1.0.0",
+      passphrase_file_required: true,
+      limitations: [],
+    },
+    coverage: [
+      {
+        group_id: "export.conversation-records",
+        included: true,
+        estimated_records: 7,
+        artifact_path: "conversations/*.jsonl",
+        summary: "Canonical conversation records.",
+        status_reason: "export.coverage.conversation-jsonl",
+      },
+    ],
+    validation_checks: [
+      {
+        check_id: "export.validation.checksums",
+        implemented: true,
+        summary: "Checksums are verified.",
+        status_reason: "export.validation.checksum-verification",
+      },
+    ],
+    limitations: [],
+  };
+}

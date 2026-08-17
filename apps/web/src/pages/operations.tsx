@@ -64,8 +64,11 @@ export function OperationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const loadRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     setLoading(true);
     const [health, media, retention, exportReadiness] = await Promise.allSettled([
       api.healthDetail(),
@@ -73,6 +76,9 @@ export function OperationsPage() {
       api.retentionReport(),
       api.exportReadiness(),
     ]);
+    if (requestId !== loadRequestRef.current) {
+      return;
+    }
     setSnapshot({
       health: health.status === "fulfilled" ? health.value : null,
       media: media.status === "fulfilled" ? media.value : null,
