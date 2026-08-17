@@ -517,6 +517,11 @@ pre {
   line-height: 1.45;
   margin: auto 7px 14px;
   padding-top: 15px;
+  text-decoration: none;
+}
+
+.sidebar-boundary:hover {
+  color: #d8e3df;
 }
 
 .boundary-icon {
@@ -632,8 +637,39 @@ pre {
   gap: 6px;
 }
 
+.status-link {
+  border-radius: var(--radius-sm);
+  min-height: 28px;
+  padding: 0 3px;
+  text-decoration: none;
+}
+
+.status-link:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.status-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.status-link small {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
 .status-item svg {
   color: var(--accent);
+}
+
+.status-item-warning {
+  color: var(--warning);
+}
+
+.status-item-warning svg {
+  color: var(--warning);
 }
 
 .status-dot {

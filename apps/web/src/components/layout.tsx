@@ -54,6 +54,14 @@ export function AppLayout() {
   const recentAuthRelative = formatRelative(principal.reauthenticated_until);
   const sessionExpiryRelative = formatRelative(principal.expires_at);
   const mutationState = canMutate ? "changes unlocked" : "read only";
+  const statusVerified = status !== null;
+  const ingressVerifiedPrivate = status?.public_ingress === false;
+  const ingressLabel = ingressVerifiedPrivate ? "Private only" : "Ingress unverified";
+  const guardianLabel = statusVerified ? `Guardian ${titleCase(status.guardian.mode)}` : "Guardian unverified";
+  const guardianDetail = statusVerified ? `Signed sequence ${status.guardian.sequence}` : "Signed status unavailable";
+  const actionLabel = statusVerified
+    ? status.external_actions_enabled ? "Actions enabled" : "Actions bounded"
+    : "Authority unverified";
 
   useEffect(() => {
     if (typeof pageShellRef.current?.scrollTo === "function") {
@@ -104,13 +112,17 @@ export function AppLayout() {
           ))}
         </nav>
 
-        <div className="sidebar-boundary">
+        <NavLink
+          aria-label="Open Guardian boundary settings"
+          className="sidebar-boundary"
+          to="/settings"
+        >
           <div className="boundary-icon"><ShieldCheck aria-hidden="true" size={17} /></div>
           <div>
             <strong>Guardian is separate</strong>
             <span>Status is read-only here. Control stays on the owner path.</span>
           </div>
-        </div>
+        </NavLink>
 
         <button
           aria-label={`Owner session: ${mutationState}; recent authentication ${recentAuthRelative}; session expires ${sessionExpiryRelative}`}
@@ -138,16 +150,24 @@ export function AppLayout() {
             <small>Private first-party surface</small>
           </div>
           <div className="authority-status">
-            <span className="status-item">
-              <span className={`status-dot status-${status === null ? "unknown" : "healthy"}`} />
-              Private only
+            <span
+              aria-label={ingressVerifiedPrivate ? "Public ingress disabled by signed status" : "Public ingress is not verified"}
+              className={`status-item ${statusVerified ? "" : "status-item-warning"}`}
+            >
+              <span className={`status-dot status-${ingressVerifiedPrivate ? "healthy" : "unknown"}`} />
+              {ingressLabel}
             </span>
-            <span className="status-item">
+            <NavLink
+              aria-label={`Open Guardian boundary settings: ${guardianLabel}; ${guardianDetail}`}
+              className={`status-item status-link ${statusVerified ? "" : "status-item-warning"}`}
+              to="/settings"
+            >
               <ShieldCheck aria-hidden="true" size={15} />
-              Guardian {status === null ? "unverified" : titleCase(status.guardian.mode)}
-            </span>
-            <Badge tone={status?.external_actions_enabled === true ? "warning" : "positive"}>
-              {status?.external_actions_enabled === true ? "Actions enabled" : "Actions bounded"}
+              <span>{guardianLabel}</span>
+              <small>{statusVerified ? `Seq ${status.guardian.sequence}` : "No signed status"}</small>
+            </NavLink>
+            <Badge tone={statusVerified && status.external_actions_enabled === false ? "positive" : "warning"}>
+              {actionLabel}
             </Badge>
             {!canMutate ? (
               <Button onClick={() => setReauthOpen(true)} size="sm" tone="primary">

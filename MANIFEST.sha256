@@ -20,7 +20,7 @@ b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/pac
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
 449dde05cc23c25373ca84911d27b9dbbabdf0af5b14600f3b801cb6190178c8  ./apps/web/src/api.ts
 7c56ba3bc2b078a5cf7ad2d9b5ee3cf776e7789e56e36bc97be2c73504584b76  ./apps/web/src/app.tsx
-114aee3d587f5f37e8d06bb0c004dd2f57b748710b56a079710636c84133dcb9  ./apps/web/src/components/layout.tsx
+73d73f08f72c56ee4f868059a53acef58d8acd0797d230a7fa14b4cc3fb3af74  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
@@ -32,13 +32,13 @@ b1d63e0f9a32c51a8871d66307fc3cca20cef3954c1957b038698db81da3c8d4  ./apps/web/src
 359b93f9b3062a3109bc6042ec28586f536cbbfd7aad6b41de36d1f7a0c8d2de  ./apps/web/src/pages/providers.tsx
 fab905d187bc9099eba278995e55e5c4adda5abda275bb8eb36568b8fb26be0f  ./apps/web/src/pages/settings.tsx
 4e08c5f3491c247951be90ae69a07ab866b9d0a6a22fbd3a662284686fdaeda2  ./apps/web/src/pages/timeline.tsx
-70a6ac67829881e5efe2da5fda46360c56d2748af14b903fce5205309373eeb0  ./apps/web/src/styles.css
+e1ef4acca71780eee3e50c4f59c75de4c12607617f42512846147a7f4c4b9d45  ./apps/web/src/styles.css
 41c57f1a91b9bd626993c2cdd5bb740b1e321a01e3bf36ef14ab960f9977c459  ./apps/web/tests/activity.test.tsx
 b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tests/api.test.ts
 34cd45ab7061c368a972bc74a94a9e8bd041edcb076c693d262dfaa2757d6bff  ./apps/web/tests/app.test.ts
 1e56562a133eb135394af2d33e0c3a1fa4bd60ad8c6a649b61b8d971735c585b  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
-d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
+1d430e015ea66e5a43e6a71094db7405489df8eef8225a35dde8af9047a7f5ac  ./apps/web/tests/layout.test.tsx
 89837ff5211508d1917a26bcb5a2d14c5bc4aaa85c1f236bf1cc5ada21496a81  ./apps/web/tests/login.test.tsx
 222792b35189844f78306196707d191542c9052aa0b5897d0b00c870f4cc5eb2  ./apps/web/tests/memory.test.tsx
 6ab7bebe9906cc3cf20f4a801eb125ab8120118fbfa901c17d6afca80506e102  ./apps/web/tests/operations.test.tsx
