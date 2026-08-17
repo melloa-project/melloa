@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest
 
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
-from melloa.application.exports import ExportBundleError, OwnerExportService, validate_bundle
+from melloa.application.exports import (
+    ExportBundleError,
+    OwnerExportService,
+    validate_bundle,
+    validate_encrypted_package,
+    write_encrypted_package,
+)
 from melloa.apps.synthetic import build_synthetic_runtime
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.classification import Sensitivity
@@ -17,6 +23,8 @@ from melloa.domain.conversation import ConversationMessage, DeliveryState, Messa
 from melloa.domain.exports import (
     CanonicalExportManifest,
     CanonicalExportValidationReport,
+    EncryptedExportPackageHeader,
+    EncryptedExportPackageValidationReport,
     ExportFileEntry,
     ExportFileKind,
 )
@@ -134,6 +142,143 @@ def test_owner_export_writes_validated_zip_from_authenticated_live_state(
             ),
         )
     assert not foreign_archive.exists()
+
+
+def test_owner_export_writes_encrypted_package_for_validated_bundle(
+    tmp_path,
+    fixed_time,
+) -> None:
+    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
+    principal = _owner(runtime.owner_id, fixed_time)
+    runtime.conversation_service.post_owner_message(
+        principal,
+        thread_id=runtime.telegram_thread_id,
+        text="Encrypt this owner export bundle.",
+        idempotency_key="export-encrypted-package",
+    )
+    bundle_dir = tmp_path / "export"
+    manifest = runtime.export_service.write_bundle(
+        bundle_dir,
+        schema_root=_schema_root(),
+        principal=principal,
+    )
+    package_path = tmp_path / "owner-export.melloaenc"
+
+    header = write_encrypted_package(
+        bundle_dir,
+        package_path,
+        passphrase="correct horse battery staple",
+        clock=lambda: fixed_time,
+    )
+    report = validate_encrypted_package(
+        package_path,
+        passphrase="correct horse battery staple",
+        clock=lambda: fixed_time,
+    )
+
+    assert header.inner_export_id == manifest.export_id
+    assert header.cipher == "aes-256-gcm"
+    assert package_path.read_bytes().startswith(b"MELLOA-EXPORT-AESGCM-V1\n")
+    assert b"Encrypt this owner export bundle." not in package_path.read_bytes()
+    assert report.valid is True
+    assert report.package_header == header
+    assert report.bundle_validation is not None
+    assert report.bundle_validation.export_id == manifest.export_id
+
+    wrong_passphrase = validate_encrypted_package(
+        package_path,
+        passphrase="correct horse battery wrong",
+        clock=lambda: fixed_time,
+    )
+    assert wrong_passphrase.valid is False
+    assert wrong_passphrase.errors == ("encrypted export package authentication failed",)
+
+    tampered = tmp_path / "tampered.melloaenc"
+    tampered_bytes = bytearray(package_path.read_bytes())
+    tampered_bytes[-1] ^= 0x01
+    tampered.write_bytes(tampered_bytes)
+    tampered_report = validate_encrypted_package(
+        tampered,
+        passphrase="correct horse battery staple",
+        clock=lambda: fixed_time,
+    )
+    assert tampered_report.valid is False
+    assert tampered_report.errors == ("encrypted export package authentication failed",)
+
+    with pytest.raises(ExportBundleError, match="already exists"):
+        write_encrypted_package(
+            bundle_dir,
+            package_path,
+            passphrase="correct horse battery staple",
+            clock=lambda: fixed_time,
+        )
+    with pytest.raises(ExportBundleError, match="passphrase"):
+        write_encrypted_package(
+            bundle_dir,
+            tmp_path / "short-passphrase.melloaenc",
+            passphrase="too short",
+            clock=lambda: fixed_time,
+        )
+
+    short_direct = validate_encrypted_package(
+        package_path,
+        passphrase="too short",
+        clock=lambda: fixed_time,
+    )
+    assert short_direct.valid is False
+    assert short_direct.errors == (
+        "export package passphrase must contain 16 to 4096 characters",
+    )
+
+    with pytest.raises(ExportBundleError, match="bundle must validate"):
+        write_encrypted_package(
+            tmp_path / "missing-bundle",
+            tmp_path / "missing-bundle.melloaenc",
+            passphrase="correct horse battery staple",
+            clock=lambda: fixed_time,
+        )
+
+
+def test_encrypted_export_validation_reports_malformed_packages(
+    tmp_path,
+    fixed_time,
+) -> None:
+    passphrase = "correct horse battery staple"
+    unknown = tmp_path / "unknown.melloaenc"
+    unknown.write_bytes(b"not-a-melloa-package")
+    assert validate_encrypted_package(
+        unknown,
+        passphrase=passphrase,
+        clock=lambda: fixed_time,
+    ).errors == ("encrypted export package has an unknown format",)
+
+    truncated = tmp_path / "truncated.melloaenc"
+    truncated.write_bytes(b"MELLOA-EXPORT-AESGCM-V1\n")
+    assert validate_encrypted_package(
+        truncated,
+        passphrase=passphrase,
+        clock=lambda: fixed_time,
+    ).errors == ("encrypted export package header is truncated",)
+
+    invalid_length = tmp_path / "invalid-length.melloaenc"
+    invalid_length.write_bytes(b"MELLOA-EXPORT-AESGCM-V1\n" + (0).to_bytes(4, "big"))
+    assert validate_encrypted_package(
+        invalid_length,
+        passphrase=passphrase,
+        clock=lambda: fixed_time,
+    ).errors == ("encrypted export package header length is invalid",)
+
+    invalid_header = tmp_path / "invalid-header.melloaenc"
+    invalid_header.write_bytes(
+        b"MELLOA-EXPORT-AESGCM-V1\n" + (2).to_bytes(4, "big") + b"{}"
+    )
+    invalid_header_report = validate_encrypted_package(
+        invalid_header,
+        passphrase=passphrase,
+        clock=lambda: fixed_time,
+    )
+    assert invalid_header_report.valid is False
+    assert "Field required" in invalid_header_report.errors[0]
 
 
 def test_owner_export_includes_redacted_delivery_status(
@@ -551,6 +696,63 @@ def test_export_contracts_reject_misleading_or_unsafe_metadata(fixed_time) -> No
             includes_blobs=False,
             files=(entry,),
         )
+    with pytest.raises(ValueError, match="authentication tag"):
+        EncryptedExportPackageHeader(
+            created_at=fixed_time,
+            inner_export_id="export_00000000000000000000000000000001",
+            scrypt_n=32768,
+            scrypt_r=8,
+            scrypt_p=1,
+            salt_b64="AAAAAAAAAAAAAAAAAAAAAA",
+            nonce_b64="AAAAAAAAAAAAAAAA",
+            plaintext_zip_hash="sha256:" + "0" * 64,
+            plaintext_zip_size_bytes=100,
+            ciphertext_size_bytes=100,
+        )
+    encrypted_header = EncryptedExportPackageHeader(
+        created_at=fixed_time,
+        inner_export_id="export_00000000000000000000000000000001",
+        scrypt_n=32768,
+        scrypt_r=8,
+        scrypt_p=1,
+        salt_b64="AAAAAAAAAAAAAAAAAAAAAA",
+        nonce_b64="AAAAAAAAAAAAAAAA",
+        plaintext_zip_hash="sha256:" + "0" * 64,
+        plaintext_zip_size_bytes=100,
+        ciphertext_size_bytes=116,
+    )
+    valid_bundle_report = CanonicalExportValidationReport(
+        export_id="export_00000000000000000000000000000001",
+        validated_at=fixed_time,
+        valid=True,
+        files_checked=1,
+    )
+    invalid_bundle_report = CanonicalExportValidationReport(
+        export_id="export_00000000000000000000000000000001",
+        validated_at=fixed_time,
+        valid=False,
+        files_checked=1,
+        errors=("bundle invalid",),
+    )
+    with pytest.raises(ValueError, match="cannot contain errors"):
+        EncryptedExportPackageValidationReport(
+            package_header=encrypted_header,
+            bundle_validation=valid_bundle_report,
+            validated_at=fixed_time,
+            valid=True,
+            errors=("unexpected",),
+        )
+    with pytest.raises(ValueError, match="requires package and bundle data"):
+        EncryptedExportPackageValidationReport(validated_at=fixed_time, valid=True)
+    with pytest.raises(ValueError, match="requires a valid bundle"):
+        EncryptedExportPackageValidationReport(
+            package_header=encrypted_header,
+            bundle_validation=invalid_bundle_report,
+            validated_at=fixed_time,
+            valid=True,
+        )
+    with pytest.raises(ValueError, match="must explain"):
+        EncryptedExportPackageValidationReport(validated_at=fixed_time, valid=False)
     with pytest.raises(ValueError, match="valid export report cannot contain errors"):
         CanonicalExportValidationReport(
             validated_at=fixed_time,

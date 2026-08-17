@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import os
 import shutil
 import tempfile
 import zipfile
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from binascii import Error as Base64DecodeError
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from pydantic import BaseModel, ValidationError
 
 from melloa.application.conversation import ConversationService
@@ -37,6 +44,8 @@ from melloa.domain.delivery import DeliveryWorkStatus
 from melloa.domain.exports import (
     CanonicalExportManifest,
     CanonicalExportValidationReport,
+    EncryptedExportPackageHeader,
+    EncryptedExportPackageValidationReport,
     ExportFileEntry,
     ExportFileKind,
 )
@@ -106,6 +115,12 @@ SCHEMA_SOURCE_PATHS = tuple(
         }
     )
 )
+_ENCRYPTED_PACKAGE_MAGIC = b"MELLOA-EXPORT-AESGCM-V1\n"
+_HEADER_LENGTH_BYTES = 4
+_PACKAGE_KEY_BYTES = 32
+_SCRYPT_N = 2**15
+_SCRYPT_R = 8
+_SCRYPT_P = 1
 
 
 class ExportBundleError(RuntimeError):
@@ -496,6 +511,94 @@ def validate_bundle(
     )
 
 
+def write_encrypted_package(
+    bundle_dir: Path,
+    package_path: Path,
+    *,
+    passphrase: str,
+    clock: Callable[[], datetime] = utc_now,
+) -> EncryptedExportPackageHeader:
+    validation = validate_bundle(bundle_dir, clock=clock)
+    if not validation.valid or validation.export_id is None:
+        raise ExportBundleError("export bundle must validate before encrypted packaging")
+    if not 16 <= len(passphrase) <= 4096:
+        raise ExportBundleError("export package passphrase must contain 16 to 4096 characters")
+    target = package_path.resolve()
+    if target.exists():
+        raise ExportBundleError("encrypted export package target already exists")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.parent.is_dir():
+        raise ExportBundleError("encrypted export package parent must be a directory")
+
+    zip_payload = _zip_bundle_bytes(bundle_dir)
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    header = EncryptedExportPackageHeader(
+        created_at=clock(),
+        inner_export_id=validation.export_id,
+        scrypt_n=_SCRYPT_N,
+        scrypt_r=_SCRYPT_R,
+        scrypt_p=_SCRYPT_P,
+        salt_b64=_b64_encode(salt),
+        nonce_b64=_b64_encode(nonce),
+        plaintext_zip_hash=sha256_digest(zip_payload),
+        plaintext_zip_size_bytes=len(zip_payload),
+        ciphertext_size_bytes=len(zip_payload) + 16,
+    )
+    header_bytes = canonical_json_bytes(header)
+    key = _derive_package_key(passphrase, salt, header)
+    ciphertext = AESGCM(key).encrypt(nonce, zip_payload, _package_aad(header_bytes))
+    if len(ciphertext) != header.ciphertext_size_bytes:
+        raise ExportBundleError("encrypted package ciphertext length was unexpected")
+    try:
+        with target.open("xb") as handle:
+            handle.write(_ENCRYPTED_PACKAGE_MAGIC)
+            handle.write(len(header_bytes).to_bytes(_HEADER_LENGTH_BYTES, "big"))
+            handle.write(header_bytes)
+            handle.write(ciphertext)
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    return header
+
+
+def validate_encrypted_package(
+    package_path: Path,
+    *,
+    passphrase: str,
+    clock: Callable[[], datetime] = utc_now,
+) -> EncryptedExportPackageValidationReport:
+    errors: list[str] = []
+    header: EncryptedExportPackageHeader | None = None
+    bundle_validation: CanonicalExportValidationReport | None = None
+    try:
+        header, header_bytes, ciphertext = _read_encrypted_package(package_path)
+        plaintext = _decrypt_package_payload(header, header_bytes, ciphertext, passphrase)
+        if sha256_digest(plaintext) != header.plaintext_zip_hash:
+            raise ExportBundleError("encrypted export package plaintext hash mismatch")
+        if len(plaintext) != header.plaintext_zip_size_bytes:
+            raise ExportBundleError("encrypted export package plaintext size mismatch")
+        with tempfile.TemporaryDirectory(prefix=".melloa-export-validate-") as directory:
+            bundle = Path(directory) / "bundle"
+            _extract_zip_bytes(plaintext, bundle)
+            bundle_validation = validate_bundle(bundle, clock=clock)
+            if not bundle_validation.valid:
+                errors.extend(bundle_validation.errors)
+            if bundle_validation.export_id != header.inner_export_id:
+                errors.append("encrypted package inner export ID does not match bundle")
+    except InvalidTag:
+        errors.append("encrypted export package authentication failed")
+    except (ExportBundleError, OSError, ValueError, ValidationError, zipfile.BadZipFile) as error:
+        errors.append(str(error))
+    return EncryptedExportPackageValidationReport(
+        package_header=header,
+        bundle_validation=bundle_validation,
+        validated_at=clock(),
+        valid=not errors,
+        errors=tuple(errors),
+    )
+
+
 def _prepare_target_dir(target_dir: Path) -> Path:
     target = target_dir.resolve()
     if target.exists() and not target.is_dir():
@@ -618,6 +721,108 @@ def _validate_jsonl(
             errors.append(f"{relative_path}:{line_number} does not match its schema model")
         count += 1
     return count
+
+
+def _zip_bundle_bytes(bundle_dir: Path) -> bytes:
+    root = bundle_dir.resolve()
+    if not root.is_dir():
+        raise ExportBundleError("export bundle directory is missing")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(root.rglob("*")):
+            if path.is_symlink():
+                raise ExportBundleError("export bundle must not contain symbolic links")
+            if not path.is_file():
+                continue
+            relative_path = path.relative_to(root).as_posix()
+            ExportFileEntry(
+                path=relative_path,
+                kind=ExportFileKind.SCHEMA,
+                content_hash=sha256_digest(path.read_bytes()),
+                size_bytes=path.stat().st_size,
+            )
+            archive.write(path, arcname=relative_path)
+    return buffer.getvalue()
+
+
+def _extract_zip_bytes(payload: bytes, target_dir: Path) -> None:
+    target = _prepare_target_dir(target_dir)
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        for member in archive.infolist():
+            if member.is_dir():
+                continue
+            destination = _contained_path(target, member.filename)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, destination.open("xb") as output:
+                shutil.copyfileobj(source, output)
+
+
+def _derive_package_key(
+    passphrase: str,
+    salt: bytes,
+    header: EncryptedExportPackageHeader,
+) -> bytes:
+    if not 16 <= len(passphrase) <= 4096:
+        raise ExportBundleError("export package passphrase must contain 16 to 4096 characters")
+    return Scrypt(
+        salt=salt,
+        length=_PACKAGE_KEY_BYTES,
+        n=header.scrypt_n,
+        r=header.scrypt_r,
+        p=header.scrypt_p,
+    ).derive(passphrase.encode("utf-8"))
+
+
+def _read_encrypted_package(
+    package_path: Path,
+) -> tuple[EncryptedExportPackageHeader, bytes, bytes]:
+    with package_path.resolve().open("rb") as handle:
+        if handle.read(len(_ENCRYPTED_PACKAGE_MAGIC)) != _ENCRYPTED_PACKAGE_MAGIC:
+            raise ExportBundleError("encrypted export package has an unknown format")
+        raw_length = handle.read(_HEADER_LENGTH_BYTES)
+        if len(raw_length) != _HEADER_LENGTH_BYTES:
+            raise ExportBundleError("encrypted export package header is truncated")
+        header_length = int.from_bytes(raw_length, "big")
+        if not 1 <= header_length <= 16_384:
+            raise ExportBundleError("encrypted export package header length is invalid")
+        header_bytes = handle.read(header_length)
+        if len(header_bytes) != header_length:
+            raise ExportBundleError("encrypted export package header is truncated")
+        header = EncryptedExportPackageHeader.model_validate_json(header_bytes)
+        ciphertext = handle.read()
+    if len(ciphertext) != header.ciphertext_size_bytes:
+        raise ExportBundleError("encrypted export package ciphertext size mismatch")
+    return header, header_bytes, ciphertext
+
+
+def _decrypt_package_payload(
+    header: EncryptedExportPackageHeader,
+    header_bytes: bytes,
+    ciphertext: bytes,
+    passphrase: str,
+) -> bytes:
+    key = _derive_package_key(passphrase, _b64_decode(header.salt_b64), header)
+    return AESGCM(key).decrypt(
+        _b64_decode(header.nonce_b64),
+        ciphertext,
+        _package_aad(header_bytes),
+    )
+
+
+def _package_aad(header_bytes: bytes) -> bytes:
+    return _ENCRYPTED_PACKAGE_MAGIC + header_bytes
+
+
+def _b64_encode(value: bytes) -> str:
+    return urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _b64_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    try:
+        return urlsafe_b64decode(value + padding)
+    except (Base64DecodeError, ValueError) as error:
+        raise ExportBundleError("encrypted export package contains invalid base64") from error
 
 
 def _load_jsonl(root: Path, relative_path: str) -> list[dict[str, Any]]:

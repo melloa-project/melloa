@@ -791,6 +791,164 @@ def test_parser_exposes_mvp_export_and_import_validation() -> None:
     assert import_args.handler is cli.import_validate
     assert import_args.bundle_dir == Path("/run/melloa/export-20260816")
 
+    encrypt_args = cli.build_parser().parse_args(
+        [
+            "export-encrypt",
+            "--bundle-dir",
+            "/run/melloa/export-20260816",
+            "--passphrase-file",
+            "/run/melloa/export-passphrase",
+            "--output-file",
+            "/run/melloa/export-20260816.melloaenc",
+        ]
+    )
+    assert encrypt_args.handler is cli.export_encrypt
+    assert encrypt_args.bundle_dir == Path("/run/melloa/export-20260816")
+    assert encrypt_args.passphrase_file == Path("/run/melloa/export-passphrase")
+    assert encrypt_args.output_file == Path("/run/melloa/export-20260816.melloaenc")
+
+    encrypted_validate_args = cli.build_parser().parse_args(
+        [
+            "export-decrypt-validate",
+            "--package-file",
+            "/run/melloa/export-20260816.melloaenc",
+            "--passphrase-file",
+            "/run/melloa/export-passphrase",
+        ]
+    )
+    assert encrypted_validate_args.handler is cli.export_decrypt_validate
+    assert encrypted_validate_args.package_file == Path("/run/melloa/export-20260816.melloaenc")
+    assert encrypted_validate_args.passphrase_file == Path("/run/melloa/export-passphrase")
+
+
+def test_export_encryption_cli_uses_private_passphrase_file(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    passphrase_file = tmp_path / "export-passphrase"
+    passphrase_file.write_text("correct horse battery staple\n", encoding="utf-8")
+    passphrase_file.chmod(0o600)
+    captured = {}
+
+    def write_package(bundle_dir, output_file, *, passphrase):
+        captured["bundle_dir"] = bundle_dir
+        captured["output_file"] = output_file
+        captured["passphrase"] = passphrase
+        output = '{"inner_export_id":"export_00000000000000000000000000000001"}'
+        return argparse.Namespace(
+            model_dump_json=lambda **_kwargs: output,
+        )
+
+    monkeypatch.setattr(cli, "write_encrypted_package", write_package)
+    args = argparse.Namespace(
+        bundle_dir=tmp_path / "bundle",
+        passphrase_file=passphrase_file,
+        output_file=tmp_path / "owner-export.melloaenc",
+    )
+
+    assert cli.export_encrypt(args) == 0
+    assert captured == {
+        "bundle_dir": tmp_path / "bundle",
+        "output_file": tmp_path / "owner-export.melloaenc",
+        "passphrase": "correct horse battery staple",
+    }
+    output = capsys.readouterr().out
+    assert "export_00000000000000000000000000000001" in output
+    assert "correct horse battery staple" not in output
+
+    passphrase_file.chmod(0o644)
+    with pytest.raises(SystemExit):
+        cli.export_encrypt(args)
+
+    passphrase_file.chmod(0o600)
+    passphrase_file.write_text("correct horse battery staple\n" + ("x" * 16_386), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        cli.export_encrypt(args)
+
+    passphrase_file.write_bytes(b"\xff")
+    passphrase_file.chmod(0o600)
+    with pytest.raises(SystemExit):
+        cli.export_encrypt(args)
+
+    with pytest.raises(SystemExit):
+        cli.export_encrypt(
+            argparse.Namespace(
+                bundle_dir=tmp_path / "bundle",
+                passphrase_file=tmp_path / "missing-passphrase",
+                output_file=tmp_path / "owner-export.melloaenc",
+            )
+        )
+
+    passphrase_dir = tmp_path / "passphrase-dir"
+    passphrase_dir.mkdir()
+    passphrase_dir.chmod(0o600)
+    with pytest.raises(SystemExit):
+        cli.export_encrypt(
+            argparse.Namespace(
+                bundle_dir=tmp_path / "bundle",
+                passphrase_file=passphrase_dir,
+                output_file=tmp_path / "owner-export.melloaenc",
+            )
+        )
+
+    passphrase_file.write_text("correct horse battery staple\n", encoding="utf-8")
+    passphrase_file.chmod(0o600)
+    monkeypatch.setattr(
+        cli,
+        "write_encrypted_package",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            cli.ExportBundleError("bundle rejected")
+        ),
+    )
+    with pytest.raises(SystemExit):
+        cli.export_encrypt(args)
+
+
+def test_encrypted_export_validation_cli_reports_package_status(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    passphrase_file = tmp_path / "export-passphrase"
+    passphrase_file.write_text("correct horse battery staple\n", encoding="utf-8")
+    passphrase_file.chmod(0o600)
+
+    def validate_package(package_file, *, passphrase):
+        assert package_file == tmp_path / "owner-export.melloaenc"
+        assert passphrase == "correct horse battery staple"
+        return argparse.Namespace(
+            valid=True,
+            model_dump_json=lambda **_kwargs: '{"valid":true}',
+        )
+
+    monkeypatch.setattr(cli, "validate_encrypted_package", validate_package)
+    args = argparse.Namespace(
+        package_file=tmp_path / "owner-export.melloaenc",
+        passphrase_file=passphrase_file,
+    )
+
+    assert cli.export_decrypt_validate(args) == 0
+    assert '"valid":true' in capsys.readouterr().out
+
+    monkeypatch.setattr(
+        cli,
+        "validate_encrypted_package",
+        lambda *_args, **_kwargs: argparse.Namespace(
+            valid=False,
+            model_dump_json=lambda **_dump_kwargs: '{"valid":false}',
+        ),
+    )
+    assert cli.export_decrypt_validate(args) == 1
+
+    monkeypatch.setattr(
+        cli,
+        "validate_encrypted_package",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("bad package")),
+    )
+    with pytest.raises(SystemExit):
+        cli.export_decrypt_validate(args)
+
 
 def test_parser_accepts_path_only_telegram_environment(monkeypatch) -> None:
     monkeypatch.setenv(

@@ -519,9 +519,23 @@ uv run melloa export-mvp \
 
 uv run melloa import-validate \
   --bundle-dir "$MELLOA_MVP_EXPORT_DIR"
+
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))' \
+  > "$MELLOA_MVP_STATE/export-passphrase"
+chmod 0600 "$MELLOA_MVP_STATE/export-passphrase"
+uv run melloa export-encrypt \
+  --bundle-dir "$MELLOA_MVP_EXPORT_DIR" \
+  --passphrase-file "$MELLOA_MVP_STATE/export-passphrase" \
+  --output-file "$MELLOA_MVP_EXPORT_DIR.melloaenc"
+
+uv run melloa export-decrypt-validate \
+  --package-file "$MELLOA_MVP_EXPORT_DIR.melloaenc" \
+  --passphrase-file "$MELLOA_MVP_STATE/export-passphrase"
 ```
 
 The first command verifies the signed Guardian projection, reads the mode-`0600` owner credential file without printing it, exports a newly composed process-local fixture or the configured PostgreSQL MVP stores, and refuses to write into a non-empty target directory. It does not attach to another running process's in-memory stores. Delivery status is exported in `conversations/deliveries.jsonl`, retention disclosure is exported in `inspection/retention.jsonl`, and model activity is exported in `inspection/model-activity.jsonl`. Deleted assertion values remain absent, but their content-free tombstones remain present in `assertions/inspections.jsonl`. The second command is validation-only; it does not mutate a database or import records yet.
+
+The encrypted package commands keep the passphrase in a mode-`0600` file rather than an argument or environment variable. `export-encrypt` validates the bundle first, wraps it as a ZIP, then encrypts that ZIP with AES-256-GCM using a Scrypt-derived key. `export-decrypt-validate` authenticates and decrypts the package into a temporary directory, reruns the canonical bundle validation, and removes the temporary plaintext. The clear package header contains only package metadata such as the inner export ID, KDF/cipher parameters, and payload hash/size; it does not include owner IDs, credentials, message text, assertion values, prompts, or model output.
 
 Expected bundle files include:
 
@@ -549,7 +563,7 @@ inspection/retention.jsonl
 assertions/inspections.jsonl
 ```
 
-This is not encrypted packaging, a logical SQL snapshot, blob export, or production backup. `manifest.json` states `encrypted: false`, `includes_sql_snapshot: false`, and `includes_blobs: false`; those limitations are deliberate until the full backup/export milestone lands. Do not place personal data in this preview export unless the target directory is protected by the owner.
+The export directory is still not itself encrypted, a logical SQL snapshot, blob export, signed archive, restore executor, or production backup. `manifest.json` states `encrypted: false`, `includes_sql_snapshot: false`, and `includes_blobs: false`; those limitations are deliberate until the full backup/export milestone lands. The `.melloaenc` wrapper protects the validated bundle while it is moved or stored, but it does not add missing SQL/blob content or prove clean restore. Do not place personal data in the plaintext preview export directory unless the target directory is protected by the owner.
 
 ### Expected route outcomes
 

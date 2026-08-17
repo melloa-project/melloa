@@ -32,7 +32,11 @@ from melloa.domain.delivery import (
     OutboundDeliveryWork,
 )
 from melloa.domain.events import EventEnvelope
-from melloa.domain.exports import CanonicalExportManifest, CanonicalExportValidationReport
+from melloa.domain.exports import (
+    CanonicalExportManifest,
+    CanonicalExportValidationReport,
+    EncryptedExportPackageHeader,
+)
 from melloa.domain.guardian import GuardianStatusPayload, SignedGuardianStatus
 from melloa.domain.identity import OwnerIdentity, PersistentIntelligenceIdentity
 from melloa.domain.inspection import OwnerModelActivityReport, OwnerTimelineReport
@@ -131,6 +135,10 @@ REGISTRY: dict[str, tuple[str, type[BaseModel]]] = {
     "owner-export/validation-report-v1.json": (
         "canonical-export-validation-report",
         CanonicalExportValidationReport,
+    ),
+    "owner-export/encrypted-package-v1.json": (
+        "encrypted-export-package",
+        EncryptedExportPackageHeader,
     ),
     "guardian/signed-status-v1.json": ("guardian-signed-status", SignedGuardianStatus),
     "guardian/status-payload-v1.json": ("guardian-status-payload", GuardianStatusPayload),

@@ -95,3 +95,52 @@ class CanonicalExportValidationReport(ContractModel):
         if not self.valid and not self.errors:
             raise ValueError("invalid export report must explain at least one error")
         return self
+
+
+class EncryptedExportPackageHeader(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    package_format_id: QualifiedName = "melloa.encrypted-owner-export-package"
+    package_format_version: SemanticVersion = "1.0.0"
+    created_at: AwareDatetime
+    inner_format_id: QualifiedName = "melloa.canonical-owner-export"
+    inner_export_id: RecordId
+    cipher: Literal["aes-256-gcm"] = "aes-256-gcm"
+    kdf: Literal["scrypt"] = "scrypt"
+    scrypt_n: Annotated[int, Field(ge=16384, le=1048576)]
+    scrypt_r: Annotated[int, Field(ge=1, le=64)]
+    scrypt_p: Annotated[int, Field(ge=1, le=16)]
+    salt_b64: str = Field(min_length=22, max_length=64)
+    nonce_b64: str = Field(min_length=16, max_length=32)
+    plaintext_zip_hash: Sha256Digest
+    plaintext_zip_size_bytes: Annotated[int, Field(gt=0)]
+    ciphertext_size_bytes: Annotated[int, Field(gt=0)]
+
+    @model_validator(mode="after")
+    def validate_package_header(self) -> EncryptedExportPackageHeader:
+        if self.ciphertext_size_bytes <= self.plaintext_zip_size_bytes:
+            raise ValueError("encrypted package ciphertext must include authentication tag")
+        return self
+
+
+class EncryptedExportPackageValidationReport(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    package_header: EncryptedExportPackageHeader | None = None
+    bundle_validation: CanonicalExportValidationReport | None = None
+    validated_at: AwareDatetime
+    valid: bool
+    errors: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_package_report(self) -> EncryptedExportPackageValidationReport:
+        if self.valid:
+            if self.errors:
+                raise ValueError("valid encrypted export report cannot contain errors")
+            if self.package_header is None or self.bundle_validation is None:
+                raise ValueError("valid encrypted export report requires package and bundle data")
+            if not self.bundle_validation.valid:
+                raise ValueError("valid encrypted export report requires a valid bundle")
+        elif not self.errors and (
+            self.bundle_validation is None or self.bundle_validation.valid
+        ):
+            raise ValueError("invalid encrypted export report must explain at least one error")
+        return self

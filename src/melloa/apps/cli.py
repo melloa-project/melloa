@@ -25,7 +25,13 @@ from melloa.adapters.postgres.migrations import (
     migration_status,
 )
 from melloa.adapters.telegram import TelegramBotApiConfig
-from melloa.application.exports import ExportBundleError, OwnerExportService, validate_bundle
+from melloa.application.exports import (
+    ExportBundleError,
+    OwnerExportService,
+    validate_bundle,
+    validate_encrypted_package,
+    write_encrypted_package,
+)
 from melloa.apps.core import create_app
 from melloa.apps.mvp import build_mvp_runtime
 from melloa.apps.postgres_mvp import (
@@ -95,6 +101,33 @@ def _read_owner_credential_file(path: Path) -> str:
     value = path.read_text(encoding="utf-8").strip()
     if not 32 <= len(value) <= 4096:
         _exit_error("owner credential file must contain between 32 and 4096 characters")
+    return value
+
+
+def _read_export_passphrase_file(path: Path) -> str:
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    except OSError:
+        _exit_error("export passphrase path must be a securely readable regular file")
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            _exit_error("export passphrase path must be a regular file")
+        if metadata.st_mode & 0o077:
+            _exit_error("export passphrase file must not be accessible by group or others")
+        if metadata.st_size > 16_385:
+            _exit_error("export passphrase file must contain between 16 and 4096 characters")
+        raw_value = os.read(descriptor, 16_386)
+    except OSError:
+        _exit_error("export passphrase file could not be read securely")
+    finally:
+        os.close(descriptor)
+    try:
+        value = raw_value.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        _exit_error("export passphrase file must contain UTF-8 text")
+    if not 16 <= len(value) <= 4096:
+        _exit_error("export passphrase file must contain between 16 and 4096 characters")
     return value
 
 
@@ -405,6 +438,31 @@ def import_validate(args: argparse.Namespace) -> int:
     return 0 if report.valid else 1
 
 
+def export_encrypt(args: argparse.Namespace) -> int:
+    try:
+        header = write_encrypted_package(
+            args.bundle_dir,
+            args.output_file,
+            passphrase=_read_export_passphrase_file(args.passphrase_file),
+        )
+    except (ExportBundleError, OSError, ValueError) as error:
+        _exit_error(f"MVP export encryption rejected: {error}")
+    print(header.model_dump_json(indent=2))
+    return 0
+
+
+def export_decrypt_validate(args: argparse.Namespace) -> int:
+    try:
+        report = validate_encrypted_package(
+            args.package_file,
+            passphrase=_read_export_passphrase_file(args.passphrase_file),
+        )
+    except (OSError, ValueError) as error:
+        _exit_error(f"MVP encrypted export validation rejected: {error}")
+    print(report.model_dump_json(indent=2))
+    return 0 if report.valid else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="melloa")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -556,6 +614,17 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser = subparsers.add_parser("import-validate")
     import_parser.add_argument("--bundle-dir", type=Path, required=True)
     import_parser.set_defaults(handler=import_validate)
+
+    encrypt_parser = subparsers.add_parser("export-encrypt")
+    encrypt_parser.add_argument("--bundle-dir", type=Path, required=True)
+    encrypt_parser.add_argument("--passphrase-file", type=Path, required=True)
+    encrypt_parser.add_argument("--output-file", type=Path, required=True)
+    encrypt_parser.set_defaults(handler=export_encrypt)
+
+    encrypted_validate_parser = subparsers.add_parser("export-decrypt-validate")
+    encrypted_validate_parser.add_argument("--package-file", type=Path, required=True)
+    encrypted_validate_parser.add_argument("--passphrase-file", type=Path, required=True)
+    encrypted_validate_parser.set_defaults(handler=export_decrypt_validate)
     return parser
 
 
