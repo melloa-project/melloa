@@ -62,7 +62,7 @@ const TERMINAL_PROCESSING_STATES = new Set(["completed", "dead", "cancelled"]);
 const starterPrompts = [
   {
     label: "Readiness check",
-    text: "Give me a concise local readiness check for this Melloa preview.",
+    text: "Give me a concise private MVP readiness check for this Melloa preview.",
   },
   {
     label: "Use memory evidence",

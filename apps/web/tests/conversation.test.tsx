@@ -395,6 +395,11 @@ describe("ConversationPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Start with what matters now" })).toBeInTheDocument();
     const starters = screen.getByLabelText("Starter prompts");
+    fireEvent.click(within(starters).getByRole("button", { name: /Readiness check/i }));
+    expect(screen.getByLabelText("Message Melli")).toHaveValue(
+      "Give me a concise private MVP readiness check for this Melloa preview.",
+    );
+
     fireEvent.click(within(starters).getByRole("button", { name: /Use memory evidence/i }));
 
     expect(screen.getByLabelText("Message Melli")).toHaveValue(

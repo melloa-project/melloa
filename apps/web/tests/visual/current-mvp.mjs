@@ -69,9 +69,9 @@ try {
   await page.getByText("Conversations", { exact: true }).waitFor();
 
   await page.getByRole("button", { name: "New conversation" }).click();
-  await page.getByLabel("Title").fill("Local MVP readiness");
+  await page.getByLabel("Title").fill("Private MVP readiness");
   await page.getByRole("button", { name: "Create conversation" }).click();
-  await page.getByRole("heading", { name: "Local MVP readiness" }).waitFor();
+  await page.getByRole("heading", { name: "Private MVP readiness" }).waitFor();
   await page.getByRole("heading", { name: "Start with what matters now" }).waitFor();
   await page.getByText("Use memory evidence", { exact: true }).waitFor();
   await page.getByText("Conversation created.", { exact: true }).waitFor({
@@ -89,7 +89,7 @@ try {
   });
   await page.setViewportSize({ width: 1440, height: 960 });
 
-  await page.getByLabel("Message Melli").fill("Give me a concise local readiness check.");
+  await page.getByLabel("Message Melli").fill("Give me a concise private MVP readiness check.");
   await page.getByRole("button", { name: "Send message" }).click();
   const response = page.getByText(/^Synthetic local reply\./);
   await response.waitFor({ timeout: 20_000 });

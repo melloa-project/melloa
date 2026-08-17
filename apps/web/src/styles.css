@@ -3919,8 +3919,8 @@ pre {
   }
 
   .message-scroll > .empty-state {
-    min-height: 185px;
-    padding: 20px 18px;
+    min-height: 150px;
+    padding: 14px 18px;
   }
 
   .starter-prompt-grid {
