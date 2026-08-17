@@ -1,14 +1,35 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 import pytest
 
 from melloa.adapters.fakes.store import InMemoryEventAuditStore
+from melloa.adapters.postgres.store import PostgresEventAuditStore
 from melloa.domain.base import canonical_json_bytes, sha256_digest
 from melloa.domain.events import EventEnvelope
-from melloa.ports.store import EventConflictError
+from melloa.ports.store import EventAuditQueryResult, EventConflictError
 from tests.conftest import record_id
+
+
+class _Rows:
+    def __init__(self, rows: tuple[tuple[Any, ...], ...]) -> None:
+        self._rows = rows
+
+    def fetchall(self) -> tuple[tuple[Any, ...], ...]:
+        return self._rows
+
+
+class _CountedSnapshotConnection:
+    def __init__(self, rows: tuple[tuple[Any, ...], ...]) -> None:
+        self.rows = rows
+        self.calls = 0
+
+    def execute(self, statement: str, _parameters: tuple[Any, ...]) -> _Rows:
+        self.calls += 1
+        assert "count(*) OVER ()" in statement
+        return _Rows(self.rows)
 
 
 def test_in_memory_event_audit_store_is_idempotent_and_chains(
@@ -116,3 +137,28 @@ def test_in_memory_event_audit_store_rejects_changed_event_replay(
 
     assert len(store.events) == 1
     assert len(store.audit_records) == 1
+
+
+def test_postgres_event_page_uses_one_counted_snapshot(event: EventEnvelope) -> None:
+    second_event = event.model_copy(update={"event_id": record_id("event", 2)})
+    connection = _CountedSnapshotConnection(
+        (
+            (second_event.model_dump(mode="json"), 2),
+            (event.model_dump(mode="json"), 2),
+        )
+    )
+    store = PostgresEventAuditStore(connection)  # type: ignore[arg-type]
+
+    result = store.list_events(
+        event_types=(event.event_type,),
+        subject_id=event.subject_ids[0],
+        occurred_from=event.occurred_at,
+        occurred_before=event.occurred_at + timedelta(hours=1),
+        limit=2,
+    )
+
+    assert connection.calls == 1
+    assert result.events == (second_event, event)
+    assert result.matching_events == 2
+    with pytest.raises(ValueError, match="cannot be below"):
+        EventAuditQueryResult(events=(event,), matching_events=0)

@@ -229,55 +229,48 @@ class PostgresOwnerSessionManager:
     def revoke_other_sessions(self, current_session_id: RecordId) -> int:
         revoked_at = self._clock()
         with self._connection.transaction():
-            current = self._connection.execute(
+            rows = self._connection.execute(
                 """
-                SELECT session.session_id
-                  FROM melloa.owner_sessions AS session
-                 WHERE session.session_id = %s
-                   AND session.owner_id = %s
-                   AND session.credential_digest = %s
-                   AND session.expires_at > %s
-                 FOR UPDATE
+                WITH current_session AS MATERIALIZED (
+                    SELECT session.session_id
+                      FROM melloa.owner_sessions AS session
+                     WHERE session.session_id = %s
+                       AND session.owner_id = %s
+                       AND session.credential_digest = %s
+                       AND session.expires_at > %s
+                       AND NOT EXISTS (
+                           SELECT 1
+                             FROM melloa.owner_session_revocations AS current_revocation
+                            WHERE current_revocation.session_id = session.session_id
+                       )
+                ), revoked AS (
+                    INSERT INTO melloa.owner_session_revocations (
+                        session_id, revoked_at, reason_code
+                    )
+                    SELECT session.session_id,
+                           greatest(session.authenticated_at, %s),
+                           'auth.owner-signout-other-sessions'
+                      FROM melloa.owner_sessions AS session
+                      CROSS JOIN current_session
+                      LEFT JOIN melloa.owner_session_revocations AS revocation
+                        ON revocation.session_id = session.session_id
+                     WHERE session.owner_id = %s
+                       AND session.credential_digest = %s
+                       AND session.session_id <> %s
+                       AND session.expires_at > %s
+                       AND revocation.session_id IS NULL
+                    ON CONFLICT DO NOTHING
+                    RETURNING session_id, revoked_at
+                )
+                SELECT revoked.session_id, revoked.revoked_at
+                  FROM current_session
+                  LEFT JOIN revoked ON true
                 """,
                 (
                     current_session_id,
                     self._owner_id,
                     self._bootstrap_digest,
                     revoked_at,
-                ),
-            ).fetchone()
-            if current is None:
-                raise OwnerSessionMissing("owner authentication failed")
-            current_revocation = self._connection.execute(
-                """
-                SELECT session_id
-                  FROM melloa.owner_session_revocations
-                 WHERE session_id = %s
-                """,
-                (current_session_id,),
-            ).fetchone()
-            if current_revocation is not None:
-                raise OwnerSessionMissing("owner authentication failed")
-            revoked = self._connection.execute(
-                """
-                INSERT INTO melloa.owner_session_revocations (
-                    session_id, revoked_at, reason_code
-                )
-                SELECT session.session_id,
-                       greatest(session.authenticated_at, %s),
-                       'auth.owner-signout-other-sessions'
-                  FROM melloa.owner_sessions AS session
-                  LEFT JOIN melloa.owner_session_revocations AS revocation
-                    ON revocation.session_id = session.session_id
-                 WHERE session.owner_id = %s
-                   AND session.credential_digest = %s
-                   AND session.session_id <> %s
-                   AND session.expires_at > %s
-                   AND revocation.session_id IS NULL
-                ON CONFLICT DO NOTHING
-                RETURNING session_id, revoked_at
-                """,
-                (
                     revoked_at,
                     self._owner_id,
                     self._bootstrap_digest,
@@ -285,6 +278,9 @@ class PostgresOwnerSessionManager:
                     revoked_at,
                 ),
             ).fetchall()
+            if not rows:
+                raise OwnerSessionMissing("owner authentication failed")
+            revoked = tuple(row for row in rows if row[0] is not None)
             for session_id, session_revoked_at in revoked:
                 self._append_session_audit(
                     session_id=str(session_id),

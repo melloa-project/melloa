@@ -49,6 +49,7 @@ from melloa.domain.models import (
 )
 from melloa.domain.retrieval import MemoryCitation, RetrievalManifest, RetrievalMethod
 from melloa.ports.conversation import CompletedConversationTurn
+from melloa.ports.store import EventAuditQueryResult
 from tests.conftest import record_id
 
 _BOOTSTRAP_TOKEN = "synthetic-bootstrap-token-value-0001"
@@ -414,6 +415,31 @@ def test_owner_timeline_includes_redacted_export_audit_events(fixed_time) -> Non
             metadata={"event_id": event.event_id, "result": "generated"},
         ),
     )
+    malformed_payload = {"message_text": "Hidden malformed export evidence"}
+    malformed_event = event.model_copy(
+        update={
+            "event_id": record_id("event", 2),
+            "occurred_at": event.occurred_at + timedelta(minutes=1),
+            "recorded_at": event.recorded_at + timedelta(minutes=1),
+            "subject_ids": (thread.owner_id,),
+            "payload": malformed_payload,
+            "integrity": EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(malformed_payload))
+            ),
+        }
+    )
+    audit_store.append_event(
+        malformed_event,
+        AuditContent(
+            audit_id=record_id("audit", 2),
+            event_type="audit.event-appended.v1",
+            occurred_at=malformed_event.occurred_at,
+            actor_id=thread.owner_id,
+            action="export.owner-preview.generate",
+            object_ids=(malformed_event.event_id,),
+            metadata={"event_id": malformed_event.event_id, "result": "generated"},
+        ),
+    )
     service = OwnerInspectionService(
         owner_id=thread.owner_id,
         conversation_store=store,
@@ -432,7 +458,7 @@ def test_owner_timeline_includes_redacted_export_audit_events(fixed_time) -> Non
     audit_event = next(
         entry
         for entry in report.entries
-        if entry.kind == "timeline.audit.owner-export-preview-generated"
+        if entry.metadata.get("export_id") == record_id("export", 1)
     )
     assert audit_event.source == "timeline.source.audit-ledger"
     assert audit_event.status == "audit.owner-export-preview.generated"
@@ -450,11 +476,89 @@ def test_owner_timeline_includes_redacted_export_audit_events(fixed_time) -> Non
         "includes_sql_snapshot": False,
         "includes_blobs": False,
     }
+    malformed_projection = next(
+        entry
+        for entry in report.entries
+        if entry.metadata.get("source_event_id") == malformed_event.event_id
+    )
+    assert malformed_projection.references == (malformed_event.event_id,)
+    assert malformed_projection.metadata["export_id"] is None
     encoded = report.model_dump_json()
     assert "Synthetic prompt" not in encoded
     assert "owner-export.zip" not in encoded
     assert "sha256:" + "a" * 64 not in encoded
     assert "export.preview-unencrypted" not in encoded
+    assert "Hidden malformed export evidence" not in encoded
+
+
+def test_owner_timeline_discloses_matches_beyond_audit_page(fixed_time) -> None:
+    store, thread = _populated_store(fixed_time)
+    baseline = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        clock=lambda: fixed_time + timedelta(hours=3),
+    ).timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+        limit=500,
+    )
+    payload = {"export_id": record_id("export", 1)}
+    occurred_at = fixed_time + timedelta(hours=2, minutes=30)
+    base_event = EventEnvelope(
+        event_id=record_id("event", 1),
+        event_type="export.owner-preview-generated.v1",
+        schema_version="1.0.0",
+        occurred_at=occurred_at,
+        recorded_at=occurred_at,
+        subject_ids=(thread.owner_id, record_id("export", 1)),
+        source=EventSource(
+            capability_id="export.owner-preview",
+            execution_id=record_id("event", 1),
+        ),
+        producer=EventProducer(component="export.private-core", version="0.1.0"),
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        sensitivity=Sensitivity.INTERNAL,
+        trust=TrustLabel.TRUSTED_SYSTEM,
+        retention_policy="retention.audit-ledger",
+        payload=payload,
+        integrity=EventIntegrity(payload_hash=sha256_digest(canonical_json_bytes(payload))),
+    )
+    audit_events = tuple(
+        base_event.model_copy(
+            update={
+                "event_id": record_id("event", number),
+                "occurred_at": occurred_at + timedelta(microseconds=number),
+                "recorded_at": occurred_at + timedelta(microseconds=number),
+            }
+        )
+        for number in range(1, 501)
+    )
+
+    class CountedAuditStore:
+        def list_events(self, **_kwargs) -> EventAuditQueryResult:
+            return EventAuditQueryResult(events=audit_events, matching_events=501)
+
+    report = OwnerInspectionService(
+        owner_id=thread.owner_id,
+        conversation_store=store,
+        event_audit_store=CountedAuditStore(),  # type: ignore[arg-type]
+        clock=lambda: fixed_time + timedelta(hours=3),
+    ).timeline(
+        _principal(fixed_time),
+        window_start=fixed_time,
+        window_end=fixed_time + timedelta(hours=3),
+        limit=500,
+    )
+
+    assert report.total_events == 500
+    assert report.matching_events == baseline.matching_events + 501
+    assert report.truncated is True
+    assert "timeline.limit.newest-events-only" in report.limitations
+    assert all(
+        entry.kind == "timeline.audit.owner-export-preview-generated"
+        for entry in report.entries
+    )
 
 
 def test_owner_timeline_includes_delivery_when_configured(fixed_time) -> None:

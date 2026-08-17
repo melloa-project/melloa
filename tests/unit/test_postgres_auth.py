@@ -93,8 +93,22 @@ class _Connection:
             credential_digest, csrf_digest, document, session_id = stored[:4]
             revoked = session_id if session_id in self.database.revoked_session_ids else None
             return _Result((credential_digest, csrf_digest, document, revoked))
-        if "FOR UPDATE" in statement and "session.session_id = %s" in statement:
-            current_session_id, owner_id, credential_digest, now = parameters
+        if "'auth.owner-signout-other-sessions'" in statement:
+            (
+                current_session_id,
+                owner_id,
+                credential_digest,
+                now,
+                revoked_at,
+                selected_owner_id,
+                selected_credential_digest,
+                selected_current_session_id,
+                selected_now,
+            ) = parameters
+            assert selected_owner_id == owner_id
+            assert selected_credential_digest == credential_digest
+            assert selected_current_session_id == current_session_id
+            assert selected_now == now
             current = next(
                 (
                     stored
@@ -103,17 +117,12 @@ class _Connection:
                     and stored[4] == owner_id
                     and stored[0] == credential_digest
                     and stored[6] > now
+                    and stored[3] not in self.database.revoked_session_ids
                 ),
                 None,
             )
-            return _Result(None if current is None else (current_session_id,))
-        if "FROM melloa.owner_session_revocations" in statement:
-            session_id = parameters[0]
-            if session_id in self.database.revoked_session_ids:
-                return _Result((session_id,))
-            return _Result(None)
-        if "'auth.owner-signout-other-sessions'" in statement:
-            revoked_at, owner_id, credential_digest, current_session_id, now = parameters
+            if current is None:
+                return _Result(rows=())
             revoked_rows: list[tuple[Any, ...]] = []
             for stored in self.database.sessions.values():
                 session_id = stored[3]
@@ -126,7 +135,7 @@ class _Connection:
                 ):
                     self.database.revoked_session_ids.add(session_id)
                     revoked_rows.append((session_id, max(stored[5], revoked_at)))
-            return _Result(rows=tuple(revoked_rows))
+            return _Result(rows=tuple(revoked_rows) or ((None, None),))
         if "INSERT INTO melloa.owner_session_revocations" in statement:
             session_digest = parameters[1]
             stored = self.database.sessions.get(session_digest)

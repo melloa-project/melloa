@@ -19,6 +19,10 @@ class EventAuditQueryResult:
     events: tuple[EventEnvelope, ...]
     matching_events: int
 
+    def __post_init__(self) -> None:
+        if self.matching_events < len(self.events):
+            raise ValueError("event query matches cannot be below returned events")
+
 
 class EventAuditStore(Protocol):
     def append_event(self, event: EventEnvelope, audit: AuditContent) -> AuditRecord | None:

@@ -9,7 +9,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from melloa.domain.audit import AuditContent, AuditRecord, audit_record_hash
-from melloa.domain.base import QualifiedName, RecordId
+from melloa.domain.base import QualifiedName, RecordId, canonical_json_bytes
 from melloa.domain.events import EventEnvelope
 from melloa.domain.retention import (
     RetentionInventoryCoverage,
@@ -144,23 +144,23 @@ class PostgresEventAuditStore:
     ) -> EventAuditQueryResult:
         if not event_types:
             return EventAuditQueryResult(events=(), matching_events=0)
-        count_row = self._connection.execute(
-            """
-            SELECT count(*)::bigint
-              FROM melloa.canonical_events
-             WHERE event_type = ANY(%s)
-               AND document->'subject_ids' ? %s
-               AND occurred_at >= %s
-               AND occurred_at < %s
-            """,
-            (list(event_types), subject_id, occurred_from, occurred_before),
-        ).fetchone()
-        matching_events = 0 if count_row is None else int(count_row[0])
         if limit <= 0:
+            count_row = self._connection.execute(
+                """
+                SELECT count(*)::bigint
+                  FROM melloa.canonical_events
+                 WHERE event_type = ANY(%s)
+                   AND document->'subject_ids' ? %s
+                   AND occurred_at >= %s
+                   AND occurred_at < %s
+                """,
+                (list(event_types), subject_id, occurred_from, occurred_before),
+            ).fetchone()
+            matching_events = 0 if count_row is None else int(count_row[0])
             return EventAuditQueryResult(events=(), matching_events=matching_events)
         rows = self._connection.execute(
             """
-            SELECT document
+            SELECT document, count(*) OVER ()::bigint AS matching_events
               FROM melloa.canonical_events
              WHERE event_type = ANY(%s)
                AND document->'subject_ids' ? %s
@@ -172,6 +172,9 @@ class PostgresEventAuditStore:
             (list(event_types), subject_id, occurred_from, occurred_before, limit),
         ).fetchall()
         return EventAuditQueryResult(
-            events=tuple(EventEnvelope.model_validate(row[0]) for row in rows),
-            matching_events=matching_events,
+            events=tuple(
+                EventEnvelope.model_validate_json(canonical_json_bytes(row[0]))
+                for row in rows
+            ),
+            matching_events=0 if not rows else int(rows[0][1]),
         )

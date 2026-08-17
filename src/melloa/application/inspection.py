@@ -441,8 +441,6 @@ class OwnerInspectionService:
         events: list[OwnerTimelineEvent] = []
         for event in export_result.events:
             export_id = _payload_text(event.payload, "export_id")
-            if export_id is None:
-                continue
             events.append(
                 self._timeline_event(
                     "timeline.audit.owner-export-preview-generated",
@@ -451,7 +449,11 @@ class OwnerInspectionService:
                     source="timeline.source.audit-ledger",
                     summary="Owner export preview generated and audited.",
                     status="audit.owner-export-preview.generated",
-                    references=(export_id, event.event_id),
+                    references=tuple(
+                        reference
+                        for reference in (export_id, event.event_id)
+                        if reference is not None
+                    ),
                     metadata={
                         "export_id": export_id,
                         "source_event_id": event.event_id,
