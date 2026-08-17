@@ -570,6 +570,30 @@ describe("ConversationPage", () => {
     expect(mocks.inspectTurn).toHaveBeenCalledWith(thread.thread_id, turn.turn_id);
   });
 
+  it("surfaces a route for a conversation missing from the thread list", async () => {
+    const missingThreadId = "thread_missing_00000000000000000001";
+
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${missingThreadId}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationWithLocation />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Requested conversation is not available")).toBeInTheDocument();
+    expect(screen.getByText(missingThreadId)).toBeInTheDocument();
+    expect(screen.getByText(`conversation-path=/conversation/${missingThreadId}`)).toBeInTheDocument();
+    expect(mocks.listMessages).not.toHaveBeenCalled();
+    expect(mocks.listTurns).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy requested conversation ID ${missingThreadId}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(missingThreadId));
+    expect(mocks.notify).toHaveBeenCalledWith("Requested conversation ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open available conversation" }));
+    await waitFor(() => expect(screen.getByText(`conversation-path=/conversation/${thread.thread_id}`)).toBeInTheDocument());
+    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
+  });
+
   it("surfaces and clears a route query for a turn missing from the thread", async () => {
     const missingTurnId = "turn_missing_00000000000000000001";
 
@@ -665,7 +689,12 @@ function ConversationWithLocation() {
 
 function ConversationLocation() {
   const location = useLocation();
-  return <div>{`conversation-search=${location.search}`}</div>;
+  return (
+    <>
+      <div>{`conversation-path=${location.pathname}`}</div>
+      <div>{`conversation-search=${location.search}`}</div>
+    </>
+  );
 }
 
 type Deferred<T> = {

@@ -115,6 +115,7 @@ export function ConversationPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const selectedThread = threads.find((thread) => thread.thread_id === threadId) ?? null;
+  const firstThread = threads[0] ?? null;
   const composerState = threadId === undefined ? EMPTY_COMPOSER_STATE : composerStateByThread[threadId] ?? EMPTY_COMPOSER_STATE;
   const draft = composerState.draft;
   const submissionKey = composerState.submissionKey;
@@ -159,6 +160,12 @@ export function ConversationPage() {
     && conversationReady
     && !turns.some((turn) => turn.turn_id === queryTurnId)
     ? queryTurnId
+    : null;
+  const missingThreadId = !loadingThreads
+    && threadId !== undefined
+    && threads.length > 0
+    && selectedThread === null
+    ? threadId
     : null;
 
   const loadThreads = useCallback(async () => {
@@ -230,11 +237,18 @@ export function ConversationPage() {
     if (loadingThreads || threads.length === 0) {
       return;
     }
-    if (threadId === undefined || !threads.some((thread) => thread.thread_id === threadId)) {
-      const first = threads[0];
-      if (first !== undefined) {
-        navigate(`/conversation/${first.thread_id}`, { replace: true });
+    if (threadId === undefined) {
+      if (firstThread !== null) {
+        navigate(`/conversation/${firstThread.thread_id}`, { replace: true });
       }
+      return;
+    }
+    if (!threads.some((thread) => thread.thread_id === threadId)) {
+      setSelectedTurnId(null);
+      setSelectedMessageId(null);
+      setSelectedDeliveryWorkId(null);
+      setInspection(null);
+      setLoadedConversationThreadId(null);
       return;
     }
     setSelectedTurnId(null);
@@ -242,7 +256,7 @@ export function ConversationPage() {
     setSelectedDeliveryWorkId(null);
     setInspection(null);
     void loadConversation(threadId);
-  }, [loadConversation, loadingThreads, navigate, threadId, threads]);
+  }, [firstThread, loadConversation, loadingThreads, navigate, threadId, threads]);
 
   useEffect(() => {
     if (queryTurnId === null || selectedThread === null || loadedConversationThreadId !== selectedThread.thread_id) {
@@ -502,7 +516,34 @@ export function ConversationPage() {
       </aside>
 
       <section className="conversation-main" aria-label="Canonical conversation">
-        {selectedThread === null ? (
+        {missingThreadId !== null ? (
+          <div className="conversation-main-missing">
+            <div className="conversation-missing-thread" role="status">
+              <CircleAlert aria-hidden="true" size={20} />
+              <span>
+                <strong>Requested conversation is not available</strong>
+                <small>The provenance link may point to a retired, repaired, or different conversation thread.</small>
+              </span>
+              <code title={missingThreadId}>{missingThreadId}</code>
+              <div className="conversation-missing-thread-actions">
+                <Button
+                  aria-label={`Copy requested conversation ID ${missingThreadId}`}
+                  onClick={() => void copyTurnLedgerId("Requested conversation", missingThreadId)}
+                  size="icon"
+                  tone="ghost"
+                  title="Copy requested conversation ID"
+                >
+                  <Copy aria-hidden="true" size={15} />
+                </Button>
+                {firstThread === null ? null : (
+                  <Button onClick={() => navigate(`/conversation/${firstThread.thread_id}`, { replace: true })} tone="primary">
+                    <ChevronRight aria-hidden="true" size={15} /> Open available conversation
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : selectedThread === null ? (
           <EmptyState
             action={<Button disabled={!canMutate} onClick={() => setCreateOpen(true)} tone="primary"><Plus size={16} /> Start a conversation</Button>}
             description="Create a private first-party thread. Messages remain channel-neutral and inspectable."
