@@ -36,6 +36,12 @@ class IssuedOwnerSession:
     csrf_token: str = field(repr=False)
 
 
+@dataclass(frozen=True)
+class OwnerSessionCleanupResult:
+    expired_sessions: int
+    expired_revocations: int = 0
+
+
 class OwnerSessionManager(Protocol):
     def issue(self, credential: str) -> IssuedOwnerSession:
         """Authenticate one owner credential and issue a short-lived browser session."""
@@ -58,3 +64,6 @@ class OwnerSessionManager(Protocol):
 
     def revoke_other_sessions(self, current_session_id: RecordId) -> int:
         """Revoke every active session except the authenticated current session."""
+
+    def cleanup_expired_sessions(self, *, limit: int = 1000) -> OwnerSessionCleanupResult:
+        """Remove bounded expired session state while preserving append audit records."""

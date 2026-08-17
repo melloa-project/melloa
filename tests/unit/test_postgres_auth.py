@@ -115,6 +115,27 @@ class _Connection:
                 return _Result(None)
             self.database.revoked_session_ids.add(stored[3])
             return _Result((stored[3], parameters[0]))
+        if "cleanup_expired_owner_sessions" in statement:
+            owner_id, before, limit = parameters
+            expired = tuple(
+                sorted(
+                    (
+                        (stored[6], stored[3], digest)
+                        for digest, stored in self.database.sessions.items()
+                        if stored[4] == owner_id and stored[6] <= before
+                    ),
+                    key=lambda row: (row[0], row[1]),
+                )
+            )[:limit]
+            expired_session_ids = {session_id for _expires, session_id, _digest in expired}
+            expired_revocations = len(
+                self.database.revoked_session_ids.intersection(expired_session_ids)
+            )
+            self.database.revoked_session_ids.difference_update(expired_session_ids)
+            for _expires, session_id, digest in expired:
+                self.database.sessions.pop(digest, None)
+                self.database.session_ids.discard(session_id)
+            return _Result((len(expired), expired_revocations))
         raise AssertionError(f"unexpected SQL: {statement}")
 
     @contextmanager
@@ -279,6 +300,56 @@ def test_postgres_owner_session_expiry_collision_and_validation(fixed_time) -> N
             _BOOTSTRAP_TOKEN,
             token_factory=lambda: "",
         ).issue(_BOOTSTRAP_TOKEN)
+
+
+def test_postgres_owner_session_cleanup_removes_expired_rows_and_revocations(
+    fixed_time,
+) -> None:
+    database = _SessionDatabase()
+    now = fixed_time
+    tokens = iter(
+        (
+            "first-csrf",
+            "first-session",
+            "second-csrf",
+            "second-session",
+        )
+    )
+    session_ids = iter((record_id("session", 1), record_id("session", 2)))
+    manager = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+        id_factory=lambda _prefix: next(session_ids),
+        session_ttl=timedelta(minutes=10),
+    )
+    first = manager.issue(_BOOTSTRAP_TOKEN)
+    now = fixed_time + timedelta(seconds=1)
+    second = manager.issue(_BOOTSTRAP_TOKEN)
+    manager.revoke(first.session_token)
+
+    now = fixed_time + timedelta(minutes=11)
+    cleanup = manager.cleanup_expired_sessions(limit=1)
+
+    assert cleanup.expired_sessions == 1
+    assert cleanup.expired_revocations == 1
+    assert first.principal.session_id not in database.session_ids
+    assert first.principal.session_id not in database.revoked_session_ids
+    assert second.principal.session_id in database.session_ids
+    assert len(database.sessions) == 1
+
+    cleanup = manager.cleanup_expired_sessions(limit=10)
+    assert cleanup.expired_sessions == 1
+    assert cleanup.expired_revocations == 0
+    assert database.sessions == {}
+    assert database.session_ids == set()
+    assert database.revoked_session_ids == set()
+    with pytest.raises(ValueError, match="session cleanup limit"):
+        manager.cleanup_expired_sessions(limit=-1)
+    with pytest.raises(ValueError, match="session cleanup limit"):
+        manager.cleanup_expired_sessions(limit=10_001)
 
 
 def test_postgres_owner_lists_and_audits_other_session_revocation(fixed_time) -> None:

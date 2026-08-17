@@ -66,6 +66,44 @@ def test_owner_session_rejects_bad_credentials_expiry_and_revocation(fixed_time)
         manager.verify(issued.session_token)
 
 
+def test_owner_session_cleanup_removes_expired_sessions(fixed_time) -> None:
+    now = fixed_time
+    tokens = iter(
+        (
+            "first-session-token",
+            "first-csrf-token",
+            "second-session-token",
+            "second-csrf-token",
+        )
+    )
+    manager = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+        session_ttl=timedelta(minutes=10),
+    )
+    first = manager.issue("synthetic-bootstrap-token-value-0001")
+    now = fixed_time + timedelta(seconds=1)
+    second = manager.issue("synthetic-bootstrap-token-value-0001")
+
+    now = fixed_time + timedelta(minutes=10)
+    cleanup = manager.cleanup_expired_sessions(limit=1)
+
+    assert cleanup.expired_sessions == 1
+    assert cleanup.expired_revocations == 0
+    assert manager.verify(second.session_token) == second.principal
+    with pytest.raises(AuthenticationError):
+        manager.verify(first.session_token)
+
+    now = fixed_time + timedelta(minutes=11)
+    assert manager.active_sessions() == ()
+    with pytest.raises(ValueError, match="session cleanup limit"):
+        manager.cleanup_expired_sessions(limit=-1)
+    with pytest.raises(ValueError, match="session cleanup limit"):
+        manager.cleanup_expired_sessions(limit=10_001)
+
+
 def test_owner_can_list_and_revoke_other_active_sessions(fixed_time) -> None:
     now = fixed_time
     tokens = iter(

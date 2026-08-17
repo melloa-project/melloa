@@ -30,6 +30,7 @@ from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
     IssuedOwnerSession,
+    OwnerSessionCleanupResult,
     OwnerSessionExpired,
     OwnerSessionMissing,
     RecentAuthenticationRequired,
@@ -37,6 +38,7 @@ from melloa.ports.auth import (
 from melloa.ports.store import EventAuditStore
 
 _MAXIMUM_SECRET_LENGTH = 4096
+_MAXIMUM_CLEANUP_LIMIT = 10_000
 _AUTHENTICATION_METHOD = "auth.local-opaque-token"
 
 
@@ -204,6 +206,7 @@ class PostgresOwnerSessionManager:
                 )
 
     def active_sessions(self) -> tuple[AuthenticatedOwner, ...]:
+        self.cleanup_expired_sessions()
         rows = self._connection.execute(
             """
             SELECT session.document
@@ -260,6 +263,25 @@ class PostgresOwnerSessionManager:
                     lifecycle="revoked",
                 )
         return len(revoked)
+
+    def cleanup_expired_sessions(self, *, limit: int = 1000) -> OwnerSessionCleanupResult:
+        if not 0 <= limit <= _MAXIMUM_CLEANUP_LIMIT:
+            raise ValueError("session cleanup limit must be between 0 and 10000")
+        if limit == 0:
+            return OwnerSessionCleanupResult(expired_sessions=0, expired_revocations=0)
+        row = self._connection.execute(
+            """
+            SELECT expired_sessions, expired_revocations
+              FROM melloa.cleanup_expired_owner_sessions(%s, %s, %s)
+            """,
+            (self._owner_id, self._clock(), limit),
+        ).fetchone()
+        if row is None:
+            return OwnerSessionCleanupResult(expired_sessions=0, expired_revocations=0)
+        return OwnerSessionCleanupResult(
+            expired_sessions=int(row[0]),
+            expired_revocations=int(row[1]),
+        )
 
     def _validated_principal(self, document: Any) -> AuthenticatedOwner:
         try:

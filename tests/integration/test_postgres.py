@@ -1980,6 +1980,11 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert third_connections[-1].execute(
             "SELECT count(*) FROM melloa.owner_session_revocations"
         ).fetchone() == (2,)
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            third_connections[-1].execute(
+                "DELETE FROM melloa.owner_sessions WHERE session_id = %s",
+                (login.json()["principal"]["session_id"],),
+            )
         audit_inventory = third_runtime.event_audit_store.audit_retention_inventory()
         assert audit_inventory.retained_objects == 6
         auth_events = third_connections[-1].execute(
@@ -2022,6 +2027,31 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
                 "auth.owner-session.revoke",
             ],
         )
+        cleanup = third_connections[-1].execute(
+            """
+            SELECT expired_sessions, expired_revocations
+              FROM melloa.cleanup_expired_owner_sessions(%s, %s, %s)
+            """,
+            (SYNTHETIC_OWNER_ID, fixed_time + timedelta(hours=1), 10),
+        ).fetchone()
+        assert cleanup == (2, 2)
+        with pytest.raises(psycopg.errors.InvalidParameterValue):
+            third_connections[-1].execute(
+                """
+                SELECT expired_sessions, expired_revocations
+                  FROM melloa.cleanup_expired_owner_sessions(%s, %s, %s)
+                """,
+                (SYNTHETIC_OWNER_ID, fixed_time + timedelta(hours=1), None),
+            )
+        assert third_connections[-1].execute(
+            """
+            SELECT
+                (SELECT count(*) FROM melloa.owner_sessions),
+                (SELECT count(*) FROM melloa.owner_session_revocations),
+                (SELECT count(*) FROM melloa.canonical_events
+                  WHERE event_type LIKE 'auth.owner-session-%')
+            """
+        ).fetchone() == (0, 0, 4)
 
 
 def _telegram_update(

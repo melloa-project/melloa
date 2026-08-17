@@ -16,12 +16,14 @@ from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
     IssuedOwnerSession,
+    OwnerSessionCleanupResult,
     OwnerSessionExpired,
     OwnerSessionMissing,
     RecentAuthenticationRequired,
 )
 
 _MAXIMUM_SECRET_LENGTH = 4096
+_MAXIMUM_CLEANUP_LIMIT = 10_000
 
 
 def _digest(value: str) -> bytes:
@@ -123,13 +125,15 @@ class InMemoryOwnerSessionManager:
             self._sessions.pop(_digest(session_token), None)
 
     def active_sessions(self) -> tuple[AuthenticatedOwner, ...]:
+        self.cleanup_expired_sessions()
         now = self._clock()
-        for session_digest, record in tuple(self._sessions.items()):
-            if now >= record.principal.expires_at:
-                self._sessions.pop(session_digest, None)
         return tuple(
             sorted(
-                (record.principal for record in self._sessions.values()),
+                (
+                    record.principal
+                    for record in self._sessions.values()
+                    if now < record.principal.expires_at
+                ),
                 key=lambda principal: (principal.authenticated_at, principal.session_id),
                 reverse=True,
             )
@@ -149,6 +153,21 @@ class InMemoryOwnerSessionManager:
         for session_digest in revoked_digests:
             self._sessions.pop(session_digest, None)
         return len(revoked_digests)
+
+    def cleanup_expired_sessions(self, *, limit: int = 1000) -> OwnerSessionCleanupResult:
+        if not 0 <= limit <= _MAXIMUM_CLEANUP_LIMIT:
+            raise ValueError("session cleanup limit must be between 0 and 10000")
+        if limit == 0:
+            return OwnerSessionCleanupResult(expired_sessions=0)
+        now = self._clock()
+        expired_digests = tuple(
+            session_digest
+            for session_digest, record in self._sessions.items()
+            if now >= record.principal.expires_at
+        )[:limit]
+        for session_digest in expired_digests:
+            self._sessions.pop(session_digest, None)
+        return OwnerSessionCleanupResult(expired_sessions=len(expired_digests))
 
     def _new_unique_session_token(self) -> str:
         for _attempt in range(8):
