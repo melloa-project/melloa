@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Brain,
   CheckCircle2,
+  ExternalLink,
   GitBranch,
   History,
   PencilLine,
@@ -66,6 +67,14 @@ export function MemoryPage() {
     }
     if (normalized === assertionQuery) {
       void inspect(normalized);
+      return;
+    }
+    setSearchParams({ assertion: normalized });
+  }
+
+  function inspectRelatedAssertion(assertionId: string) {
+    const normalized = assertionId.trim();
+    if (normalized.length === 0 || normalized === "unknown") {
       return;
     }
     setSearchParams({ assertion: normalized });
@@ -203,10 +212,13 @@ export function MemoryPage() {
             <Card className="memory-lineage-card">
               <div className="subsection-heading"><GitBranch size={17} /><div><h2>Provenance</h2><p>{inspection.provenance_edges.length} recorded edges</p></div></div>
               {inspection.provenance_edges.length === 0 ? <p className="muted-copy">No upstream provenance edges are recorded.</p> : inspection.provenance_edges.map((edge, index) => (
-                <details className="record-details" key={`${readString(edge, "edge_id")}-${index}`}>
-                  <summary><span>{titleCase(readString(edge, "relationship"))}</span><code>{shortId(readString(edge, "edge_id"))}</code></summary>
-                  <pre>{safeJson(edge)}</pre>
-                </details>
+                <ProvenanceEdgeDetails
+                  currentAssertionId={inspection.assertion.assertion_id}
+                  edge={edge}
+                  index={index}
+                  key={`${readString(edge, "edge_id")}-${index}`}
+                  onInspectAssertion={inspectRelatedAssertion}
+                />
               ))}
             </Card>
             <Card className="memory-lineage-card">
@@ -303,4 +315,79 @@ function memoryActionPastTense(action: MemoryAction): string {
 function stateChangeLabel(change: JsonObject): string {
   const explicitType = readString(change, "change_type");
   return titleCase(explicitType === "unknown" ? readString(change, "reason") : explicitType);
+}
+
+function ProvenanceEdgeDetails({
+  currentAssertionId,
+  edge,
+  index,
+  onInspectAssertion,
+}: {
+  readonly currentAssertionId: string;
+  readonly edge: JsonObject;
+  readonly index: number;
+  readonly onInspectAssertion: (assertionId: string) => void;
+}) {
+  const edgeId = readString(edge, "edge_id");
+  const fromId = readString(edge, "from_id");
+  const toId = readString(edge, "to_id");
+  const relation = provenanceRelation(edge);
+  return (
+    <details className="record-details" key={`${edgeId}-${index}`}>
+      <summary><span>{titleCase(relation)}</span><code>{shortId(edgeId)}</code></summary>
+      <div className="provenance-edge-summary">
+        <ProvenanceEndpoint
+          currentAssertionId={currentAssertionId}
+          label="From"
+          onInspectAssertion={onInspectAssertion}
+          value={fromId}
+        />
+        <span className="provenance-relation">{titleCase(relation)}</span>
+        <ProvenanceEndpoint
+          currentAssertionId={currentAssertionId}
+          label="To"
+          onInspectAssertion={onInspectAssertion}
+          value={toId}
+        />
+      </div>
+      <pre>{safeJson(edge)}</pre>
+    </details>
+  );
+}
+
+function ProvenanceEndpoint({
+  currentAssertionId,
+  label,
+  onInspectAssertion,
+  value,
+}: {
+  readonly currentAssertionId: string;
+  readonly label: string;
+  readonly onInspectAssertion: (assertionId: string) => void;
+  readonly value: string;
+}) {
+  const current = value === currentAssertionId;
+  const navigable = value !== "unknown" && !current;
+  return (
+    <div className={`provenance-endpoint ${current ? "current" : ""}`}>
+      <span>{label}</span>
+      {navigable ? (
+        <button
+          aria-label={`Inspect related memory assertion ${value}`}
+          onClick={() => onInspectAssertion(value)}
+          type="button"
+        >
+          <strong>{shortId(value)}</strong>
+          <ExternalLink size={13} />
+        </button>
+      ) : (
+        <strong>{current ? "Current assertion" : shortId(value)}</strong>
+      )}
+    </div>
+  );
+}
+
+function provenanceRelation(edge: JsonObject): string {
+  const relation = readString(edge, "relation");
+  return relation === "unknown" ? readString(edge, "relationship") : relation;
 }

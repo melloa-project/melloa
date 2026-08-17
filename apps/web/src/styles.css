@@ -2160,6 +2160,88 @@ pre {
   font-size: 0.61rem;
 }
 
+.provenance-edge-summary {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  margin-top: 10px;
+}
+
+.provenance-relation {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.62rem;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 70px;
+  text-transform: uppercase;
+}
+
+.provenance-endpoint {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.provenance-endpoint.current {
+  background: var(--accent-soft);
+  border-color: #cce5d8;
+}
+
+.provenance-endpoint > span {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.provenance-endpoint strong,
+.provenance-endpoint button {
+  min-width: 0;
+}
+
+.provenance-endpoint strong {
+  color: var(--ink);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provenance-endpoint button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 6px;
+  padding: 0;
+  text-align: left;
+}
+
+.provenance-endpoint button:hover strong {
+  text-decoration: underline;
+}
+
+.provenance-endpoint button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.provenance-endpoint button svg {
+  flex: 0 0 auto;
+}
+
 .history-empty,
 .candidate-empty {
   align-items: center;
@@ -3505,6 +3587,15 @@ pre {
 
   .activity-page .page-footnote {
     display: none;
+  }
+
+  .provenance-edge-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .provenance-relation {
+    justify-content: flex-start;
+    min-width: 0;
   }
 
   .card-heading-row {

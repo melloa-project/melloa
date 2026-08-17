@@ -101,6 +101,20 @@ const updatedInspection: MemoryInspection = {
   },
 };
 
+const retainedInspectionWithProvenance: MemoryInspection = {
+  ...retainedInspection,
+  provenance_edges: [
+    {
+      edge_id: "edge_00000000000000000000000000000001",
+      from_id: updatedInspection.assertion.assertion_id,
+      to_id: retainedInspection.assertion.assertion_id,
+      relation: "corrects",
+      created_at: "2026-08-16T12:01:00Z",
+      producer_id: "owner_00000000000000000000000000000001",
+    },
+  ],
+};
+
 describe("MemoryPage", () => {
   beforeEach(() => {
     mocks.inspectMemory.mockReset();
@@ -186,6 +200,33 @@ describe("MemoryPage", () => {
 
     expect(await screen.findByText("reading")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open alternate memory" }));
+
+    expect(await screen.findByText("walking")).toBeInTheDocument();
+    expect(screen.queryByText("reading")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.inspectMemory).toHaveBeenCalledWith(
+      updatedInspection.assertion.assertion_id,
+    ));
+  });
+
+  it("opens related assertion inspections from provenance edges", async () => {
+    mocks.inspectMemory.mockImplementation((assertionId: string) => Promise.resolve(
+      assertionId === updatedInspection.assertion.assertion_id ? updatedInspection : retainedInspectionWithProvenance,
+    ));
+
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${retainedInspection.assertion.assertion_id}`]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("reading")).toBeInTheDocument();
+    const edgeSummary = screen.getAllByText("Corrects")[0] as HTMLElement;
+    fireEvent.click(edgeSummary);
+    expect(screen.getByText("Current assertion")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Inspect related memory assertion ${updatedInspection.assertion.assertion_id}`,
+    }));
 
     expect(await screen.findByText("walking")).toBeInTheDocument();
     expect(screen.queryByText("reading")).not.toBeInTheDocument();
