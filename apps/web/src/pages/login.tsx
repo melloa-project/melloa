@@ -6,6 +6,7 @@ import {
   KeyRound,
   LockKeyhole,
   Network,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -17,14 +18,17 @@ import { Badge, Button, Card } from "../components/ui";
 
 export function LoginPage({
   login,
+  refreshStatus,
   status,
 }: {
   readonly login: (credential: string) => Promise<void>;
+  readonly refreshStatus: () => Promise<void>;
   readonly status: SystemStatus | null;
 }) {
   const navigate = useNavigate();
   const [showCredential, setShowCredential] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -45,6 +49,15 @@ export function LoginPage({
       setError(errorMessage(caught));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function retryStatus() {
+    setRefreshingStatus(true);
+    try {
+      await refreshStatus();
+    } finally {
+      setRefreshingStatus(false);
     }
   }
 
@@ -109,6 +122,16 @@ export function LoginPage({
               <strong>{status === null ? "Private core not verified" : `Guardian ${titleCase(status.guardian.mode)}`}</strong>
               <small>{status === null ? "Check the backend and signed status paths." : `Sequence ${status.guardian.sequence} · no public ingress`}</small>
             </div>
+            <Button
+              aria-label="Retry signed status check"
+              loading={refreshingStatus}
+              onClick={() => void retryStatus()}
+              size="icon"
+              tone="ghost"
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" size={16} />
+            </Button>
           </div>
         </Card>
         <p className="login-help">Fresh setup? Follow <code>docs/run-current-mvp.md</code>.</p>

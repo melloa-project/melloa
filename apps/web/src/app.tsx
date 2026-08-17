@@ -175,7 +175,7 @@ export function App() {
     return (
       <BrowserRouter>
         <Routes>
-          <Route path="*" element={<LoginPage login={login} status={status} />} />
+          <Route path="*" element={<LoginPage login={login} refreshStatus={refreshStatus} status={status} />} />
         </Routes>
       </BrowserRouter>
     );

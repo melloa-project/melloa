@@ -19,14 +19,14 @@ a6d6c1d19d09c0ae8f496e56d6343445aacd16177893758cb22f1c2fd177ce63  ./apps/web/pac
 b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/package.json
 c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
 449dde05cc23c25373ca84911d27b9dbbabdf0af5b14600f3b801cb6190178c8  ./apps/web/src/api.ts
-5b68284710490e3bedb7be2efe8e9af43907adbddf7a6343d32117060788e024  ./apps/web/src/app.tsx
+7c56ba3bc2b078a5cf7ad2d9b5ee3cf776e7789e56e36bc97be2c73504584b76  ./apps/web/src/app.tsx
 114aee3d587f5f37e8d06bb0c004dd2f57b748710b56a079710636c84133dcb9  ./apps/web/src/components/layout.tsx
 0eccfa019a57abcc27b0b7ef42195fbd4b393dac706145a204e66e0efffc8b5f  ./apps/web/src/components/ui.tsx
 d1a5d817476f7400293e4951b6d7fd884b53996fea2d2e8e32a10766c48e87a1  ./apps/web/src/lib/format.ts
 f83afc6ee2f9ab9cd7cc3fd746300d7f644e8fc4fbf854c1dc1104afeb5e3c14  ./apps/web/src/main.tsx
 e968c7140bebd1041d57d86146e8825f0a6cdb20fd216df9dedee59a0352de53  ./apps/web/src/pages/activity.tsx
 8a3ac9a75a616d16ddceb16b3aa6306b147dc6a7cb0c7a0d3e0dc025b828a668  ./apps/web/src/pages/conversation.tsx
-fe5acd1e584f66388dd3d95f2471a8067621d8895f78ef563a2b507a9d5a9d2d  ./apps/web/src/pages/login.tsx
+43a0807292b01c143547ff56bb4718ef06f21b1d2ab418f05e375ec021c41b0b  ./apps/web/src/pages/login.tsx
 61b6fed8328e0c9e95088417b1feff606f8d973befad8146ec4f6762d38fcf2d  ./apps/web/src/pages/memory.tsx
 edfc4c9f4f8bfe8dd89a42b06a18a0cd7ce2494bb9df1300f6497f73d45a0355  ./apps/web/src/pages/operations.tsx
 8c4ecf2ff16e97a2ab29f21c011cd8377afdbc31d82bf1c04d268b02b88876c8  ./apps/web/src/pages/providers.tsx
@@ -39,7 +39,7 @@ b3b6ff52eacf518afa53da3bb34970e42e8372728335a6287787e52737a05c2d  ./apps/web/tes
 093d433e824d66384c7d308817dba087642625144c80b3b89ecdea3ee2879527  ./apps/web/tests/conversation.test.tsx
 ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tests/format.test.ts
 d67c62ebe12cf543ed02ebbc0165c8084209d9042c3fea09235f190d4be4f785  ./apps/web/tests/layout.test.tsx
-86ccb01e06f688517a28b54b714205a8c70b5f8e73ef526c49cfbdc241e8e1a2  ./apps/web/tests/login.test.tsx
+89837ff5211508d1917a26bcb5a2d14c5bc4aaa85c1f236bf1cc5ada21496a81  ./apps/web/tests/login.test.tsx
 b364b6ee5fb73a9f31783bbbf325ac17ec8d7feeb3e52de9f706fac92e000c7a  ./apps/web/tests/memory.test.tsx
 0a18d03ce451081e7edc4eea1cfb286f2c85cc99dfebda599ff4001ce75d3762  ./apps/web/tests/operations.test.tsx
 c37751db6e2e4a364debaa436ce4684cec6a7d2cf11a1080df886a69ef94d317  ./apps/web/tests/providers.test.tsx
