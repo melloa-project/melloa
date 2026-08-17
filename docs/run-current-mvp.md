@@ -497,7 +497,7 @@ If canonical records disappear, stop using the preview and check that the restar
 
 ## 8. Export and validate owner data
 
-The current MVP includes an offline canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity. Model-activity rows preserve route, token, cost, timing, and external-disclosure evidence without prompts or raw model output. Memory inspection rows include deleted-content tombstone and rebuild-work evidence instead of dropping the accountability record. Before running the CLI command, open **Operations → Export** to inspect estimated record counts, covered record groups, dry-run validation checks, and explicit gaps through the authenticated Owner Console. The validation scope card should show checksum, schema, and reference checks as implemented while leaving database restore execution pending.
+The current MVP includes an offline canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity. Delivery rows preserve redacted exact-authority work status, attempts, resumptions, and receipt identifiers without message text. Model-activity rows preserve route, token, cost, timing, and external-disclosure evidence without prompts or raw model output. Memory inspection rows include deleted-content tombstone and rebuild-work evidence instead of dropping the accountability record. Before running the CLI command, open **Operations → Export** to inspect estimated record counts, covered record groups, dry-run validation checks, and explicit gaps through the authenticated Owner Console. The validation scope card should show checksum, schema, and reference checks as implemented while leaving database restore execution pending.
 
 Keep using the disposable state directory and run:
 
@@ -514,7 +514,7 @@ uv run melloa import-validate \
   --bundle-dir "$MELLOA_MVP_EXPORT_DIR"
 ```
 
-The first command verifies the signed Guardian projection, reads the mode-`0600` owner credential file without printing it, exports the process-local preview state or the configured PostgreSQL MVP stores, and refuses to write into a non-empty target directory. Model activity is exported in `inspection/model-activity.jsonl`. Deleted assertion values remain absent, but their content-free tombstones remain present in `assertions/inspections.jsonl`. The second command is validation-only; it does not mutate a database or import records yet.
+The first command verifies the signed Guardian projection, reads the mode-`0600` owner credential file without printing it, exports the process-local preview state or the configured PostgreSQL MVP stores, and refuses to write into a non-empty target directory. Delivery status is exported in `conversations/deliveries.jsonl`, and model activity is exported in `inspection/model-activity.jsonl`. Deleted assertion values remain absent, but their content-free tombstones remain present in `assertions/inspections.jsonl`. The second command is validation-only; it does not mutate a database or import records yet.
 
 Expected bundle files include:
 
@@ -535,6 +535,7 @@ conversations/messages.jsonl
 conversations/turns.jsonl
 conversations/turn-inspections.jsonl
 conversations/processing.jsonl
+conversations/deliveries.jsonl
 inspection/model-activity.jsonl
 assertions/inspections.jsonl
 ```

@@ -39,6 +39,7 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
         owner_id=runtime.owner_id,
         intelligence_id=runtime.intelligence_id,
         conversation=runtime.conversation_service,
+        delivery=runtime.delivery_service,
         memory=runtime.memory_service,
         memory_repository=runtime.memory_store,
         clock=lambda: fixed_time,
@@ -48,11 +49,13 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
     assert report.valid is True
     assert report.export_id == manifest.export_id
+    assert report.record_counts["conversations/deliveries.jsonl"] == 0
     assert report.record_counts["conversations/threads.jsonl"] == 1
     assert report.record_counts["assertions/inspections.jsonl"] == 1
     assert report.record_counts["inspection/model-activity.jsonl"] == 1
     assert (bundle_dir / "schemas/owner-export/manifest-v1.json").is_file()
     assert (bundle_dir / "schemas/inspection/owner-model-activity-v1.json").is_file()
+    assert (bundle_dir / "schemas/conversation/delivery-work-status-v1.json").is_file()
     assert "export.preview-unencrypted" in manifest.limitations
     assert manifest.encrypted is False
     assert manifest.includes_sql_snapshot is False
@@ -70,6 +73,58 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     assert activity_records[0]["entries"][0]["turn_id"] == reply.turn.turn_id
     assert activity_records[0]["entries"][0]["route_id"] == "model.fake.deterministic"
     assert activity_records[0]["entries"][0]["external_disclosure"] is False
+
+
+def test_owner_export_includes_redacted_delivery_status(
+    tmp_path,
+    fixed_time,
+) -> None:
+    runtime = _runtime(fixed_time, mode=GuardianMode.NORMAL)
+    principal = _owner(runtime.owner_id, fixed_time)
+    reply = runtime.conversation_service.post_owner_message(
+        principal,
+        thread_id=runtime.telegram_thread_id,
+        text="Create a reply that can be delivered.",
+        idempotency_key="export-delivery-message",
+    )
+    assert reply.output_message is not None
+    submitted = runtime.delivery_service.enqueue_owner_delivery(
+        principal,
+        thread_id=runtime.telegram_thread_id,
+        message_id=reply.output_message.message_id,
+        client_adapter="client.fake",
+        destination_ref="synthetic:owner",
+        idempotency_key="export-delivery-work",
+    )
+    bundle_dir = tmp_path / "export"
+
+    OwnerExportService(
+        owner_id=runtime.owner_id,
+        intelligence_id=runtime.intelligence_id,
+        conversation=runtime.conversation_service,
+        delivery=runtime.delivery_service,
+        memory=runtime.memory_service,
+        memory_repository=runtime.memory_store,
+        clock=lambda: fixed_time,
+        id_factory=_fixed_ids(),
+    ).write_bundle(bundle_dir, schema_root=_schema_root())
+
+    report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
+    delivery_text = (bundle_dir / "conversations/deliveries.jsonl").read_text(
+        encoding="utf-8"
+    )
+    records = [json.loads(line) for line in delivery_text.splitlines() if line]
+
+    assert report.valid is True
+    assert report.record_counts["conversations/deliveries.jsonl"] == 1
+    assert records[0]["work_id"] == submitted.status.work_id
+    assert records[0]["message_id"] == reply.output_message.message_id
+    assert records[0]["state"] == "completed"
+    assert records[0]["attempts"][0]["adapter_receipt"]["message_id"] == (
+        reply.output_message.message_id
+    )
+    assert "Create a reply" not in delivery_text
+    assert "No external model" not in delivery_text
 
 
 def test_owner_export_includes_deleted_memory_tombstone_evidence(

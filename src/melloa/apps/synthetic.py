@@ -138,6 +138,7 @@ class SyntheticRuntime:
     telegram_worker: TelegramPollWorker
     telegram_delivery_adapter: ClientAdapter | None
     telegram_reply_dispatcher: TelegramReplyDispatcher | None
+    delivery_service: DeliveryService
     delivery_store: DeliveryStore
     event_audit_store: EventAuditStore
     conversation_service: ConversationService
@@ -515,6 +516,7 @@ def build_synthetic_runtime(
             ),
         ),
         conversation=conversation,
+        delivery=delivery,
         memory_repository=memory_store,
         clock=clock,
     )
@@ -585,6 +587,7 @@ def build_synthetic_runtime(
         telegram_worker=telegram_worker,
         telegram_delivery_adapter=telegram_delivery_adapter,
         telegram_reply_dispatcher=telegram_reply_dispatcher,
+        delivery_service=delivery,
         delivery_store=delivery_store,
         event_audit_store=event_audit_store,
         conversation_service=conversation,

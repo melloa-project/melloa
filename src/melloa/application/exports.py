@@ -13,6 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from melloa.application.conversation import ConversationService
+from melloa.application.delivery import DeliveryService
 from melloa.application.memory import MemoryService
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import (
@@ -29,6 +30,7 @@ from melloa.domain.conversation import (
     ConversationTurn,
     ConversationTurnInspection,
 )
+from melloa.domain.delivery import DeliveryWorkStatus
 from melloa.domain.exports import (
     CanonicalExportManifest,
     CanonicalExportValidationReport,
@@ -70,6 +72,11 @@ DATA_SCHEMAS: dict[str, tuple[str, type[BaseModel], str]] = {
         ConversationProcessingStatus,
         "schemas/conversation/processing-status-v1.json",
     ),
+    "conversations/deliveries.jsonl": (
+        "export.delivery-work-status",
+        DeliveryWorkStatus,
+        "schemas/conversation/delivery-work-status-v1.json",
+    ),
     "inspection/model-activity.jsonl": (
         "export.owner-model-activity-report",
         OwnerModelActivityReport,
@@ -105,6 +112,7 @@ class OwnerExportService:
         conversation: ConversationService,
         memory: MemoryService,
         memory_repository: MemoryRepository,
+        delivery: DeliveryService | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
         source_runtime: str = "melloa-core/0.1.0-export-preview",
@@ -114,6 +122,7 @@ class OwnerExportService:
         self._conversation = conversation
         self._memory = memory
         self._memory_repository = memory_repository
+        self._delivery = delivery
         self._clock = clock
         self._id_factory = id_factory
         self._source_runtime = source_runtime
@@ -175,6 +184,7 @@ class OwnerExportService:
         turns: list[ConversationTurn] = []
         turn_inspections: list[ConversationTurnInspection] = []
         processing: list[ConversationProcessingStatus] = []
+        deliveries: list[DeliveryWorkStatus] = []
         for thread in threads:
             thread_messages = self._conversation.list_messages(principal, thread.thread_id)
             messages.extend(thread_messages)
@@ -183,6 +193,8 @@ class OwnerExportService:
             processing.extend(
                 self._conversation.list_processing(principal, thread.thread_id)
             )
+            if self._delivery is not None:
+                deliveries.extend(self._delivery.list_deliveries(principal, thread.thread_id))
             for turn in thread_turns:
                 turn_inspections.append(
                     self._conversation.inspect_turn(
@@ -221,6 +233,9 @@ class OwnerExportService:
         sorted_processing: tuple[ConversationProcessingStatus, ...] = tuple(
             sorted(processing, key=lambda item: (item.available_at, item.work_id))
         )
+        sorted_deliveries: tuple[DeliveryWorkStatus, ...] = tuple(
+            sorted(deliveries, key=lambda item: (item.available_at, item.work_id))
+        )
         model_activity = self._model_activity_report(sorted_turn_inspections)
         return {
             "conversations/threads.jsonl": sorted_threads,
@@ -228,6 +243,7 @@ class OwnerExportService:
             "conversations/turns.jsonl": sorted_turns,
             "conversations/turn-inspections.jsonl": sorted_turn_inspections,
             "conversations/processing.jsonl": sorted_processing,
+            "conversations/deliveries.jsonl": sorted_deliveries,
             "inspection/model-activity.jsonl": (model_activity,),
             "assertions/inspections.jsonl": inspections,
         }
@@ -555,6 +571,7 @@ def _validate_references(root: Path, errors: list[str]) -> None:
         messages = _load_jsonl(root, "conversations/messages.jsonl")
         turns = _load_jsonl(root, "conversations/turns.jsonl")
         inspections = _load_jsonl(root, "conversations/turn-inspections.jsonl")
+        deliveries = _load_jsonl(root, "conversations/deliveries.jsonl")
         activity_reports = _load_jsonl(root, "inspection/model-activity.jsonl")
         memories = _load_jsonl(root, "assertions/inspections.jsonl")
     except (OSError, json.JSONDecodeError, ExportBundleError):
@@ -579,6 +596,11 @@ def _validate_references(root: Path, errors: list[str]) -> None:
                 "turn inspection references missing turn: "
                 f"{inspection['turn']['turn_id']}"
             )
+    for delivery in deliveries:
+        if delivery["thread_id"] not in thread_ids:
+            errors.append(f"delivery references missing thread: {delivery['work_id']}")
+        if delivery["message_id"] not in message_ids:
+            errors.append(f"delivery references missing message: {delivery['work_id']}")
     for report in activity_reports:
         for entry in report["entries"]:
             if entry["thread_id"] not in thread_ids:

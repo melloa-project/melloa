@@ -705,6 +705,7 @@ def test_export_mvp_writes_validated_bundle_without_printing_owner_credential(
         owner_id="owner_00000000000000000000000000000001",
         intelligence_id="intelligence_00000000000000000000000000000001",
         conversation_service=object(),
+        delivery_service=object(),
         memory_service=object(),
         memory_store=object(),
         persistence=RuntimePersistenceStatus(
@@ -752,6 +753,7 @@ def test_export_mvp_writes_validated_bundle_without_printing_owner_credential(
 
     assert cli.export_mvp(args) == 0
     assert captured["guardian_verified"] is True
+    assert captured["service_kwargs"]["delivery"] is runtime.delivery_service
     assert captured["service_kwargs"]["memory_repository"] is runtime.memory_store
     assert captured["output"] == output_dir
     output = capsys.readouterr().out

@@ -292,8 +292,9 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         item["group_id"]: item for item in export_after.json()["coverage"]
     }
     assert export_after_coverage["export.conversation-records"]["estimated_records"] == 7
+    assert export_after_coverage["export.delivery-records"]["estimated_records"] == 0
     assert export_after_coverage["export.model-activity"]["estimated_records"] == 1
-    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 11
+    assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 12
 
     correction = client.post(
         f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",
@@ -461,6 +462,9 @@ def test_synthetic_runtime_delivers_canonical_output_without_channel_network(
         assert delivery_inventory["retained_bytes"] > 0
         assert delivery_inventory["deletion_receipts"] == 0
         assert delivery_inventory["oldest_retained_at"] is not None
+        export = client.get("/api/v1/inspection/export").json()
+        export_coverage = {item["group_id"]: item for item in export["coverage"]}
+        assert export_coverage["export.delivery-records"]["estimated_records"] == 1
 
         health = client.get("/api/v1/inspection/health").json()
         delivery_worker = next(

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from melloa.application.conversation import ConversationService
+from melloa.application.delivery import DeliveryService
 from melloa.application.inspection import InspectionOwnershipError
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, utc_now
@@ -28,12 +29,14 @@ class OwnerOperationsService:
         owner_id: RecordId,
         reader: OperationsInspectionReader,
         conversation: ConversationService | None = None,
+        delivery: DeliveryService | None = None,
         memory_repository: MemoryRepository | None = None,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._owner_id = owner_id
         self._reader = reader
         self._conversation = conversation
+        self._delivery = delivery
         self._memory_repository = memory_repository
         self._clock = clock
 
@@ -124,6 +127,17 @@ class OwnerOperationsService:
                     status_reason="export.coverage.conversation-jsonl",
                 ),
                 ExportCoverageItem(
+                    group_id="export.delivery-records",
+                    included=True,
+                    estimated_records=counts["delivery_records"],
+                    artifact_path="conversations/deliveries.jsonl",
+                    summary=(
+                        "Redacted outbound delivery work status, attempts, resumptions, "
+                        "and exact-authority receipt identifiers."
+                    ),
+                    status_reason="export.coverage.delivery-jsonl",
+                ),
+                ExportCoverageItem(
                     group_id="export.logical-sql",
                     included=False,
                     artifact_path=None,
@@ -177,7 +191,7 @@ class OwnerOperationsService:
                     check_id="export.validation.references",
                     implemented=True,
                     summary=(
-                        "Conversation, turn, and model-activity records receive "
+                        "Conversation, delivery, turn, and model-activity records receive "
                         "basic referential-integrity checks inside the bundle."
                     ),
                     status_reason="export.validation.basic-references",
@@ -217,11 +231,13 @@ class OwnerOperationsService:
 
     def _export_counts(self, principal: AuthenticatedOwner) -> dict[str, int]:
         conversation = self._conversation
+        delivery = self._delivery
         memory_repository = self._memory_repository
         threads = conversation.list_threads(principal) if conversation is not None else ()
         message_count = 0
         turn_count = 0
         processing_count = 0
+        delivery_count = 0
         for thread in threads:
             if conversation is None:
                 continue
@@ -229,6 +245,8 @@ class OwnerOperationsService:
             thread_turns = conversation.list_turns(principal, thread.thread_id)
             turn_count += len(thread_turns)
             processing_count += len(conversation.list_processing(principal, thread.thread_id))
+            if delivery is not None:
+                delivery_count += len(delivery.list_deliveries(principal, thread.thread_id))
         assertion_count = (
             len(memory_repository.list_assertion_metadata(self._owner_id))
             if memory_repository is not None
@@ -239,6 +257,7 @@ class OwnerOperationsService:
             "conversation_records": (
                 len(threads) + message_count + turn_count + turn_count + processing_count
             ),
+            "delivery_records": delivery_count,
             "model_activity_entries": turn_count,
-            "validation_artifacts": 11,
+            "validation_artifacts": 12,
         }
