@@ -2,6 +2,8 @@
 
 This is the one canonical path for running the current owner-facing Melloa MVP. It starts an independently built disposable Guardian fixture, the Melloa core with process-local stores by default or optional PostgreSQL restart durability, one optional real local Qwen route through Ollama, one optional experimental subscription-backed Codex CLI route, an optional real Telegram Bot API channel, and the same-origin Owner Console.
 
+Use [the current MVP operations runbook](operations/current-mvp.md) as the operator checklist for health validation, export validation, release evidence, incident response, and cleanup boundaries around this startup path.
+
 The result is a usable loop:
 
 > owner login → canonical conversation → provider-neutral model route → Melli reply → route, disclosure, latency, token, cost, evidence, and decision inspection

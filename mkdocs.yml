@@ -28,6 +28,7 @@ nav:
   - Contracts:
       - Guardian protocol: contracts/guardian-protocol.md
   - Operations:
+      - Current MVP operations: operations/current-mvp.md
       - M0 recovery drill: operations/m0-recovery.md
   - Traceability: 00-traceability.md
   - Vision: 01-executive-vision.md

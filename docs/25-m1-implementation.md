@@ -103,6 +103,6 @@ Outbound adapters no longer accept a string that merely looks like a policy deci
 
 ## Remaining M1 gates
 
-- Owner deletion/retention-change controls beyond memory content deletion, quarantine expiry, and expired-session cleanup, event/audit coverage for additional mutation categories, atomic coupling of source mutations and audit append beyond PostgreSQL sessions, workers beyond quarantine, canonical inventory coverage beyond conversation, memory, delivery, Telegram quarantine, and audit append aggregates, blob and logical SQL export, signed archives, real import/migration execution, threat review completion, observability, production operational runbooks, and full clean acceptance evidence.
+- Owner deletion/retention-change controls beyond memory content deletion, quarantine expiry, and expired-session cleanup, event/audit coverage for additional mutation categories, atomic coupling of source mutations and audit append beyond PostgreSQL sessions, workers beyond quarantine, canonical inventory coverage beyond conversation, memory, delivery, Telegram quarantine, and audit append aggregates, blob and logical SQL export, signed archives, real import/migration execution, threat review completion, observability, production operational runbooks beyond the current-MVP preview runbook, and full clean acceptance evidence.
 
 No remaining item may weaken Guardian independence, deterministic policy authority, private networking, application authentication, provenance, or channel neutrality.
