@@ -96,15 +96,15 @@ export function ActivityPage() {
     return entries.length;
   };
 
-  async function copyResultId(resultId: string) {
+  async function copyActivityId(label: string, id: string) {
     try {
       if (navigator.clipboard === undefined) {
         throw new Error("Clipboard API unavailable.");
       }
-      await navigator.clipboard.writeText(resultId);
-      notify("Result ID copied.", "success");
+      await navigator.clipboard.writeText(id);
+      notify(`${label} ID copied.`, "success");
     } catch {
-      notify("Result ID copy failed.", "error");
+      notify(`${label} ID copy failed.`, "error");
     }
   }
 
@@ -180,7 +180,7 @@ export function ActivityPage() {
                     <ActivityRow
                       entry={entry}
                       key={entry.result_id}
-                      onCopyResultId={(resultId) => void copyResultId(resultId)}
+                      onCopyActivityId={(label, id) => void copyActivityId(label, id)}
                       onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
                       onOpenRoute={(routeId) => navigate(`/providers?route=${encodeURIComponent(routeId)}`)}
                       onOpenThread={navigate}
@@ -202,13 +202,13 @@ export function ActivityPage() {
 
 function ActivityRow({
   entry,
-  onCopyResultId,
+  onCopyActivityId,
   onInspectMemory,
   onOpenRoute,
   onOpenThread,
 }: {
   readonly entry: ModelActivityEntry;
-  readonly onCopyResultId: (resultId: string) => void;
+  readonly onCopyActivityId: (label: string, id: string) => void;
   readonly onInspectMemory: (assertionId: string) => void;
   readonly onOpenRoute: (routeId: string) => void;
   readonly onOpenThread: (path: string) => void;
@@ -243,7 +243,7 @@ function ActivityRow({
       <div className="activity-actions">
         <Button
           aria-label={`Copy result ID ${entry.result_id}`}
-          onClick={() => onCopyResultId(entry.result_id)}
+          onClick={() => onCopyActivityId("Result", entry.result_id)}
           size="icon"
           title="Copy result ID"
           tone="ghost"
@@ -267,7 +267,7 @@ function ActivityRow({
           <ArrowUpRight size={17} />
         </Button>
       </div>
-      <ActivityDisclosure entry={entry} onInspectMemory={onInspectMemory} />
+      <ActivityDisclosure entry={entry} onCopyActivityId={onCopyActivityId} onInspectMemory={onInspectMemory} />
     </article>
   );
 }
@@ -278,9 +278,11 @@ function isSyntheticActivityEntry(entry: ModelActivityEntry): boolean {
 
 function ActivityDisclosure({
   entry,
+  onCopyActivityId,
   onInspectMemory,
 }: {
   readonly entry: ModelActivityEntry;
+  readonly onCopyActivityId: (label: string, id: string) => void;
   readonly onInspectMemory: (assertionId: string) => void;
 }) {
   const disclosure = entry.disclosure;
@@ -292,11 +294,26 @@ function ActivityDisclosure({
     <div className="activity-disclosure" aria-label={`Disclosure evidence for ${entry.model_id}`}>
       <div className="activity-disclosure-fact">
         <FileSearch size={14} />
-        <span>Manifest {shortId(disclosure.retrieval_manifest_id)}</span>
+        <span>Manifest</span>
+        <CopyableActivityId
+          id={disclosure.retrieval_manifest_id}
+          label="Retrieval manifest"
+          onCopy={onCopyActivityId}
+        />
       </div>
       <div className="activity-disclosure-fact">
         <MessageSquare size={14} />
         <span>{disclosure.triggering_message_ids.length} trigger{disclosure.triggering_message_ids.length === 1 ? "" : "s"}</span>
+        <div className="activity-disclosure-id-list">
+          {disclosure.triggering_message_ids.map((messageId, index) => (
+            <CopyableActivityId
+              id={messageId}
+              key={messageId}
+              label={`Trigger message ${index + 1}`}
+              onCopy={onCopyActivityId}
+            />
+          ))}
+        </div>
       </div>
       <div className="activity-disclosure-fact">
         <Fingerprint size={14} />
@@ -304,9 +321,12 @@ function ActivityDisclosure({
       </div>
       <div className="activity-disclosure-attempts">
         {disclosure.external_attempts.map((attempt) => (
-          <Badge key={`${attempt.route_id}-${attempt.started_at}`} tone={attempt.outcome === "succeeded" ? "warning" : "danger"}>
-            {titleCase(attempt.route_id)} · {titleCase(attempt.outcome)}
-          </Badge>
+          <div className="activity-disclosure-attempt" key={`${attempt.route_id}-${attempt.started_at}`}>
+            <Badge tone={attempt.outcome === "succeeded" ? "warning" : "danger"}>
+              {titleCase(attempt.route_id)} · {titleCase(attempt.outcome)}
+            </Badge>
+            <CopyableActivityId id={attempt.route_id} label="External attempt route" onCopy={onCopyActivityId} />
+          </div>
         ))}
       </div>
       {disclosure.memory_references.length === 0 ? (
@@ -314,21 +334,49 @@ function ActivityDisclosure({
       ) : (
         <div className="activity-memory-list" aria-label="Disclosed memory references">
           {disclosure.memory_references.map((reference) => (
-            <button
-              aria-label={`Inspect disclosed memory ${reference.assertion_id}`}
-              className="activity-memory-chip"
-              key={reference.citation_id}
-              onClick={() => onInspectMemory(reference.assertion_id)}
-              title="Inspect disclosed memory"
-              type="button"
-            >
-              <strong>{shortId(reference.assertion_id)}</strong>
-              <small>{titleCase(reference.sensitivity)} · {shortId(reference.citation_id)}</small>
-            </button>
+            <div className="activity-memory-reference" key={reference.citation_id}>
+              <button
+                aria-label={`Inspect disclosed memory ${reference.assertion_id}`}
+                className="activity-memory-chip"
+                onClick={() => onInspectMemory(reference.assertion_id)}
+                title="Inspect disclosed memory"
+                type="button"
+              >
+                <strong>{shortId(reference.assertion_id)}</strong>
+                <small>{titleCase(reference.sensitivity)} · {shortId(reference.citation_id)}</small>
+              </button>
+              <div className="activity-disclosure-id-list">
+                <CopyableActivityId id={reference.assertion_id} label="Disclosed assertion" onCopy={onCopyActivityId} />
+                <CopyableActivityId id={reference.citation_id} label="Memory citation" onCopy={onCopyActivityId} />
+              </div>
+            </div>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+function CopyableActivityId({
+  id,
+  label,
+  onCopy,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly onCopy: (label: string, id: string) => void;
+}) {
+  return (
+    <button
+      aria-label={`Copy ${label} ID ${id}`}
+      className="ledger-id-copy"
+      onClick={() => onCopy(label, id)}
+      title={id}
+      type="button"
+    >
+      <code>{shortId(id)}</code>
+      <Copy aria-hidden="true" size={12} />
+    </button>
   );
 }
 

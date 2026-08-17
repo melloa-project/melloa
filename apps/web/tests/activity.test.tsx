@@ -148,11 +148,11 @@ describe("ActivityPage", () => {
     expect(screen.queryByText("qwen3:8b")).not.toBeInTheDocument();
     expect(screen.getByText("gpt-5.3-codex")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "External 1" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Manifest retrieval…000001")).toBeInTheDocument();
+    expect(screen.getByText("Manifest")).toBeInTheDocument();
     expect(screen.getByText("Conversation Reply")).toBeInTheDocument();
     expect(screen.getByText("Model Codex Subscription · Succeeded")).toBeInTheDocument();
-    expect(screen.getByText("assertion…000001")).toBeInTheDocument();
-    expect(screen.getByText("assertion…000002")).toBeInTheDocument();
+    expect(screen.getAllByText("assertion…000001").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("assertion…000002").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Personal · citation_…000001")).toBeInTheDocument();
     expect(screen.getByText("Internal · citation_…000002")).toBeInTheDocument();
 
@@ -189,6 +189,47 @@ describe("ActivityPage", () => {
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.result_id));
     expect(mocks.notify).toHaveBeenCalledWith("Result ID copied.", "success");
+  });
+
+  it("copies exact external disclosure evidence ids from the activity ledger", async () => {
+    render(
+      <MemoryRouter>
+        <ActivityPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("qwen3:8b");
+    fireEvent.click(screen.getByRole("button", { name: "External 1" }));
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Retrieval manifest ID ${externalEntry.disclosure?.retrieval_manifest_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.disclosure?.retrieval_manifest_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Retrieval manifest ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Trigger message 1 ID ${externalEntry.disclosure?.triggering_message_ids[0]}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.disclosure?.triggering_message_ids[0]));
+    expect(mocks.notify).toHaveBeenCalledWith("Trigger message 1 ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy External attempt route ID ${externalEntry.disclosure?.external_attempts[0]?.route_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.disclosure?.external_attempts[0]?.route_id));
+    expect(mocks.notify).toHaveBeenCalledWith("External attempt route ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Disclosed assertion ID ${externalEntry.disclosure?.memory_references[0]?.assertion_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.disclosure?.memory_references[0]?.assertion_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Disclosed assertion ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Copy Memory citation ID ${externalEntry.disclosure?.memory_references[0]?.citation_id}`,
+    }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(externalEntry.disclosure?.memory_references[0]?.citation_id));
+    expect(mocks.notify).toHaveBeenCalledWith("Memory citation ID copied.", "success");
   });
 
   it("reports when activity result id copy is unavailable", async () => {
@@ -238,7 +279,7 @@ describe("ActivityPage", () => {
 
     expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "External 1" }));
-    expect(screen.getByText("assertion…000001")).toBeInTheDocument();
+    expect(screen.getAllByText("assertion…000001").length).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Private 1" }));
 

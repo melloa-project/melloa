@@ -1835,8 +1835,31 @@ pre {
   gap: 5px;
 }
 
+.activity-disclosure-attempt,
+.activity-disclosure-id-list,
+.activity-memory-reference {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.activity-disclosure .ledger-id-copy {
+  background: rgb(255 255 255 / 58%);
+  border-color: #f0d4a9;
+  color: #57370f;
+}
+
 .activity-memory-list {
   flex: 1 1 260px;
+}
+
+.activity-memory-reference {
+  background: rgb(255 255 255 / 34%);
+  border: 1px solid #f0d4a9;
+  border-radius: var(--radius-sm);
+  padding: 4px;
 }
 
 .activity-memory-chip {
@@ -4432,23 +4455,35 @@ pre {
   }
 
   .activity-disclosure {
-    flex-wrap: nowrap;
+    align-items: flex-start;
+    flex-wrap: wrap;
     gap: 6px;
-    overflow-x: auto;
+    overflow-x: visible;
     padding: 7px;
-    scrollbar-width: thin;
   }
 
   .activity-disclosure-fact,
   .activity-disclosure-empty,
   .activity-disclosure-attempts,
-  .activity-memory-list,
+  .activity-memory-list {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .activity-disclosure-attempt,
+  .activity-memory-reference {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .activity-disclosure-id-list,
   .activity-memory-chip {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    max-width: 100%;
   }
 
   .activity-memory-list {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   .activity-memory-chip {
@@ -4456,6 +4491,10 @@ pre {
     flex-direction: row;
     gap: 5px;
     padding: 4px 6px;
+  }
+
+  .activity-memory-reference {
+    flex-wrap: wrap;
   }
 
   .activity-page .page-footnote {
