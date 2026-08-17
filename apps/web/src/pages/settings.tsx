@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   Clock3,
@@ -34,30 +34,45 @@ export function SettingsPage() {
   const [sessions, setSessions] = useState<OwnerSessionInventory | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const sessionsLoadRequestRef = useRef(0);
   const [revokeSessionsOpen, setRevokeSessionsOpen] = useState(false);
   const [revokingSessions, setRevokingSessions] = useState(false);
   const [telegram, setTelegram] = useState<TelegramState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const telegramLoadRequestRef = useRef(0);
   const [selectedCandidate, setSelectedCandidate] = useState<TelegramPairingCandidate | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [revoking, setRevoking] = useState(false);
 
   const loadSessions = useCallback(async () => {
+    const requestId = sessionsLoadRequestRef.current + 1;
+    sessionsLoadRequestRef.current = requestId;
     setSessionsLoading(true);
     try {
-      setSessions(await api.activeSessions());
+      const nextSessions = await api.activeSessions();
+      if (requestId !== sessionsLoadRequestRef.current) {
+        return;
+      }
+      setSessions(nextSessions);
       setSessionsError(null);
     } catch (caught) {
+      if (requestId !== sessionsLoadRequestRef.current) {
+        return;
+      }
       setSessions(null);
       setSessionsError(errorMessage(caught));
     } finally {
-      setSessionsLoading(false);
+      if (requestId === sessionsLoadRequestRef.current) {
+        setSessionsLoading(false);
+      }
     }
   }, [api]);
 
   const loadTelegram = useCallback(async () => {
+    const requestId = telegramLoadRequestRef.current + 1;
+    telegramLoadRequestRef.current = requestId;
     setLoading(true);
     try {
       const [status, pairing, candidates] = await Promise.all([
@@ -65,13 +80,21 @@ export function SettingsPage() {
         api.inspectTelegramPairing(),
         api.listTelegramPairingCandidates(),
       ]);
+      if (requestId !== telegramLoadRequestRef.current) {
+        return;
+      }
       setTelegram({ status, pairing, candidates });
       setError(null);
     } catch (caught) {
+      if (requestId !== telegramLoadRequestRef.current) {
+        return;
+      }
       setTelegram(null);
       setError(errorMessage(caught));
     } finally {
-      setLoading(false);
+      if (requestId === telegramLoadRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [api]);
 

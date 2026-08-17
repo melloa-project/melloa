@@ -1,7 +1,18 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { OwnerSessionInventory, TelegramChannelStatus } from "../src/api";
 import { SettingsPage } from "../src/pages/settings";
+
+type ApiMock = {
+  readonly activeSessions: ReturnType<typeof vi.fn>;
+  readonly revokeOtherSessions: ReturnType<typeof vi.fn>;
+  readonly inspectTelegramPairing: ReturnType<typeof vi.fn>;
+  readonly inspectTelegramStatus: ReturnType<typeof vi.fn>;
+  readonly listTelegramPairingCandidates: ReturnType<typeof vi.fn>;
+  readonly confirmTelegramPairing: ReturnType<typeof vi.fn>;
+  readonly revokeTelegramPairing: ReturnType<typeof vi.fn>;
+};
 
 const mocks = vi.hoisted(() => ({
   activeSessions: vi.fn(),
@@ -13,20 +24,21 @@ const mocks = vi.hoisted(() => ({
   revokeTelegramPairing: vi.fn(),
   notify: vi.fn(),
   canMutate: true,
+  apiOverride: null as ApiMock | null,
 }));
 
-vi.mock("../src/app", () => ({
-  errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
-  useMelloa: () => ({
-    api: {
-      activeSessions: mocks.activeSessions,
-      revokeOtherSessions: mocks.revokeOtherSessions,
-      inspectTelegramPairing: mocks.inspectTelegramPairing,
-      inspectTelegramStatus: mocks.inspectTelegramStatus,
-      listTelegramPairingCandidates: mocks.listTelegramPairingCandidates,
-      confirmTelegramPairing: mocks.confirmTelegramPairing,
-      revokeTelegramPairing: mocks.revokeTelegramPairing,
-    },
+vi.mock("../src/app", () => {
+  const stableApi = {
+    activeSessions: mocks.activeSessions,
+    revokeOtherSessions: mocks.revokeOtherSessions,
+    inspectTelegramPairing: mocks.inspectTelegramPairing,
+    inspectTelegramStatus: mocks.inspectTelegramStatus,
+    listTelegramPairingCandidates: mocks.listTelegramPairingCandidates,
+    confirmTelegramPairing: mocks.confirmTelegramPairing,
+    revokeTelegramPairing: mocks.revokeTelegramPairing,
+  };
+  const context = {
+    api: stableApi,
     principal: {
       owner_id: "owner_01",
       session_id: "session_01",
@@ -45,10 +57,17 @@ vi.mock("../src/app", () => ({
       external_actions_enabled: true,
       public_ingress: false,
     },
-    canMutate: mocks.canMutate,
     notify: mocks.notify,
-  }),
-}));
+  };
+  return {
+    errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
+    useMelloa: () => ({
+      ...context,
+      api: mocks.apiOverride ?? stableApi,
+      canMutate: mocks.canMutate,
+    }),
+  };
+});
 
 describe("SettingsPage Telegram inspection", () => {
   beforeEach(() => {
@@ -65,6 +84,7 @@ describe("SettingsPage Telegram inspection", () => {
       mock.mockReset();
     }
     mocks.canMutate = true;
+    mocks.apiOverride = null;
     mocks.inspectTelegramStatus.mockResolvedValue({
       configured: true,
       adapter_id: "client.telegram.bot-api",
@@ -269,4 +289,150 @@ describe("SettingsPage Telegram inspection", () => {
 
     expect(mocks.revokeTelegramPairing).not.toHaveBeenCalled();
   });
+
+  it("keeps the latest session refresh when an older request resolves last", async () => {
+    const stale = deferred<OwnerSessionInventory>();
+    mocks.activeSessions.mockReset();
+    mocks.activeSessions
+      .mockResolvedValueOnce(sessionInventory(["session_02"]))
+      .mockReturnValueOnce(stale.promise);
+
+    const rendered = render(<SettingsPage />);
+
+    expect(await screen.findByText("This browser")).toBeInTheDocument();
+    expect(screen.getByText(/^Other browser · /i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh sessions" }));
+    mocks.apiOverride = settingsApi(vi.fn().mockResolvedValue(sessionInventory([])));
+    rendered.rerender(<SettingsPage />);
+
+    await waitFor(() => expect(screen.queryByText(/^Other browser · /i)).not.toBeInTheDocument());
+
+    await act(async () => {
+      stale.resolve(sessionInventory(["session_stale_000000000000000000000001"]));
+      await stale.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/^Other browser · /i)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText(/session_st…000001/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the latest Telegram inspection refresh when an older request resolves last", async () => {
+    const staleStatus = deferred<TelegramChannelStatus>();
+    mocks.inspectTelegramStatus.mockReset();
+    mocks.inspectTelegramPairing.mockReset();
+    mocks.listTelegramPairingCandidates.mockReset();
+    mocks.inspectTelegramStatus
+      .mockResolvedValueOnce(telegramStatus("healthy", true))
+      .mockReturnValueOnce(staleStatus.promise)
+      .mockResolvedValueOnce(telegramStatus("disabled", false));
+    mocks.inspectTelegramPairing.mockResolvedValue(null);
+    mocks.listTelegramPairingCandidates.mockResolvedValue([]);
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByText(/Bot API · Healthy/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(await screen.findByText(/Synthetic fixture · Disabled/i)).toBeInTheDocument();
+
+    await act(async () => {
+      staleStatus.resolve(telegramStatus("healthy", true));
+      await staleStatus.promise;
+    });
+
+    expect(screen.getByText(/Synthetic fixture · Disabled/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Bot API · Healthy/i)).not.toBeInTheDocument();
+  });
 });
+
+type Deferred<T> = {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let reject!: (reason?: unknown) => void;
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
+
+function sessionInventory(otherSessionIds: readonly string[]): OwnerSessionInventory {
+  return {
+    current_session_id: "session_01",
+    sessions: [
+      {
+        owner_id: "owner_01",
+        session_id: "session_01",
+        authentication_method: "auth.local",
+        authenticated_at: "2026-08-16T12:00:00Z",
+        reauthenticated_until: "2026-08-16T12:05:00Z",
+        expires_at: "2026-08-16T12:30:00Z",
+      },
+      ...otherSessionIds.map((sessionId, index) => ({
+        owner_id: "owner_01",
+        session_id: sessionId,
+        authentication_method: "auth.local",
+        authenticated_at: `2026-08-16T12:0${index + 1}:00Z`,
+        reauthenticated_until: `2026-08-16T12:0${index + 6}:00Z`,
+        expires_at: `2026-08-16T12:3${index + 1}:00Z`,
+      })),
+    ],
+  };
+}
+
+function settingsApi(activeSessions: ReturnType<typeof vi.fn>): ApiMock {
+  return {
+    activeSessions,
+    revokeOtherSessions: mocks.revokeOtherSessions,
+    inspectTelegramPairing: mocks.inspectTelegramPairing,
+    inspectTelegramStatus: mocks.inspectTelegramStatus,
+    listTelegramPairingCandidates: mocks.listTelegramPairingCandidates,
+    confirmTelegramPairing: mocks.confirmTelegramPairing,
+    revokeTelegramPairing: mocks.revokeTelegramPairing,
+  };
+}
+
+function telegramStatus(pollingState: "healthy" | "disabled", network: boolean): TelegramChannelStatus {
+  return {
+    configured: true,
+    adapter_id: network ? "client.telegram.bot-api" : "client.telegram.synthetic",
+    state_persistence: network ? "postgresql" : "process-only-preview",
+    polling: {
+      state: pollingState,
+      reason_code: pollingState === "healthy" ? "telegram.worker.ready" : "telegram.worker.disabled",
+      next_offset: network ? 12 : 0,
+      poll_revision: network ? 2 : 0,
+      updates_handled: network ? 2 : 0,
+      source: {
+        status: pollingState,
+        transport: network ? "telegram-bot-api" : "synthetic",
+        network,
+      },
+    },
+    replies: null,
+    delivery: {
+      status: pollingState,
+      transport: network ? "telegram-bot-api" : "synthetic",
+      network,
+    },
+    capabilities: {
+      transport: network ? "telegram-bot-api" : "synthetic",
+      network,
+      text: true,
+      attachments: false,
+      max_text_length: 4096,
+      ambiguous_send_retries: false,
+    },
+    limitations: ["attachments rejected before fetch"],
+  };
+}
