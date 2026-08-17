@@ -325,6 +325,7 @@ def build_synthetic_runtime(
         code_issuer=telegram_code_issuer or DeterministicTelegramPairingCodeIssuer(),
         challenge_publisher=resolved_challenge_publisher,
         guardian_reader=guardian_reader,
+        event_audit_store=event_audit_store,
         clock=clock,
         id_factory=id_factory,
     )

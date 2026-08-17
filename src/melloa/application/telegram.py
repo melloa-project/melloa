@@ -9,22 +9,30 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from threading import RLock
+from typing import Literal
 
 from melloa.application.delivery import (
     ClientDeliveryRoute,
     DeliveryService,
     DeliveryUnavailableError,
 )
+from melloa.domain.audit import AuditContent
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import (
     JsonObject,
     QualifiedName,
     RecordId,
+    canonical_json_bytes,
     new_record_id,
     sha256_digest,
     utc_now,
 )
-from melloa.domain.classification import Sensitivity, sensitivity_scope
+from melloa.domain.classification import (
+    EpistemicStatus,
+    Sensitivity,
+    TrustLabel,
+    sensitivity_scope,
+)
 from melloa.domain.conversation import (
     ConversationMessage,
     ConversationProcessingState,
@@ -35,6 +43,7 @@ from melloa.domain.conversation import (
     MessagePart,
 )
 from melloa.domain.delivery import DeliveryWorkStatus
+from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.retention import RetentionDeletionReceipt
 from melloa.domain.telegram import (
@@ -62,6 +71,7 @@ from melloa.ports.client import ClientAdapter
 from melloa.ports.conversation import ConversationConflictError, ConversationStore
 from melloa.ports.delivery import DeliveryStore
 from melloa.ports.guardian import GuardianStatusReader
+from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import (
     TelegramAttachmentBackend,
     TelegramAttachmentConflictError,
@@ -145,6 +155,7 @@ class TelegramPairingService:
         code_issuer: TelegramPairingCodeIssuer,
         challenge_publisher: TelegramPairingChallengePublisher,
         guardian_reader: GuardianStatusReader,
+        event_audit_store: EventAuditStore | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
         candidate_ttl: timedelta = timedelta(minutes=10),
@@ -157,6 +168,7 @@ class TelegramPairingService:
         self._code_issuer = code_issuer
         self._challenge_publisher = challenge_publisher
         self._guardian_reader = guardian_reader
+        self._event_audit_store = event_audit_store
         self._clock = clock
         self._id_factory = id_factory
         self._candidate_ttl = candidate_ttl
@@ -279,6 +291,11 @@ class TelegramPairingService:
                 raise TelegramPairingConflictError(
                     "Telegram pairing candidate was already consumed"
                 )
+            self._append_pairing_audit(
+                principal=principal,
+                pairing=existing,
+                lifecycle="confirmed",
+            )
             return existing
         if now >= candidate.expires_at:
             raise TelegramPairingConflictError("Telegram pairing candidate expired")
@@ -296,7 +313,13 @@ class TelegramPairingService:
             confirmed_by_owner_id=principal.owner_id,
             confirmed_at=now,
         )
-        return self._store.confirm_pairing(self._adapter_id, candidate, pairing)
+        persisted = self._store.confirm_pairing(self._adapter_id, candidate, pairing)
+        self._append_pairing_audit(
+            principal=principal,
+            pairing=persisted,
+            lifecycle="confirmed",
+        )
+        return persisted
 
     def revoke(
         self,
@@ -310,6 +333,11 @@ class TelegramPairingService:
         if pairing.owner_id != self._owner_id:
             raise TelegramPairingNotFoundError("Telegram owner pairing not found")
         if pairing.revoked_at is not None:
+            self._append_pairing_audit(
+                principal=principal,
+                pairing=pairing,
+                lifecycle="revoked",
+            )
             return pairing
         revoked = TelegramOwnerPairing.model_validate(
             {
@@ -317,7 +345,107 @@ class TelegramPairingService:
                 "revoked_at": now,
             }
         )
-        return self._store.revoke_pairing(self._adapter_id, revoked)
+        persisted = self._store.revoke_pairing(self._adapter_id, revoked)
+        self._append_pairing_audit(
+            principal=principal,
+            pairing=persisted,
+            lifecycle="revoked",
+        )
+        return persisted
+
+    def _append_pairing_audit(
+        self,
+        *,
+        principal: AuthenticatedOwner,
+        pairing: TelegramOwnerPairing,
+        lifecycle: Literal["confirmed", "revoked"],
+    ) -> None:
+        event_audit_store = self._event_audit_store
+        if event_audit_store is None:
+            return
+        if lifecycle == "confirmed":
+            occurred_at = pairing.confirmed_at
+            event_type: QualifiedName = "telegram.owner-pairing-confirmed.v1"
+            action: QualifiedName = "telegram.owner-pairing.confirm"
+        else:
+            revoked_at = pairing.revoked_at
+            if revoked_at is None:
+                raise TelegramPairingConflictError(
+                    "Telegram pairing revocation audit requires revoked state"
+                )
+            occurred_at = revoked_at
+            event_type = "telegram.owner-pairing-revoked.v1"
+            action = "telegram.owner-pairing.revoke"
+        payload: JsonObject = {
+            "adapter_id": self._adapter_id,
+            "candidate_id": pairing.candidate_id,
+            "pairing_id": pairing.pairing_id,
+            "state": lifecycle,
+        }
+        event = EventEnvelope(
+            event_id=self._derived_pairing_audit_id(
+                "event",
+                pairing.pairing_id,
+                event_type,
+            ),
+            event_type=event_type,
+            schema_version="1.0.0",
+            occurred_at=occurred_at,
+            recorded_at=occurred_at,
+            subject_ids=(pairing.owner_id,),
+            source=EventSource(
+                capability_id="telegram.owner-pairing",
+                execution_id=pairing.pairing_id,
+            ),
+            producer=EventProducer(
+                component="telegram.pairing-service",
+                version="0.1.0",
+            ),
+            epistemic_status=EpistemicStatus.OBSERVATION,
+            sensitivity=Sensitivity.PERSONAL,
+            trust=TrustLabel.TRUSTED_SYSTEM,
+            retention_policy="retention.audit-ledger",
+            correlation_id=pairing.pairing_id,
+            payload=payload,
+            integrity=EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(payload))
+            ),
+        )
+        audit = AuditContent(
+            audit_id=self._derived_pairing_audit_id(
+                "audit",
+                pairing.pairing_id,
+                action,
+            ),
+            event_type="audit.event-appended.v1",
+            occurred_at=occurred_at,
+            actor_id=principal.owner_id,
+            action=action,
+            object_ids=(pairing.pairing_id, pairing.candidate_id),
+            metadata={
+                "adapter_id": self._adapter_id,
+                "event_id": event.event_id,
+                "result": lifecycle,
+            },
+        )
+        event_audit_store.append_event(event, audit)
+
+    @staticmethod
+    def _derived_pairing_audit_id(
+        prefix: str,
+        pairing_id: RecordId,
+        purpose: QualifiedName,
+    ) -> str:
+        digest = sha256_digest(
+            canonical_json_bytes(
+                {
+                    "pairing_id": pairing_id,
+                    "prefix": prefix,
+                    "purpose": purpose,
+                }
+            )
+        ).removeprefix("sha256:")
+        return f"{prefix}_{digest[:32]}"
 
     def _publish_replay_stable_challenge(
         self,

@@ -7,6 +7,7 @@ import pytest
 
 from melloa.adapters.fakes.conversation import InMemoryConversationStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.adapters.fakes.telegram import (
     DeterministicTelegramPairingCodeIssuer,
     FakeTelegramPairingChallengePublisher,
@@ -93,6 +94,18 @@ class IncompleteReplayPollStateStore(InMemoryTelegramPollStateStore):
         if self.hide_receipt:
             return None
         return super().get_receipt(adapter_id, update_id)
+
+
+class FailNextAuditStore(InMemoryEventAuditStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_next = True
+
+    def append_event(self, event, audit):
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("synthetic audit outage")
+        return super().append_event(event, audit)
 
 
 class MutableClock:
@@ -192,6 +205,7 @@ def configured_pairing_service(
     owner_id: str = OWNER_ID,
     id_factory=None,
     clock=None,
+    event_audit_store=None,
 ) -> tuple[
     TelegramPairingService,
     InMemoryTelegramPairingStateStore,
@@ -227,6 +241,7 @@ def configured_pairing_service(
             code_issuer=issuer,
             challenge_publisher=publisher,
             guardian_reader=guardian_reader,
+            event_audit_store=event_audit_store,
             clock=effective_clock,
             id_factory=id_factory or sequential_id_factory(),
         ),
@@ -381,6 +396,104 @@ def owner_principal(
         authenticated_at=fixed_time,
         reauthenticated_until=recent_until or fixed_time + timedelta(minutes=5),
         expires_at=fixed_time + timedelta(minutes=30),
+    )
+
+
+def test_pairing_lifecycle_audit_is_content_free_and_recovers_on_replay(
+    fixed_time: datetime,
+) -> None:
+    guardian_reader = guardian(fixed_time, GuardianMode.NORMAL)
+    clock = MutableClock(fixed_time + timedelta(minutes=3))
+    audit_store = FailNextAuditStore()
+    service, store, publisher = configured_pairing_service(
+        fixed_time,
+        guardian_reader,
+        pairing=None,
+        clock=clock,
+        event_audit_store=audit_store,
+    )
+    candidate = service.begin_candidate(
+        inbound_update(fixed_time, update_id=40, text="/start")
+    )
+    challenge = publisher.challenge_for(candidate.candidate_id)
+    principal = owner_principal(
+        fixed_time,
+        recent_until=fixed_time + timedelta(minutes=10),
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic audit outage"):
+        service.confirm(
+            principal,
+            candidate.candidate_id,
+            challenge.confirmation_code,
+        )
+
+    persisted = store.active_pairing(ADAPTER_ID, OWNER_ID)
+    assert persisted is not None
+    assert audit_store.events == ()
+    pairing = service.confirm(
+        principal,
+        candidate.candidate_id,
+        challenge.confirmation_code,
+    )
+    assert pairing == persisted
+    assert service.confirm(
+        principal,
+        candidate.candidate_id,
+        challenge.confirmation_code,
+    ) == pairing
+
+    audit_store.fail_next = True
+    clock.now = fixed_time + timedelta(minutes=5)
+    with pytest.raises(RuntimeError, match="synthetic audit outage"):
+        service.revoke(principal, pairing.pairing_id)
+
+    persisted_revoked = store.get_pairing(ADAPTER_ID, pairing.pairing_id)
+    assert persisted_revoked.revoked_at == clock.now
+    revoked = service.revoke(principal, pairing.pairing_id)
+    assert revoked == persisted_revoked
+    assert service.revoke(principal, pairing.pairing_id) == revoked
+
+    assert len(audit_store.events) == 2
+    confirmed_event, revoked_event = audit_store.events
+    assert confirmed_event.event_type == "telegram.owner-pairing-confirmed.v1"
+    assert confirmed_event.occurred_at == pairing.confirmed_at
+    assert confirmed_event.subject_ids == (OWNER_ID,)
+    assert confirmed_event.payload == {
+        "adapter_id": ADAPTER_ID,
+        "candidate_id": candidate.candidate_id,
+        "pairing_id": pairing.pairing_id,
+        "state": "confirmed",
+    }
+    assert revoked_event.event_type == "telegram.owner-pairing-revoked.v1"
+    assert revoked_event.occurred_at == revoked.revoked_at
+    assert revoked_event.subject_ids == (OWNER_ID,)
+    assert revoked_event.payload == {
+        "adapter_id": ADAPTER_ID,
+        "candidate_id": candidate.candidate_id,
+        "pairing_id": pairing.pairing_id,
+        "state": "revoked",
+    }
+    event_documents = tuple(event.model_dump_json() for event in audit_store.events)
+    assert all("telegram_user_id" not in document for document in event_documents)
+    assert all("telegram_chat_id" not in document for document in event_documents)
+    assert all("confirmation_code" not in document for document in event_documents)
+    assert all('"text"' not in document for document in event_documents)
+
+    assert len(audit_store.audit_records) == 2
+    confirmed_audit, revoked_audit = audit_store.audit_records
+    assert confirmed_audit.content.actor_id == OWNER_ID
+    assert confirmed_audit.content.action == "telegram.owner-pairing.confirm"
+    assert confirmed_audit.content.object_ids == (
+        pairing.pairing_id,
+        candidate.candidate_id,
+    )
+    assert revoked_audit.previous_hash == confirmed_audit.record_hash
+    assert revoked_audit.content.actor_id == OWNER_ID
+    assert revoked_audit.content.action == "telegram.owner-pairing.revoke"
+    assert revoked_audit.content.object_ids == (
+        pairing.pairing_id,
+        candidate.candidate_id,
     )
 
 

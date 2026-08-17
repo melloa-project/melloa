@@ -2045,6 +2045,10 @@ def test_postgres_telegram_state_survives_core_restarts(database_dsn, fixed_time
             pairing.pairing_id,
         )
         assert persisted.revoked_at == second_time
+        audit_inventory = runtime.event_audit_store.audit_retention_inventory()
+        assert audit_inventory.retained_objects == 2
+        assert audit_inventory.retained_bytes > 0
+        assert audit_inventory.oldest_retained_at == fixed_time
         assert stores.telegram_poll_state_store.read_state(
             SYNTHETIC_TELEGRAM_ADAPTER_ID
         ).next_offset == 3
