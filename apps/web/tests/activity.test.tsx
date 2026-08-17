@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ModelActivityEntry, ModelActivityReport } from "../src/api";
@@ -98,8 +98,11 @@ describe("ActivityPage", () => {
 
   it("filters the run ledger by disclosure state", async () => {
     render(
-      <MemoryRouter>
-        <ActivityPage />
+      <MemoryRouter initialEntries={["/activity"]}>
+        <Routes>
+          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/memory" element={<MemoryLocation />} />
+        </Routes>
       </MemoryRouter>,
     );
 
@@ -119,6 +122,24 @@ describe("ActivityPage", () => {
     expect(screen.getByText("assertion…000002")).toBeInTheDocument();
     expect(screen.getByText("Personal · citation_…000001")).toBeInTheDocument();
     expect(screen.getByText("Internal · citation_…000002")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `Inspect disclosed memory ${externalEntry.disclosure?.memory_references[0]?.assertion_id}`,
+    }));
+
+    expect(screen.getByText(`memory-search=?assertion=${externalEntry.disclosure?.memory_references[0]?.assertion_id}`)).toBeInTheDocument();
+  });
+
+  it("filters back to local runs after viewing external disclosure evidence", async () => {
+    render(
+      <MemoryRouter>
+        <ActivityPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "External 1" }));
+    expect(screen.getByText("assertion…000001")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Local 1" }));
 
@@ -143,3 +164,8 @@ describe("ActivityPage", () => {
     expect((end.getTime() - start.getTime()) / (60 * 60 * 1_000)).toBe(24);
   });
 });
+
+function MemoryLocation() {
+  const location = useLocation();
+  return <div>{`memory-search=${location.search}`}</div>;
+}

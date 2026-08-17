@@ -150,7 +150,14 @@ export function ActivityPage() {
                   onChange={setDisclosureFilter}
                 />
                 <div className="activity-list">
-                  {visibleEntries.map((entry) => <ActivityRow entry={entry} key={entry.result_id} onOpenThread={navigate} />)}
+                  {visibleEntries.map((entry) => (
+                    <ActivityRow
+                      entry={entry}
+                      key={entry.result_id}
+                      onInspectMemory={(assertionId) => navigate(`/memory?assertion=${encodeURIComponent(assertionId)}`)}
+                      onOpenThread={navigate}
+                    />
+                  ))}
                 </div>
               </>
             )}
@@ -167,9 +174,11 @@ export function ActivityPage() {
 
 function ActivityRow({
   entry,
+  onInspectMemory,
   onOpenThread,
 }: {
   readonly entry: ModelActivityEntry;
+  readonly onInspectMemory: (assertionId: string) => void;
   readonly onOpenThread: (path: string) => void;
 }) {
   const started = Date.parse(entry.started_at);
@@ -203,12 +212,18 @@ function ActivityRow({
       >
         <ArrowUpRight size={17} />
       </Button>
-      <ActivityDisclosure entry={entry} />
+      <ActivityDisclosure entry={entry} onInspectMemory={onInspectMemory} />
     </article>
   );
 }
 
-function ActivityDisclosure({ entry }: { readonly entry: ModelActivityEntry }) {
+function ActivityDisclosure({
+  entry,
+  onInspectMemory,
+}: {
+  readonly entry: ModelActivityEntry;
+  readonly onInspectMemory: (assertionId: string) => void;
+}) {
   const disclosure = entry.disclosure;
   if (disclosure === null || disclosure === undefined) {
     return null;
@@ -240,10 +255,17 @@ function ActivityDisclosure({ entry }: { readonly entry: ModelActivityEntry }) {
       ) : (
         <div className="activity-memory-list" aria-label="Disclosed memory references">
           {disclosure.memory_references.map((reference) => (
-            <span className="activity-memory-chip" key={reference.citation_id}>
+            <button
+              aria-label={`Inspect disclosed memory ${reference.assertion_id}`}
+              className="activity-memory-chip"
+              key={reference.citation_id}
+              onClick={() => onInspectMemory(reference.assertion_id)}
+              title="Inspect disclosed memory"
+              type="button"
+            >
               <strong>{shortId(reference.assertion_id)}</strong>
               <small>{titleCase(reference.sensitivity)} · {shortId(reference.citation_id)}</small>
-            </span>
+            </button>
           ))}
         </div>
       )}
