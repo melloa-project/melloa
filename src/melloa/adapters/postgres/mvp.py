@@ -219,6 +219,7 @@ def build_postgres_mvp_store_bundle(
                     audit_connection,
                     owner_id,
                     bootstrap_token,
+                    event_audit_store=cast(EventAuditStore, event_audit_store),
                     clock=clock,
                     id_factory=id_factory,
                 ),

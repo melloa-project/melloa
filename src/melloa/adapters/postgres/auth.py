@@ -7,20 +7,32 @@ import hmac
 import secrets
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any, TypeGuard
+from typing import Any, Literal, TypeGuard
 
 import psycopg
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from melloa.domain.audit import AuditContent
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import RecordId, canonical_json_bytes, new_record_id, utc_now
+from melloa.domain.base import (
+    JsonObject,
+    QualifiedName,
+    RecordId,
+    canonical_json_bytes,
+    new_record_id,
+    sha256_digest,
+    utc_now,
+)
+from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
+from melloa.domain.events import EventEnvelope, EventIntegrity, EventProducer, EventSource
 from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
     IssuedOwnerSession,
     RecentAuthenticationRequired,
 )
+from melloa.ports.store import EventAuditStore
 
 _MAXIMUM_SECRET_LENGTH = 4096
 _AUTHENTICATION_METHOD = "auth.local-opaque-token"
@@ -41,6 +53,7 @@ class PostgresOwnerSessionManager:
         owner_id: RecordId,
         bootstrap_token: str,
         *,
+        event_audit_store: EventAuditStore | None = None,
         clock: Callable[[], datetime] = utc_now,
         token_factory: Callable[[], str] = _secure_token,
         id_factory: Callable[[str], str] = new_record_id,
@@ -56,6 +69,7 @@ class PostgresOwnerSessionManager:
         self._connection = connection
         self._owner_id = owner_id
         self._bootstrap_digest = _digest(bootstrap_token)
+        self._event_audit_store = event_audit_store
         self._clock = clock
         self._token_factory = token_factory
         self._id_factory = id_factory
@@ -80,35 +94,41 @@ class PostgresOwnerSessionManager:
                 reauthenticated_until=authenticated_at + self._recent_auth_ttl,
                 expires_at=authenticated_at + self._session_ttl,
             )
-            inserted = self._connection.execute(
-                """
-                INSERT INTO melloa.owner_sessions (
-                    session_digest, session_id, owner_id, credential_digest,
-                    csrf_digest, authentication_method, authenticated_at,
-                    reauthenticated_until, expires_at, document
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-                RETURNING session_id
-                """,
-                (
-                    _digest(session_token),
-                    principal.session_id,
-                    principal.owner_id,
-                    self._bootstrap_digest,
-                    csrf_digest,
-                    principal.authentication_method,
-                    principal.authenticated_at,
-                    principal.reauthenticated_until,
-                    principal.expires_at,
-                    Jsonb(principal.model_dump(mode="json")),
-                ),
-            ).fetchone()
-            if inserted is not None:
-                return IssuedOwnerSession(
-                    principal=principal,
-                    session_token=session_token,
-                    csrf_token=csrf_token,
-                )
+            with self._connection.transaction():
+                inserted = self._connection.execute(
+                    """
+                    INSERT INTO melloa.owner_sessions (
+                        session_digest, session_id, owner_id, credential_digest,
+                        csrf_digest, authentication_method, authenticated_at,
+                        reauthenticated_until, expires_at, document
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                    RETURNING session_id
+                    """,
+                    (
+                        _digest(session_token),
+                        principal.session_id,
+                        principal.owner_id,
+                        self._bootstrap_digest,
+                        csrf_digest,
+                        principal.authentication_method,
+                        principal.authenticated_at,
+                        principal.reauthenticated_until,
+                        principal.expires_at,
+                        Jsonb(principal.model_dump(mode="json")),
+                    ),
+                ).fetchone()
+                if inserted is not None:
+                    self._append_session_audit(
+                        session_id=principal.session_id,
+                        occurred_at=principal.authenticated_at,
+                        lifecycle="issued",
+                    )
+                    return IssuedOwnerSession(
+                        principal=principal,
+                        session_token=session_token,
+                        csrf_token=csrf_token,
+                    )
         raise RuntimeError("could not generate a unique owner session")
 
     def verify(
@@ -162,18 +182,103 @@ class PostgresOwnerSessionManager:
     def revoke(self, session_token: str) -> None:
         if not self._valid_secret(session_token):
             return
-        self._connection.execute(
-            """
-            INSERT INTO melloa.owner_session_revocations (
-                session_id, revoked_at, reason_code
-            )
-            SELECT session_id, greatest(authenticated_at, %s), 'auth.owner-logout'
-              FROM melloa.owner_sessions
-             WHERE session_digest = %s
-            ON CONFLICT DO NOTHING
-            """,
-            (self._clock(), _digest(session_token)),
+        with self._connection.transaction():
+            revoked = self._connection.execute(
+                """
+                INSERT INTO melloa.owner_session_revocations (
+                    session_id, revoked_at, reason_code
+                )
+                SELECT session_id, greatest(authenticated_at, %s), 'auth.owner-logout'
+                  FROM melloa.owner_sessions
+                 WHERE session_digest = %s AND owner_id = %s
+                ON CONFLICT DO NOTHING
+                RETURNING session_id, revoked_at
+                """,
+                (self._clock(), _digest(session_token), self._owner_id),
+            ).fetchone()
+            if revoked is not None:
+                self._append_session_audit(
+                    session_id=str(revoked[0]),
+                    occurred_at=revoked[1],
+                    lifecycle="revoked",
+                )
+
+    def _append_session_audit(
+        self,
+        *,
+        session_id: RecordId,
+        occurred_at: datetime,
+        lifecycle: Literal["issued", "revoked"],
+    ) -> None:
+        event_audit_store = self._event_audit_store
+        if event_audit_store is None:
+            return
+        if lifecycle == "issued":
+            event_type: QualifiedName = "auth.owner-session-issued.v1"
+            action: QualifiedName = "auth.owner-session.issue"
+        else:
+            event_type = "auth.owner-session-revoked.v1"
+            action = "auth.owner-session.revoke"
+        payload: JsonObject = {
+            "authentication_method": _AUTHENTICATION_METHOD,
+            "session_id": session_id,
+            "state": lifecycle,
+        }
+        event = EventEnvelope(
+            event_id=self._derived_audit_id("event", session_id, event_type),
+            event_type=event_type,
+            schema_version="1.0.0",
+            occurred_at=occurred_at,
+            recorded_at=occurred_at,
+            subject_ids=(self._owner_id,),
+            source=EventSource(
+                capability_id="auth.owner-session",
+                execution_id=session_id,
+            ),
+            producer=EventProducer(
+                component="auth.owner-session-manager",
+                version="0.1.0",
+            ),
+            epistemic_status=EpistemicStatus.OBSERVATION,
+            sensitivity=Sensitivity.PERSONAL,
+            trust=TrustLabel.TRUSTED_SYSTEM,
+            retention_policy="retention.audit-ledger",
+            correlation_id=session_id,
+            payload=payload,
+            integrity=EventIntegrity(
+                payload_hash=sha256_digest(canonical_json_bytes(payload))
+            ),
         )
+        audit = AuditContent(
+            audit_id=self._derived_audit_id("audit", session_id, action),
+            event_type="audit.event-appended.v1",
+            occurred_at=occurred_at,
+            actor_id=self._owner_id,
+            action=action,
+            object_ids=(session_id,),
+            metadata={
+                "event_id": event.event_id,
+                "result": lifecycle,
+            },
+        )
+        event_audit_store.append_event(event, audit)
+
+    @staticmethod
+    def _derived_audit_id(
+        prefix: str,
+        session_id: RecordId,
+        purpose: QualifiedName,
+    ) -> str:
+        digest = sha256_digest(
+            canonical_json_bytes(
+                {
+                    "prefix": prefix,
+                    "purpose": purpose,
+                    "session_id": session_id,
+                }
+            )
+        ).removeprefix("sha256:")
+        return f"{prefix}_{digest[:32]}"
 
     def _new_token(self) -> str:
         token = self._token_factory()

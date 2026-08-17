@@ -1908,7 +1908,7 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert retention.status_code == 200
         inventory = {item["policy_id"]: item for item in retention.json()["inventory"]}
         assert inventory["retention.audit-ledger"]["coverage"] == "complete"
-        assert inventory["retention.audit-ledger"]["retained_objects"] == 2
+        assert inventory["retention.audit-ledger"]["retained_objects"] == 3
         assert inventory["retention.audit-ledger"]["retained_bytes"] > 0
         assert inventory["retention.owner-memory"]["deletion_receipts"] == 1
         health = second_client.get("/api/v1/inspection/health")
@@ -1946,6 +1946,42 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert third_connections[-1].execute(
             "SELECT count(*) FROM melloa.owner_session_revocations"
         ).fetchone() == (1,)
+        audit_inventory = third_runtime.event_audit_store.audit_retention_inventory()
+        assert audit_inventory.retained_objects == 4
+        auth_events = third_connections[-1].execute(
+            """
+            SELECT event_type, document::text
+              FROM melloa.canonical_events
+             WHERE event_type IN (
+                 'auth.owner-session-issued.v1',
+                 'auth.owner-session-revoked.v1'
+             )
+             ORDER BY occurred_at, event_type
+            """
+        ).fetchall()
+        assert tuple(row[0] for row in auth_events) == (
+            "auth.owner-session-issued.v1",
+            "auth.owner-session-revoked.v1",
+        )
+        auth_documents = tuple(str(row[1]) for row in auth_events)
+        assert all(bootstrap_token not in document for document in auth_documents)
+        assert all(session_token not in document for document in auth_documents)
+        assert all(csrf_token not in document for document in auth_documents)
+        assert all("credential_digest" not in document for document in auth_documents)
+        assert all("session_digest" not in document for document in auth_documents)
+        assert all("csrf_digest" not in document for document in auth_documents)
+        assert third_connections[-1].execute(
+            """
+            SELECT array_agg(action_name ORDER BY occurred_at, action_name)
+              FROM melloa.audit_events
+             WHERE action_name IN (
+                 'auth.owner-session.issue',
+                 'auth.owner-session.revoke'
+             )
+            """
+        ).fetchone() == (
+            ["auth.owner-session.issue", "auth.owner-session.revoke"],
+        )
 
 
 def _telegram_update(

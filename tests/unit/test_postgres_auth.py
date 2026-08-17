@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 import pytest
 from psycopg.types.json import Jsonb
 
+from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.ports.auth import (
     AuthenticationError,
@@ -63,20 +65,41 @@ class _Connection:
         if "INSERT INTO melloa.owner_session_revocations" in statement:
             session_digest = parameters[1]
             stored = self.database.sessions.get(session_digest)
-            if stored is not None:
-                self.database.revoked_session_ids.add(stored[3])
-            return _Result(None)
+            if stored is None or stored[3] in self.database.revoked_session_ids:
+                return _Result(None)
+            self.database.revoked_session_ids.add(stored[3])
+            return _Result((stored[3], parameters[0]))
         raise AssertionError(f"unexpected SQL: {statement}")
+
+    @contextmanager
+    def transaction(self):
+        sessions = dict(self.database.sessions)
+        session_ids = set(self.database.session_ids)
+        revoked_session_ids = set(self.database.revoked_session_ids)
+        try:
+            yield
+        except Exception:
+            self.database.sessions = sessions
+            self.database.session_ids = session_ids
+            self.database.revoked_session_ids = revoked_session_ids
+            raise
+
+
+class _FailingAuditStore(InMemoryEventAuditStore):
+    def append_event(self, event, audit):
+        raise RuntimeError("synthetic audit outage")
 
 
 def test_postgres_owner_session_survives_restart_without_plaintext(fixed_time) -> None:
     database = _SessionDatabase()
     now = fixed_time
     tokens = iter(("csrf-token", "session-token"))
+    audit_store = InMemoryEventAuditStore()
     manager = PostgresOwnerSessionManager(
         _Connection(database),
         record_id("owner", 1),
         _BOOTSTRAP_TOKEN,
+        event_audit_store=audit_store,
         clock=lambda: now,
         token_factory=lambda: next(tokens),
         id_factory=lambda _prefix: record_id("session", 1),
@@ -101,6 +124,7 @@ def test_postgres_owner_session_survives_restart_without_plaintext(fixed_time) -
         _Connection(database),
         record_id("owner", 1),
         _BOOTSTRAP_TOKEN,
+        event_audit_store=audit_store,
         clock=lambda: now,
     )
     assert restarted.verify(issued.session_token) == issued.principal
@@ -137,6 +161,31 @@ def test_postgres_owner_session_survives_restart_without_plaintext(fixed_time) -
     restarted.revoke(issued.session_token)
     with pytest.raises(AuthenticationError):
         restarted.verify(issued.session_token)
+
+    assert len(audit_store.events) == 2
+    issued_event, revoked_event = audit_store.events
+    assert issued_event.event_type == "auth.owner-session-issued.v1"
+    assert issued_event.payload == {
+        "authentication_method": "auth.local-opaque-token",
+        "session_id": issued.principal.session_id,
+        "state": "issued",
+    }
+    assert revoked_event.event_type == "auth.owner-session-revoked.v1"
+    assert revoked_event.payload == {
+        "authentication_method": "auth.local-opaque-token",
+        "session_id": issued.principal.session_id,
+        "state": "revoked",
+    }
+    audit_documents = tuple(
+        event.model_dump_json() for event in audit_store.events
+    ) + tuple(record.model_dump_json() for record in audit_store.audit_records)
+    assert all(_BOOTSTRAP_TOKEN not in document for document in audit_documents)
+    assert all("session-token" not in document for document in audit_documents)
+    assert all("csrf-token" not in document for document in audit_documents)
+    issued_audit, revoked_audit = audit_store.audit_records
+    assert issued_audit.content.action == "auth.owner-session.issue"
+    assert revoked_audit.content.action == "auth.owner-session.revoke"
+    assert revoked_audit.previous_hash == issued_audit.record_hash
 
 
 def test_postgres_owner_session_expiry_collision_and_validation(fixed_time) -> None:
@@ -184,6 +233,46 @@ def test_postgres_owner_session_expiry_collision_and_validation(fixed_time) -> N
             _BOOTSTRAP_TOKEN,
             token_factory=lambda: "",
         ).issue(_BOOTSTRAP_TOKEN)
+
+
+def test_postgres_owner_session_rolls_back_when_audit_fails(fixed_time) -> None:
+    database = _SessionDatabase()
+    tokens = iter(("failed-csrf", "failed-session"))
+    manager = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        event_audit_store=_FailingAuditStore(),
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(tokens),
+        id_factory=lambda _prefix: record_id("session", 4),
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic audit outage"):
+        manager.issue(_BOOTSTRAP_TOKEN)
+    assert database.sessions == {}
+
+    persisted_tokens = iter(("persisted-csrf", "persisted-session"))
+    persisted = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: fixed_time,
+        token_factory=lambda: next(persisted_tokens),
+        id_factory=lambda _prefix: record_id("session", 5),
+    ).issue(_BOOTSTRAP_TOKEN)
+    failing_revoke = PostgresOwnerSessionManager(
+        _Connection(database),
+        record_id("owner", 1),
+        _BOOTSTRAP_TOKEN,
+        event_audit_store=_FailingAuditStore(),
+        clock=lambda: fixed_time + timedelta(seconds=1),
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic audit outage"):
+        failing_revoke.revoke(persisted.session_token)
+    assert database.revoked_session_ids == set()
+    assert failing_revoke.verify(persisted.session_token) == persisted.principal
 
 
 @pytest.mark.parametrize(
