@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OperationsPage } from "../src/pages/operations";
@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
   mediaCatalog: vi.fn(),
   retentionReport: vi.fn(),
   exportReadiness: vi.fn(),
+  downloadExportPreview: vi.fn(),
+  notify: vi.fn(),
+  createObjectUrl: vi.fn(),
+  revokeObjectUrl: vi.fn(),
+  anchorClick: vi.fn(),
 }));
 
 vi.mock("../src/app", () => ({
@@ -18,7 +23,10 @@ vi.mock("../src/app", () => ({
       mediaCatalog: mocks.mediaCatalog,
       retentionReport: mocks.retentionReport,
       exportReadiness: mocks.exportReadiness,
+      downloadExportPreview: mocks.downloadExportPreview,
     },
+    canMutate: true,
+    notify: mocks.notify,
   }),
 }));
 
@@ -32,6 +40,23 @@ describe("OperationsPage retention view", () => {
       value: {
         writeText: vi.fn().mockResolvedValue(undefined),
       },
+    });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: mocks.createObjectUrl,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: mocks.revokeObjectUrl,
+    });
+    Object.defineProperty(HTMLAnchorElement.prototype, "click", {
+      configurable: true,
+      value: mocks.anchorClick,
+    });
+    mocks.createObjectUrl.mockReturnValue("blob:melloa-owner-export");
+    mocks.downloadExportPreview.mockResolvedValue({
+      blob: new Blob(["validated archive"], { type: "application/zip" }),
+      filename: "melloa-owner-export-export_01.zip",
     });
     mocks.healthDetail.mockResolvedValue({
       generated_at: "2026-08-16T12:00:00Z",
@@ -219,6 +244,8 @@ describe("OperationsPage retention view", () => {
     expect(screen.getByText("Known gaps")).toBeInTheDocument();
     expect(screen.getByText("Bundle encryption")).toBeInTheDocument();
     expect(screen.getByText("Not encrypted")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download current ZIP" })).toBeEnabled();
+    expect(screen.getByText("Validated before download. The ZIP is not encrypted and excludes blobs and SQL snapshots.")).toBeInTheDocument();
     expect(screen.getByText("Included artifacts")).toBeInTheDocument();
     expect(screen.getByText("Explicit gaps")).toBeInTheDocument();
     expect(screen.getByText("conversations/*.jsonl")).toBeInTheDocument();
@@ -262,6 +289,22 @@ describe("OperationsPage retention view", () => {
     await screen.findByText("Validation command copied");
     expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
       "melloa import-validate --bundle-dir <export-dir>",
+    );
+  });
+
+  it("downloads the validated live export and releases its object URL", async () => {
+    render(<OperationsPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Export/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Download current ZIP" }));
+
+    await waitFor(() => expect(mocks.downloadExportPreview).toHaveBeenCalledOnce());
+    expect(mocks.createObjectUrl).toHaveBeenCalledOnce();
+    expect(mocks.anchorClick).toHaveBeenCalledOnce();
+    expect(mocks.revokeObjectUrl).toHaveBeenCalledWith("blob:melloa-owner-export");
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "Validated unencrypted export downloaded.",
+      "success",
     );
   });
 });

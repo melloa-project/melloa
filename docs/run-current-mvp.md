@@ -500,9 +500,13 @@ If canonical records disappear, stop using the preview and check that the restar
 
 ## 8. Export and validate owner data
 
-The current MVP includes an offline canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity. Delivery rows preserve redacted exact-authority work status, attempts, resumptions, and receipt identifiers without message text. Retention rows preserve owner-visible policy, aggregate inventory, and backup-expiry disclosure without retained object content. Model-activity rows preserve route, token, cost, timing, and external-disclosure evidence without prompts or raw model output. Memory inspection rows include deleted-content tombstone and rebuild-work evidence instead of dropping the accountability record. Before running the CLI command, open **Operations → Export** to inspect estimated record counts, covered record groups, dry-run validation checks, and explicit gaps through the authenticated Owner Console. The validation scope card should show checksum, schema, and reference checks as implemented while leaving database restore execution pending.
+The current MVP includes a canonical export preview for owner data portability and import dry-run validation. It writes JSONL records plus copied JSON Schemas, a manifest, and SHA-256 checksums, then validates checksums, schema readability, and basic referential integrity. Delivery rows preserve redacted exact-authority work status, attempts, resumptions, and receipt identifiers without message text. Retention rows preserve owner-visible policy, aggregate inventory, and backup-expiry disclosure without retained object content. Model-activity rows preserve route, token, cost, timing, and external-disclosure evidence without prompts or raw model output. Memory inspection rows include deleted-content tombstone and rebuild-work evidence instead of dropping the accountability record.
 
-Keep using the disposable state directory and run:
+For the running MVP, open **Operations → Export**, inspect the readiness summary and explicit gaps, select **Unlock changes** if the console is read-only, and choose **Download current ZIP**. The private core requires the session-bound CSRF proof and live recent authentication, reads the current runtime stores, validates the complete bundle before responding, serves it as an attachment, and removes its temporary server-side files after the response. The downloaded filename starts with `melloa-owner-export-` and ends in `.zip`. Unzip it into an empty directory before running `melloa import-validate --bundle-dir <unzipped-export-dir>`.
+
+Use the browser download before stopping the default process-local core: another process cannot recover that volatile state. The CLI path below is still useful for headless operation and for the explicitly configured PostgreSQL stores, but a newly started CLI process sees a newly composed in-memory fixture rather than another process's conversations.
+
+For the CLI path, keep using the disposable state directory and run:
 
 ```bash
 export MELLOA_MVP_EXPORT_DIR="$MELLOA_MVP_STATE/export-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -517,7 +521,7 @@ uv run melloa import-validate \
   --bundle-dir "$MELLOA_MVP_EXPORT_DIR"
 ```
 
-The first command verifies the signed Guardian projection, reads the mode-`0600` owner credential file without printing it, exports the process-local preview state or the configured PostgreSQL MVP stores, and refuses to write into a non-empty target directory. Delivery status is exported in `conversations/deliveries.jsonl`, retention disclosure is exported in `inspection/retention.jsonl`, and model activity is exported in `inspection/model-activity.jsonl`. Deleted assertion values remain absent, but their content-free tombstones remain present in `assertions/inspections.jsonl`. The second command is validation-only; it does not mutate a database or import records yet.
+The first command verifies the signed Guardian projection, reads the mode-`0600` owner credential file without printing it, exports a newly composed process-local fixture or the configured PostgreSQL MVP stores, and refuses to write into a non-empty target directory. It does not attach to another running process's in-memory stores. Delivery status is exported in `conversations/deliveries.jsonl`, retention disclosure is exported in `inspection/retention.jsonl`, and model activity is exported in `inspection/model-activity.jsonl`. Deleted assertion values remain absent, but their content-free tombstones remain present in `assertions/inspections.jsonl`. The second command is validation-only; it does not mutate a database or import records yet.
 
 Expected bundle files include:
 

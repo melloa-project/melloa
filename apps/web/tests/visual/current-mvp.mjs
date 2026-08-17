@@ -69,6 +69,28 @@ try {
   await page.getByRole("tab", { name: "Export" }).click();
   await page.getByText("melloa.canonical-owner-export", { exact: true }).waitFor();
   await page.getByText("Unencrypted preview", { exact: true }).waitFor();
+  const [ownerExport] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download current ZIP" }).click(),
+  ]);
+  if (!/^melloa-owner-export-export_[a-z0-9]+\.zip$/.test(ownerExport.suggestedFilename())) {
+    throw new Error("Owner export download did not use the bounded attachment filename");
+  }
+  const ownerExportPath = await ownerExport.path();
+  if (ownerExportPath === null) {
+    throw new Error("Owner export download did not produce a local archive");
+  }
+  const ownerExportBytes = await readFile(ownerExportPath);
+  if (
+    ownerExportBytes.length < 4
+    || ownerExportBytes[0] !== 0x50
+    || ownerExportBytes[1] !== 0x4b
+    || ownerExportBytes[2] !== 0x03
+    || ownerExportBytes[3] !== 0x04
+  ) {
+    throw new Error("Owner export download is not a ZIP archive");
+  }
+  await page.getByText("Validated unencrypted export downloaded.", { exact: true }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/operations-export-desktop.png`,
     fullPage: true,
@@ -93,6 +115,15 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: `${outputDirectory}/operations-export-mobile.png`,
+  });
+  await page.getByText("Validated unencrypted export downloaded.", { exact: true }).waitFor({
+    state: "hidden",
+    timeout: 7_000,
+  });
+  const exportDownloadButton = page.getByRole("button", { name: "Download current ZIP" });
+  await exportDownloadButton.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  await page.screenshot({
+    path: `${outputDirectory}/operations-export-download-mobile.png`,
   });
 
   await page.getByRole("link", { name: "Providers" }).click();

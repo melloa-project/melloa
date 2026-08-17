@@ -231,10 +231,12 @@ function RetentionView({ report }: { readonly report: OwnerRetentionReport | nul
 }
 
 function ExportView({ report }: { readonly report: OwnerExportReadinessReport | null }) {
+  const { api, canMutate, notify } = useMelloa();
   const [copyState, setCopyState] = useState<{
     readonly command: "export" | "validation";
     readonly status: "copied" | "failed";
   } | null>(null);
+  const [downloading, setDownloading] = useState(false);
   if (report === null) {
     return <Card><EmptyState icon={Download} title="Export report unavailable" description="The private core did not return owner export readiness." /></Card>;
   }
@@ -252,6 +254,31 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
       setCopyState({ command, status: "failed" });
     }
   };
+  const downloadCurrentExport = async () => {
+    setDownloading(true);
+    try {
+      const archive = await api.downloadExportPreview();
+      const objectUrl = URL.createObjectURL(archive.blob);
+      try {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = archive.filename;
+        document.body.append(link);
+        try {
+          link.click();
+        } finally {
+          link.remove();
+        }
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+      notify("Validated unencrypted export downloaded.", "success");
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    } finally {
+      setDownloading(false);
+    }
+  };
   return (
     <div className="operations-stack">
       <Card className="operations-panel export-summary-panel">
@@ -267,6 +294,24 @@ function ExportView({ report }: { readonly report: OwnerExportReadinessReport | 
           <div><span>Validation checks</span><strong>{implementedValidationChecks} of {report.validation_checks.length}</strong></div>
           <div><span>Known gaps</span><strong>{excludedCoverage.length}</strong></div>
           <div><span>Bundle encryption</span><strong>{report.encrypted ? "Enabled" : "Not encrypted"}</strong></div>
+        </div>
+        <div className="export-command-grid" aria-label="Live export download">
+          <div>
+            <div className="export-command-header">
+              <span>Live runtime bundle</span>
+              <Button
+                disabled={!canMutate}
+                loading={downloading}
+                onClick={() => void downloadCurrentExport()}
+                size="sm"
+                tone="primary"
+                type="button"
+              >
+                <Download size={14} /> Download current ZIP
+              </Button>
+            </div>
+            <small>Validated before download. The ZIP is not encrypted and excludes blobs and SQL snapshots.</small>
+          </div>
         </div>
         <div className="export-command-grid" aria-label="Export commands">
           <CommandBlock
