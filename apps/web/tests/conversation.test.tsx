@@ -570,6 +570,28 @@ describe("ConversationPage", () => {
     expect(mocks.inspectTurn).toHaveBeenCalledWith(thread.thread_id, turn.turn_id);
   });
 
+  it("surfaces and clears a route query for a turn missing from the thread", async () => {
+    const missingTurnId = "turn_missing_00000000000000000001";
+
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}?turn=${missingTurnId}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationWithLocation />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Requested turn is not in this thread")).toBeInTheDocument();
+    expect(screen.getByText(missingTurnId)).toBeInTheDocument();
+    expect(mocks.inspectTurn).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: `Copy requested turn ID ${missingTurnId}` }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(missingTurnId));
+    expect(mocks.notify).toHaveBeenCalledWith("Requested turn ID copied.", "success");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear turn link" }));
+    await waitFor(() => expect(screen.queryByText("Requested turn is not in this thread")).not.toBeInTheDocument());
+    expect(screen.getByText("conversation-search=")).toBeInTheDocument();
+  });
+
   it("shows outbound delivery authority and resumes dead delivery work", async () => {
     mocks.listDeliveries.mockResolvedValue([completedDelivery, deadDelivery]);
     render(
@@ -630,6 +652,20 @@ describe("ConversationPage", () => {
 function MemoryLocation() {
   const location = useLocation();
   return <div>{`memory-search=${location.search}`}</div>;
+}
+
+function ConversationWithLocation() {
+  return (
+    <>
+      <ConversationPage />
+      <ConversationLocation />
+    </>
+  );
+}
+
+function ConversationLocation() {
+  const location = useLocation();
+  return <div>{`conversation-search=${location.search}`}</div>;
 }
 
 type Deferred<T> = {

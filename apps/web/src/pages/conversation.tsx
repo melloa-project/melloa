@@ -98,6 +98,7 @@ export function ConversationPage() {
   const [deliveries, setDeliveries] = useState<readonly DeliveryWorkStatus[]>([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
+  const [loadedConversationThreadId, setLoadedConversationThreadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -150,6 +151,15 @@ export function ConversationPage() {
     : deliveries.find((delivery) => delivery.work_id === selectedDeliveryWorkId) ?? null;
   const pending = processing.some((status) => !TERMINAL_PROCESSING_STATES.has(status.state))
     || deliveries.some((status) => !TERMINAL_PROCESSING_STATES.has(status.state));
+  const conversationReady = selectedThread !== null
+    && loadedConversationThreadId === selectedThread.thread_id
+    && !loadingConversation
+    && error === null;
+  const missingTurnId = queryTurnId !== null
+    && conversationReady
+    && !turns.some((turn) => turn.turn_id === queryTurnId)
+    ? queryTurnId
+    : null;
 
   const loadThreads = useCallback(async () => {
     const requestId = threadsLoadRequestRef.current + 1;
@@ -180,6 +190,7 @@ export function ConversationPage() {
     const requestId = conversationLoadRequestRef.current + 1;
     conversationLoadRequestRef.current = requestId;
     if (!quiet) {
+      setLoadedConversationThreadId(null);
       setLoadingConversation(true);
     }
     try {
@@ -196,11 +207,13 @@ export function ConversationPage() {
       setTurns(nextTurns);
       setProcessing(nextProcessing);
       setDeliveries(nextDeliveries);
+      setLoadedConversationThreadId(selectedId);
       setError(null);
     } catch (caught) {
       if (requestId !== conversationLoadRequestRef.current) {
         return;
       }
+      setLoadedConversationThreadId(null);
       setError(errorMessage(caught));
     } finally {
       if (requestId === conversationLoadRequestRef.current) {
@@ -232,16 +245,19 @@ export function ConversationPage() {
   }, [loadConversation, loadingThreads, navigate, threadId, threads]);
 
   useEffect(() => {
-    if (queryTurnId === null || turns.length === 0) {
+    if (queryTurnId === null || selectedThread === null || loadedConversationThreadId !== selectedThread.thread_id) {
       return;
     }
     if (!turns.some((turn) => turn.turn_id === queryTurnId)) {
+      setSelectedTurnId(null);
+      setSelectedMessageId(null);
+      setSelectedDeliveryWorkId(null);
       return;
     }
     setSelectedTurnId(queryTurnId);
     setSelectedMessageId(null);
     setSelectedDeliveryWorkId(null);
-  }, [queryTurnId, turns]);
+  }, [loadedConversationThreadId, queryTurnId, selectedThread, turns]);
 
   useEffect(() => {
     if (!pending || threadId === undefined) {
@@ -512,6 +528,28 @@ export function ConversationPage() {
             <div className="message-scroll">
               {loadingConversation ? <LoadingState label="Loading canonical messages" /> : null}
               {error === null ? null : <ErrorState message={error} />}
+              {missingTurnId !== null ? (
+                <div className="conversation-missing-turn" role="status">
+                  <CircleAlert aria-hidden="true" size={18} />
+                  <span>
+                    <strong>Requested turn is not in this thread</strong>
+                    <small>The provenance link may point to a retired, repaired, or different conversation turn.</small>
+                  </span>
+                  <code title={missingTurnId}>{missingTurnId}</code>
+                  <Button
+                    aria-label={`Copy requested turn ID ${missingTurnId}`}
+                    onClick={() => void copyTurnLedgerId("Requested turn", missingTurnId)}
+                    size="icon"
+                    tone="ghost"
+                    title="Copy requested turn ID"
+                  >
+                    <Copy aria-hidden="true" size={15} />
+                  </Button>
+                  <Button onClick={clearTurnQuery} tone="ghost">
+                    <X aria-hidden="true" size={15} /> Clear turn link
+                  </Button>
+                </div>
+              ) : null}
               {!loadingConversation && error === null && messages.length === 0 ? (
                 <EmptyState
                   description="Ask a question or share context. Route, cost, disclosure, and evidence will be attached to Melli's reply."
