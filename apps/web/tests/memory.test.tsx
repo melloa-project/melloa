@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MemoryInspection } from "../src/api";
-import { MemoryPage } from "../src/pages/memory";
+import { MemoryPage, normalizeAssertionLookup } from "../src/pages/memory";
 
 const mocks = vi.hoisted(() => ({
   inspectMemory: vi.fn(),
@@ -273,6 +273,36 @@ describe("MemoryPage", () => {
     expect(await screen.findByText("walking")).toBeInTheDocument();
     expect(screen.queryByText("reading")).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.inspectMemory).toHaveBeenCalledWith(
+      updatedInspection.assertion.assertion_id,
+    ));
+  });
+
+  it("normalizes assertion ids pasted from memory links and copied snippets", async () => {
+    expect(normalizeAssertionLookup(
+      `http://melloa.local/memory?assertion=${retainedInspection.assertion.assertion_id}`,
+    )).toBe(retainedInspection.assertion.assertion_id);
+    expect(normalizeAssertionLookup(
+      `timeline reference ${updatedInspection.assertion.assertion_id} copied from export`,
+    )).toBe(updatedInspection.assertion.assertion_id);
+  });
+
+  it("loads memory inspections from normalized assertion query references", async () => {
+    mocks.inspectMemory.mockImplementation((assertionId: string) => Promise.resolve(
+      assertionId === updatedInspection.assertion.assertion_id ? updatedInspection : retainedInspection,
+    ));
+
+    render(
+      <MemoryRouter initialEntries={[`/memory?assertion=${encodeURIComponent(
+        `timeline reference ${updatedInspection.assertion.assertion_id} copied from export`,
+      )}`]}>
+        <Routes>
+          <Route path="/memory" element={<MemoryPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("walking")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.inspectMemory).toHaveBeenLastCalledWith(
       updatedInspection.assertion.assertion_id,
     ));
   });

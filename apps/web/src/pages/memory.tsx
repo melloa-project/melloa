@@ -24,7 +24,7 @@ type MemoryAction = "correct" | "dispute" | "retract" | "delete_content";
 export function MemoryPage() {
   const { api, canMutate, notify } = useMelloa();
   const [searchParams, setSearchParams] = useSearchParams();
-  const assertionQuery = searchParams.get("assertion")?.trim() ?? "";
+  const assertionQuery = normalizeAssertionLookup(searchParams.get("assertion") ?? "");
   const [query, setQuery] = useState(assertionQuery);
   const [inspection, setInspection] = useState<MemoryInspection | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,7 +76,7 @@ export function MemoryPage() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const normalized = query.trim();
+    const normalized = normalizeAssertionLookup(query);
     if (normalized.length === 0) {
       return;
     }
@@ -347,6 +347,24 @@ function memoryActionPastTense(action: MemoryAction): string {
     return "Memory content deleted.";
   }
   return "Memory retracted.";
+}
+
+export function normalizeAssertionLookup(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+  try {
+    const url = new URL(trimmed, "http://melloa.local");
+    const assertion = url.searchParams.get("assertion")?.trim();
+    if (assertion !== undefined && assertion !== null && assertion.length > 0) {
+      return assertion;
+    }
+  } catch {
+    // Fall through to extracting an assertion token from copied references.
+  }
+  const match = trimmed.match(/\bassertion_[A-Za-z0-9_-]+\b/);
+  return match?.[0] ?? trimmed;
 }
 
 function stateChangeLabel(change: JsonObject): string {
