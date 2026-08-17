@@ -433,7 +433,7 @@ def validate_bundle(
                 )
                 if entry.record_count != record_counts[entry.path]:
                     errors.append(f"manifest record count does not match file: {entry.path}")
-        _validate_references(root, errors)
+        _validate_references(root, manifest, errors)
 
     return CanonicalExportValidationReport(
         export_id=export_id,
@@ -578,7 +578,11 @@ def _load_jsonl(root: Path, relative_path: str) -> list[dict[str, Any]]:
     ]
 
 
-def _validate_references(root: Path, errors: list[str]) -> None:
+def _validate_references(
+    root: Path,
+    manifest: CanonicalExportManifest,
+    errors: list[str],
+) -> None:
     try:
         threads = _load_jsonl(root, "conversations/threads.jsonl")
         messages = _load_jsonl(root, "conversations/messages.jsonl")
@@ -586,6 +590,7 @@ def _validate_references(root: Path, errors: list[str]) -> None:
         inspections = _load_jsonl(root, "conversations/turn-inspections.jsonl")
         deliveries = _load_jsonl(root, "conversations/deliveries.jsonl")
         activity_reports = _load_jsonl(root, "inspection/model-activity.jsonl")
+        retention_reports = _load_jsonl(root, "inspection/retention.jsonl")
         memories = _load_jsonl(root, "assertions/inspections.jsonl")
     except (OSError, json.JSONDecodeError, ExportBundleError):
         errors.append("export data cannot be loaded for referential integrity checks")
@@ -614,6 +619,15 @@ def _validate_references(root: Path, errors: list[str]) -> None:
             errors.append(f"delivery references missing thread: {delivery['work_id']}")
         if delivery["message_id"] not in message_ids:
             errors.append(f"delivery references missing message: {delivery['work_id']}")
+    if len(retention_reports) > 1:
+        errors.append("retention export contains multiple owner reports")
+    for report in retention_reports:
+        if report["owner_id"] != manifest.owner_id:
+            errors.append("retention report owner does not match manifest")
+        policy_ids = tuple(policy["policy_id"] for policy in report["policies"])
+        inventory_ids = tuple(item["policy_id"] for item in report["inventory"])
+        if inventory_ids != policy_ids:
+            errors.append("retention inventory references different policies")
     for report in activity_reports:
         for entry in report["entries"]:
             if entry["thread_id"] not in thread_ids:

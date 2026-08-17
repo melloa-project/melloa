@@ -354,6 +354,49 @@ def test_import_validation_reports_missing_checksum_manifest_and_references(
     )
 
 
+def test_import_validation_reports_retention_reference_errors(
+    tmp_path,
+    fixed_time,
+) -> None:
+    runtime = _runtime(fixed_time)
+    bundle_dir = tmp_path / "retention-reference-export"
+    OwnerExportService(
+        owner_id=runtime.owner_id,
+        intelligence_id=runtime.intelligence_id,
+        conversation=runtime.conversation_service,
+        delivery=runtime.delivery_service,
+        memory=runtime.memory_service,
+        memory_repository=runtime.memory_store,
+        retention=runtime.retention_service,
+        clock=lambda: fixed_time,
+        id_factory=_fixed_ids(),
+    ).write_bundle(bundle_dir, schema_root=_schema_root())
+    retention_path = bundle_dir / "inspection/retention.jsonl"
+    retention_records = [
+        json.loads(line)
+        for line in retention_path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    retention_records[0]["owner_id"] = "owner_0000000000000000000000000000ffff"
+    retention_records.append({**retention_records[0], "owner_id": runtime.owner_id})
+    retention_path.write_text(
+        "".join(json.dumps(record, sort_keys=True) + "\n" for record in retention_records),
+        encoding="utf-8",
+    )
+
+    retention_reference_report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
+
+    assert retention_reference_report.valid is False
+    assert any(
+        "retention export contains multiple owner reports" in error
+        for error in retention_reference_report.errors
+    )
+    assert any(
+        "retention report owner does not match manifest" in error
+        for error in retention_reference_report.errors
+    )
+
+
 def test_import_validation_reports_malformed_checksum_file(tmp_path, fixed_time) -> None:
     malformed = tmp_path / "malformed"
     malformed.mkdir()
