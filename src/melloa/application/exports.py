@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import tempfile
+import zipfile
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -141,10 +143,13 @@ class OwnerExportService:
         target_dir: Path,
         *,
         schema_root: Path,
+        principal: AuthenticatedOwner | None = None,
     ) -> CanonicalExportManifest:
         target = _prepare_target_dir(target_dir)
-        principal = self._export_principal()
-        rows = self._collect_rows(principal)
+        export_principal = principal or self._export_principal()
+        if export_principal.owner_id != self._owner_id:
+            raise ExportBundleError("authenticated principal does not own this export")
+        rows = self._collect_rows(export_principal)
         entries: list[ExportFileEntry] = []
 
         for relative_path, records in rows.items():
@@ -182,6 +187,52 @@ class OwnerExportService:
         manifest_path = target / "manifest.json"
         manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
         _write_checksums(target)
+        return manifest
+
+    def write_validated_zip(
+        self,
+        archive_path: Path,
+        *,
+        schema_root: Path,
+        principal: AuthenticatedOwner | None = None,
+    ) -> CanonicalExportManifest:
+        target = archive_path.resolve()
+        if target.exists():
+            raise ExportBundleError("export archive target already exists")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.parent.is_dir():
+            raise ExportBundleError("export archive parent must be a directory")
+
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix=".melloa-export-",
+                dir=target.parent,
+            ) as staging_directory:
+                bundle = Path(staging_directory) / "bundle"
+                manifest = self.write_bundle(
+                    bundle,
+                    schema_root=schema_root,
+                    principal=principal,
+                )
+                validation = validate_bundle(bundle, clock=self._clock)
+                if not validation.valid or validation.export_id != manifest.export_id:
+                    raise ExportBundleError("generated export bundle failed validation")
+                with zipfile.ZipFile(
+                    target,
+                    mode="x",
+                    compression=zipfile.ZIP_DEFLATED,
+                ) as archive:
+                    for path in sorted(bundle.rglob("*")):
+                        if path.is_file():
+                            archive.write(
+                                path,
+                                arcname=path.relative_to(bundle).as_posix(),
+                            )
+        except FileExistsError as error:
+            raise ExportBundleError("export archive target already exists") from error
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
         return manifest
 
     def _collect_rows(

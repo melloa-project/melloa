@@ -82,6 +82,49 @@ describe("MelloaApi", () => {
     expect(new Headers(calls[2]?.init?.headers).get("X-Melloa-CSRF")).toBe("csrf-proof");
   });
 
+  it("downloads a CSRF-bound owner export archive with a safe filename", async () => {
+    const calls: Array<{ readonly input: string; readonly init?: RequestInit }> = [];
+    const api = new MelloaApi(async (input, init) => {
+      calls.push({ input: String(input), init });
+      if (String(input) === "/api/v1/auth/session") {
+        return jsonResponse({ principal, csrf_token: "csrf-proof" });
+      }
+      return new Response(new Uint8Array([80, 75, 3, 4]), {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": "attachment; filename=\"melloa-owner-export-export_01.zip\"",
+        },
+      });
+    });
+
+    await api.login("owner-credential");
+    const archive = await api.downloadExportPreview();
+
+    expect(archive.filename).toBe("melloa-owner-export-export_01.zip");
+    expect(Array.from(new Uint8Array(await archive.blob.arrayBuffer()))).toEqual([80, 75, 3, 4]);
+    expect(calls[1]?.input).toBe("/api/v1/exports/preview");
+    expect(calls[1]?.init?.method).toBe("POST");
+    const headers = new Headers(calls[1]?.init?.headers);
+    expect(headers.get("Accept")).toBe("application/zip");
+    expect(headers.get("X-Melloa-CSRF")).toBe("csrf-proof");
+  });
+
+  it("rejects a successful non-archive export response", async () => {
+    let requests = 0;
+    const api = new MelloaApi(async () => {
+      requests += 1;
+      return requests === 1
+        ? jsonResponse({ principal, csrf_token: "csrf-proof" })
+        : jsonResponse({ unexpected: true });
+    });
+
+    await api.login("owner-credential");
+    await expect(api.downloadExportPreview()).rejects.toMatchObject({
+      code: "invalid_export_response",
+      status: 502,
+    });
+  });
+
   it("rejects mutations before making a request when proof is absent", async () => {
     let called = false;
     const api = new MelloaApi(async () => {
@@ -98,6 +141,10 @@ describe("MelloaApi", () => {
       code: "recent_authentication_required",
     });
     await expect(api.revokeOtherSessions()).rejects.toMatchObject({
+      status: 403,
+      code: "recent_authentication_required",
+    });
+    await expect(api.downloadExportPreview()).rejects.toMatchObject({
       status: 403,
       code: "recent_authentication_required",
     });

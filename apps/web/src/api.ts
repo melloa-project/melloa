@@ -509,6 +509,11 @@ export type OwnerExportReadinessReport = {
   readonly limitations: readonly string[];
 };
 
+export type OwnerExportArchive = {
+  readonly blob: Blob;
+  readonly filename: string;
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -527,6 +532,7 @@ type RequestOptions = {
   readonly method?: string;
   readonly body?: JsonObject;
   readonly csrf?: boolean;
+  readonly accept?: string;
 };
 
 export class MelloaApi {
@@ -597,6 +603,26 @@ export class MelloaApi {
 
   async exportReadiness(): Promise<OwnerExportReadinessReport> {
     return this.#request<OwnerExportReadinessReport>("/api/v1/inspection/export");
+  }
+
+  async downloadExportPreview(): Promise<OwnerExportArchive> {
+    const response = await this.#response("/api/v1/exports/preview", {
+      method: "POST",
+      csrf: true,
+      accept: "application/zip",
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/zip")) {
+      throw new ApiError(
+        502,
+        "invalid_export_response",
+        "The private core returned an invalid export archive.",
+      );
+    }
+    return {
+      blob: await response.blob(),
+      filename: exportArchiveFilename(response.headers.get("content-disposition")),
+    };
   }
 
   async modelRoutes(): Promise<OwnerModelRouteReport> {
@@ -827,7 +853,16 @@ export class MelloaApi {
   }
 
   async #request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const headers = new Headers({ Accept: "application/json" });
+    const response = await this.#response(path, options);
+    const contentType = response.headers.get("content-type") ?? "";
+    const payload: unknown = contentType.includes("application/json")
+      ? await response.json()
+      : null;
+    return payload as T;
+  }
+
+  async #response(path: string, options: RequestOptions = {}): Promise<Response> {
+    const headers = new Headers({ Accept: options.accept ?? "application/json" });
     if (options.body !== undefined) {
       headers.set("Content-Type", "application/json");
     }
@@ -850,24 +885,29 @@ export class MelloaApi {
       cache: "no-store",
       redirect: "error",
     });
-    const contentType = response.headers.get("content-type") ?? "";
-    const payload: unknown = contentType.includes("application/json")
-      ? await response.json()
-      : null;
     if (!response.ok) {
       if (response.status === 401) {
         this.#csrfToken = null;
       }
+      const contentType = response.headers.get("content-type") ?? "";
+      const payload: unknown = contentType.includes("application/json")
+        ? await response.json()
+        : null;
       const error = isObject(payload) ? payload : {};
       const code = typeof error.code === "string" ? error.code : `http_${response.status}`;
       const detail = typeof error.detail === "string" ? error.detail : undefined;
       const message = typeof error.message === "string" ? error.message : detail;
       throw new ApiError(response.status, code, message ?? "Melloa API request failed.");
     }
-    return payload as T;
+    return response;
   }
 }
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function exportArchiveFilename(contentDisposition: string | null): string {
+  const filename = contentDisposition?.match(/filename="([A-Za-z0-9._-]+)"/i)?.[1];
+  return filename ?? "melloa-owner-export.zip";
 }

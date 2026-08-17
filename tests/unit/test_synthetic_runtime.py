@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import time
 from datetime import timedelta
+from io import BytesIO
 from itertools import count
+from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 
@@ -10,6 +12,8 @@ from melloa.adapters.fakes.conversation import InMemoryConversationStore
 from melloa.adapters.fakes.delivery import InMemoryDeliveryStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
+from melloa.application.exports import ExportBundleError
+from melloa.apps import core as core_app
 from melloa.apps.mvp import build_mvp_runtime
 from melloa.apps.synthetic import (
     SYNTHETIC_ASSERTION_ID,
@@ -165,6 +169,7 @@ def test_mvp_runtime_preserves_deleted_durable_seed_inspection(fixed_time) -> No
 
 def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     fixed_time,
+    monkeypatch,
 ) -> None:
     payload = GuardianStatusPayload(
         instance_id="home-guardian",
@@ -188,7 +193,17 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         clock=lambda: fixed_time,
         id_factory=id_factory,
     )
+    export_workspaces = []
+    create_export_workspace = core_app._create_export_workspace
+
+    def tracked_export_workspace():
+        workspace = create_export_workspace()
+        export_workspaces.append(workspace)
+        return workspace
+
+    monkeypatch.setattr(core_app, "_create_export_workspace", tracked_export_workspace)
     client = TestClient(runtime.app, base_url="https://testserver")
+    assert client.post("/api/v1/exports/preview").status_code == 401
 
     status = client.get("/api/v1/system/status")
     assert status.status_code == 200
@@ -367,6 +382,25 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     assert export_after_coverage["export.model-activity"]["estimated_records"] == 1
     assert export_after_coverage["export.retention-report"]["estimated_records"] == 1
     assert export_after_coverage["export.schemas-checksums"]["estimated_records"] == 13
+    assert client.post("/api/v1/exports/preview").status_code == 403
+    archive_response = client.post("/api/v1/exports/preview", headers=headers)
+    assert archive_response.status_code == 200
+    assert archive_response.headers["content-type"] == "application/zip"
+    assert archive_response.headers["cache-control"] == "no-store"
+    assert "melloa-owner-export-export_" in archive_response.headers[
+        "content-disposition"
+    ]
+    with ZipFile(BytesIO(archive_response.content)) as archive:
+        assert archive.testzip() is None
+        messages = archive.read("conversations/messages.jsonl").decode("utf-8")
+        assert "Please use my reading preference." in messages
+        archive_text = "".join(
+            archive.read(name).decode("utf-8") for name in archive.namelist()
+        )
+        assert _BOOTSTRAP_TOKEN not in archive_text
+        assert csrf not in archive_text
+    assert export_workspaces
+    assert all(not workspace.exists() for workspace in export_workspaces)
 
     correction = client.post(
         f"/api/v1/memory/{SYNTHETIC_ASSERTION_ID}/corrections",
@@ -445,6 +479,72 @@ def test_synthetic_runtime_preserves_guardian_write_denial(fixed_time) -> None:
     )
     assert correction.status_code == 503
     assert correction.json()["code"] == "memory_write_unavailable"
+
+
+def test_live_export_requires_recent_authentication_and_redacts_failures(
+    fixed_time,
+    monkeypatch,
+) -> None:
+    now = fixed_time
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="home-guardian",
+            mode=GuardianMode.NO_ACTIONS,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.export-auth-test",
+        ),
+        receipt_hash="sha256:" + "3" * 64,
+    )
+    runtime = build_synthetic_runtime(
+        guardian,
+        _BOOTSTRAP_TOKEN,
+        clock=lambda: now,
+    )
+    client = TestClient(runtime.app, base_url="https://testserver")
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": _BOOTSTRAP_TOKEN},
+    )
+    now = fixed_time + timedelta(minutes=5)
+    stale = client.post(
+        "/api/v1/exports/preview",
+        headers={"X-Melloa-CSRF": login.json()["csrf_token"]},
+    )
+    assert stale.status_code == 403
+    assert stale.json()["code"] == "recent_authentication_required"
+
+    fresh = client.post(
+        "/api/v1/auth/session",
+        json={"credential": _BOOTSTRAP_TOKEN},
+    )
+
+    class FailingExportService:
+        def write_validated_zip(self, *_args, **_kwargs):
+            raise ExportBundleError("sensitive internal export path")
+
+    runtime.app.state.export_service = FailingExportService()
+    workspaces = []
+    create_export_workspace = core_app._create_export_workspace
+
+    def tracked_export_workspace():
+        workspace = create_export_workspace()
+        workspaces.append(workspace)
+        return workspace
+
+    monkeypatch.setattr(core_app, "_create_export_workspace", tracked_export_workspace)
+    failed = client.post(
+        "/api/v1/exports/preview",
+        headers={"X-Melloa-CSRF": fresh.json()["csrf_token"]},
+    )
+    assert failed.status_code == 503
+    assert failed.json() == {
+        "code": "export_preview_unavailable",
+        "message": "The owner export preview could not be generated and validated.",
+    }
+    assert "sensitive" not in failed.text
+    assert workspaces
+    assert all(not workspace.exists() for workspace in workspaces)
 
 
 def test_synthetic_runtime_delivers_canonical_output_without_channel_network(

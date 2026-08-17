@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -34,6 +35,7 @@ from melloa.adapters.fakes.telegram import (
 )
 from melloa.application.conversation import ConversationRoutePolicy, ConversationService
 from melloa.application.delivery import ClientDeliveryRoute, DeliveryService
+from melloa.application.exports import OwnerExportService
 from melloa.application.inspection import OwnerInspectionService
 from melloa.application.memory import MemoryService
 from melloa.application.operations import OwnerOperationsService
@@ -101,6 +103,7 @@ SYNTHETIC_INTELLIGENCE_ID: RecordId = "intelligence_0000000000000000000000000000
 SYNTHETIC_ASSERTION_ID: RecordId = "assertion_00000000000000000000000000000001"
 SYNTHETIC_TELEGRAM_THREAD_ID: RecordId = "thread_00000000000000000000000000000002"
 SYNTHETIC_TELEGRAM_ADAPTER_ID: QualifiedName = "client.telegram.synthetic"
+_SCHEMA_ROOT = Path(__file__).resolve().parents[3] / "schemas"
 
 
 @dataclass(frozen=True)
@@ -147,6 +150,7 @@ class SyntheticRuntime:
     memory_service: MemoryService
     memory_store: MemoryStore
     retention_service: OwnerRetentionService
+    export_service: OwnerExportService
     model_route_ids: tuple[QualifiedName, ...]
     persistence: RuntimePersistenceStatus
 
@@ -553,6 +557,18 @@ def build_synthetic_runtime(
         memory_repository=memory_store,
         clock=clock,
     )
+    export = OwnerExportService(
+        owner_id=SYNTHETIC_OWNER_ID,
+        intelligence_id=SYNTHETIC_INTELLIGENCE_ID,
+        conversation=conversation,
+        delivery=delivery,
+        memory=memory,
+        memory_repository=memory_store,
+        retention=retention,
+        clock=clock,
+        id_factory=id_factory,
+        source_runtime=f"melloa-mvp/{persistence.mode}",
+    )
     return SyntheticRuntime(
         app=create_app(
             guardian_reader,
@@ -569,6 +585,8 @@ def build_synthetic_runtime(
             telegram_delivery_adapter,
             retention_service=retention,
             model_route_service=model_routes,
+            export_service=export,
+            export_schema_root=_SCHEMA_ROOT,
             run_conversation_worker=True,
             run_delivery_worker=True,
             run_telegram_worker=True,
@@ -601,6 +619,7 @@ def build_synthetic_runtime(
         memory_service=memory,
         memory_store=memory_store,
         retention_service=retention,
+        export_service=export,
         model_route_ids=tuple(
             binding.route.route_id
             for binding in (*configured_model_bindings, synthetic_binding)

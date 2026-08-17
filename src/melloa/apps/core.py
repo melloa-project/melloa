@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from starlette.background import BackgroundTask
 
 from melloa.adapters.guardian.file import GuardianVerificationError
 from melloa.application.conversation import (
@@ -27,6 +31,7 @@ from melloa.application.delivery import (
     DeliverySubmission,
     DeliveryUnavailableError,
 )
+from melloa.application.exports import ExportBundleError, OwnerExportService
 from melloa.application.inspection import (
     InspectionOwnershipError,
     InspectionWindowError,
@@ -349,6 +354,17 @@ def _configured_operations(request: Request) -> OwnerOperationsService:
     return operations_service
 
 
+def _configured_export(request: Request) -> tuple[OwnerExportService, Path]:
+    export_service: OwnerExportService | None = request.app.state.export_service
+    schema_root: Path | None = request.app.state.export_schema_root
+    if export_service is None or schema_root is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Owner export download is not configured.",
+        )
+    return export_service, schema_root
+
+
 def _configured_retention(request: Request) -> OwnerRetentionService:
     retention_service: OwnerRetentionService | None = request.app.state.retention_service
     if retention_service is None:
@@ -377,6 +393,10 @@ def _configured_telegram_pairing(request: Request) -> TelegramPairingService:
             detail="Telegram pairing is not configured.",
         )
     return pairing_service
+
+
+def _create_export_workspace() -> Path:
+    return Path(tempfile.mkdtemp(prefix="melloa-owner-export-"))
 
 
 def _authenticated_owner(request: Request) -> AuthenticatedOwner:
@@ -425,6 +445,8 @@ def create_app(
     retention_service: OwnerRetentionService | None = None,
     model_route_service: OwnerModelRouteService | None = None,
     *,
+    export_service: OwnerExportService | None = None,
+    export_schema_root: Path | None = None,
     secure_session_cookie: bool = True,
     run_conversation_worker: bool = False,
     conversation_worker_interval: float = 1.0,
@@ -446,6 +468,8 @@ def create_app(
         raise ValueError("Telegram retention worker interval must be positive")
     if telegram_state_persistence not in {"process-only-preview", "postgresql"}:
         raise ValueError("Telegram state persistence mode is not supported")
+    if (export_service is None) != (export_schema_root is None):
+        raise ValueError("export service and schema root must be configured together")
     if run_conversation_worker and conversation_service is None:
         raise ValueError("conversation worker requires a configured conversation service")
     if run_delivery_worker and delivery_service is None:
@@ -517,6 +541,8 @@ def create_app(
     app.state.memory_service = memory_service
     app.state.inspection_service = inspection_service
     app.state.operations_service = operations_service
+    app.state.export_service = export_service
+    app.state.export_schema_root = export_schema_root
     app.state.retention_service = retention_service
     app.state.model_route_service = model_route_service
     app.state.delivery_service = delivery_service
@@ -803,6 +829,19 @@ def create_app(
             content={
                 "code": "model_routes_not_found",
                 "message": "Model route report not found.",
+            },
+        )
+
+    @app.exception_handler(ExportBundleError)
+    async def export_unavailable(
+        _request: Request,
+        _error: ExportBundleError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "code": "export_preview_unavailable",
+                "message": "The owner export preview could not be generated and validated.",
             },
         )
 
@@ -1350,6 +1389,37 @@ def create_app(
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
     ) -> OwnerExportReadinessReport:
         return _configured_operations(request).export_readiness(principal)
+
+    @app.post("/api/v1/exports/preview", response_class=FileResponse)
+    async def download_export_preview(
+        request: Request,
+        principal: Annotated[
+            AuthenticatedOwner,
+            Depends(_authenticated_owner_sensitive_mutation),
+        ],
+    ) -> Response:
+        export_service, schema_root = _configured_export(request)
+        workspace = _create_export_workspace()
+        archive_path = workspace / "owner-export.zip"
+        try:
+            manifest = export_service.write_validated_zip(
+                archive_path,
+                schema_root=schema_root,
+                principal=principal,
+            )
+            return FileResponse(
+                path=archive_path,
+                media_type="application/zip",
+                filename=f"melloa-owner-export-{manifest.export_id}.zip",
+                background=BackgroundTask(
+                    shutil.rmtree,
+                    workspace,
+                    ignore_errors=True,
+                ),
+            )
+        except Exception:
+            shutil.rmtree(workspace, ignore_errors=True)
+            raise
 
     @app.get(
         "/api/v1/retention",

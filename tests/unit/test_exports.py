@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from datetime import timedelta
 from itertools import count
 from pathlib import Path
@@ -76,6 +77,63 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     assert activity_records[0]["entries"][0]["turn_id"] == reply.turn.turn_id
     assert activity_records[0]["entries"][0]["route_id"] == "model.fake.deterministic"
     assert activity_records[0]["entries"][0]["external_disclosure"] is False
+
+
+def test_owner_export_writes_validated_zip_from_authenticated_live_state(
+    tmp_path,
+    fixed_time,
+) -> None:
+    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
+    principal = _owner(runtime.owner_id, fixed_time)
+    runtime.conversation_service.post_owner_message(
+        principal,
+        thread_id=runtime.telegram_thread_id,
+        text="Include this live conversation in my export.",
+        idempotency_key="export-live-archive",
+    )
+    archive_path = tmp_path / "owner-export.zip"
+
+    manifest = runtime.export_service.write_validated_zip(
+        archive_path,
+        schema_root=_schema_root(),
+        principal=principal,
+    )
+
+    with zipfile.ZipFile(archive_path) as archive:
+        names = tuple(sorted(archive.namelist()))
+        assert archive.testzip() is None
+        assert "manifest.json" in names
+        assert "checksums.sha256" in names
+        assert "conversations/messages.jsonl" in names
+        assert all(not name.startswith("/") and ".." not in Path(name).parts for name in names)
+        messages = archive.read("conversations/messages.jsonl").decode("utf-8")
+        assert "Include this live conversation in my export." in messages
+        assert _BOOTSTRAP_TOKEN not in "".join(
+            archive.read(name).decode("utf-8") for name in names
+        )
+        extracted = tmp_path / "extracted"
+        archive.extractall(extracted)
+
+    validation = validate_bundle(extracted, clock=lambda: fixed_time)
+    assert validation.valid is True
+    assert validation.export_id == manifest.export_id
+    with pytest.raises(ExportBundleError, match="already exists"):
+        runtime.export_service.write_validated_zip(
+            archive_path,
+            schema_root=_schema_root(),
+            principal=principal,
+        )
+
+    foreign_archive = tmp_path / "foreign.zip"
+    with pytest.raises(ExportBundleError, match="does not own"):
+        runtime.export_service.write_validated_zip(
+            foreign_archive,
+            schema_root=_schema_root(),
+            principal=principal.model_copy(
+                update={"owner_id": "owner_00000000000000000000000000000002"}
+            ),
+        )
+    assert not foreign_archive.exists()
 
 
 def test_owner_export_includes_redacted_delivery_status(
