@@ -13,6 +13,8 @@ from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
+    OwnerSessionExpired,
+    OwnerSessionMissing,
     RecentAuthenticationRequired,
 )
 from tests.conftest import record_id
@@ -263,11 +265,11 @@ def test_postgres_owner_session_expiry_collision_and_validation(fixed_time) -> N
     assert second.session_token == "unique-session"
     assert first.session_token == "shared-session"
 
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(OwnerSessionMissing):
         manager.verify("unknown-session")
     manager.revoke("")
     now = fixed_time + timedelta(minutes=10)
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(OwnerSessionExpired):
         manager.verify(second.session_token)
 
     with pytest.raises(RuntimeError, match="invalid opaque token"):

@@ -106,7 +106,9 @@ from melloa.domain.telegram import (
 from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
+    OwnerSessionExpired,
     OwnerSessionManager,
+    OwnerSessionMissing,
     RecentAuthenticationRequired,
 )
 from melloa.ports.client import ClientAdapter
@@ -519,7 +521,39 @@ def _append_owner_mutation_denial_audit(
     )
 
 
-def _append_owner_mutation_denial_audit_from_error(
+def _append_owner_session_denial_audit(
+    event_audit_store: EventAuditStore,
+    *,
+    owner_id: RecordId,
+    occurred_at: datetime,
+    id_factory: Callable[[str], str],
+    reason_code: QualifiedName,
+) -> None:
+    payload: JsonObject = {
+        "boundary": "owner-session",
+        "reason_code": reason_code,
+        "request_authenticated": False,
+        "result": "denied",
+        "session_verified": False,
+    }
+    _append_auth_security_audit(
+        event_audit_store,
+        owner_id=owner_id,
+        occurred_at=occurred_at,
+        id_factory=id_factory,
+        event_type="auth.owner-session-denied.v1",
+        capability_id="auth.owner-session",
+        action="auth.owner-session.deny",
+        actor_id=_unauthenticated_actor_id(owner_id),
+        payload=payload,
+    )
+
+
+def _should_skip_session_denial_audit(request: Request) -> bool:
+    return request.method == "GET" and request.url.path == "/api/v1/auth/session"
+
+
+def _append_auth_denial_audit_from_error(
     request: Request,
     error: AuthenticationError,
 ) -> None:
@@ -533,6 +567,28 @@ def _append_owner_mutation_denial_audit_from_error(
     elif isinstance(error, RecentAuthenticationRequired):
         boundary = "recent-auth"
         reason_code = "auth.recent-auth.required"
+    elif isinstance(error, OwnerSessionExpired):
+        if _should_skip_session_denial_audit(request):
+            return
+        _append_owner_session_denial_audit(
+            event_audit_store,
+            owner_id=owner_id,
+            occurred_at=request.app.state.security_event_clock(),
+            id_factory=request.app.state.security_event_id_factory,
+            reason_code="auth.owner-session.expired",
+        )
+        return
+    elif isinstance(error, OwnerSessionMissing):
+        if _should_skip_session_denial_audit(request):
+            return
+        _append_owner_session_denial_audit(
+            event_audit_store,
+            owner_id=owner_id,
+            occurred_at=request.app.state.security_event_clock(),
+            id_factory=request.app.state.security_event_id_factory,
+            reason_code="auth.owner-session.missing",
+        )
+        return
     else:
         return
     _append_owner_mutation_denial_audit(
@@ -770,7 +826,7 @@ def create_app(
             response_status = status.HTTP_401_UNAUTHORIZED
             code = "owner_authentication_failed"
             message = "Owner authentication failed."
-        _append_owner_mutation_denial_audit_from_error(request, error)
+        _append_auth_denial_audit_from_error(request, error)
         return JSONResponse(
             status_code=response_status,
             content={"code": code, "message": message},

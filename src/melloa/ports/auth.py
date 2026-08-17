@@ -13,6 +13,14 @@ class AuthenticationError(RuntimeError):
     """Credentials or a session failed authentication without revealing why."""
 
 
+class OwnerSessionMissing(AuthenticationError):
+    """A request did not present a known, valid owner session."""
+
+
+class OwnerSessionExpired(AuthenticationError):
+    """A known owner session was presented after its expiry."""
+
+
 class CsrfValidationError(AuthenticationError):
     """A browser mutation lacked the session-bound CSRF proof."""
 

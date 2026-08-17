@@ -30,6 +30,8 @@ from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
     IssuedOwnerSession,
+    OwnerSessionExpired,
+    OwnerSessionMissing,
     RecentAuthenticationRequired,
 )
 from melloa.ports.store import EventAuditStore
@@ -140,7 +142,7 @@ class PostgresOwnerSessionManager:
         require_recent: bool = False,
     ) -> AuthenticatedOwner:
         if not self._valid_secret(session_token):
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionMissing("owner authentication failed")
         row = self._connection.execute(
             """
             SELECT session.credential_digest, session.csrf_digest, session.document,
@@ -153,7 +155,7 @@ class PostgresOwnerSessionManager:
             (_digest(session_token),),
         ).fetchone()
         if row is None:
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionMissing("owner authentication failed")
         try:
             credential_digest = bytes(row[0])
             csrf_digest = bytes(row[1])
@@ -164,10 +166,10 @@ class PostgresOwnerSessionManager:
             row[3] is not None
             or not hmac.compare_digest(credential_digest, self._bootstrap_digest)
         ):
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionMissing("owner authentication failed")
         now = self._clock()
         if now >= principal.expires_at:
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionExpired("owner authentication failed")
         if require_csrf:
             if not self._valid_secret(csrf_token) or not hmac.compare_digest(
                 _digest(csrf_token), csrf_digest

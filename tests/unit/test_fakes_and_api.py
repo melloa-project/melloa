@@ -329,6 +329,100 @@ def test_owner_mutation_boundary_denials_append_content_free_security_audits(
     assert all("csrf-token" not in document for document in documents)
 
 
+def test_owner_session_denials_append_content_free_security_audits(fixed_time) -> None:
+    now = fixed_time
+    ids = iter(
+        (
+            record_id("event", 1),
+            record_id("audit", 1),
+            record_id("event", 2),
+            record_id("audit", 2),
+        )
+    )
+    tokens = iter(("session-token", "csrf-token"))
+    audit_store = InMemoryEventAuditStore()
+    sessions = InMemoryOwnerSessionManager(
+        record_id("owner", 1),
+        "synthetic-bootstrap-token-value-0001",
+        clock=lambda: now,
+        token_factory=lambda: next(tokens),
+        session_ttl=timedelta(minutes=1),
+        recent_auth_ttl=timedelta(seconds=30),
+    )
+    client = TestClient(
+        create_app(
+            guardian_reader(fixed_time),
+            sessions,
+            owner_id=record_id("owner", 1),
+            event_audit_store=audit_store,
+            security_event_clock=lambda: now,
+            security_event_id_factory=lambda prefix: next(ids),
+        ),
+        base_url="https://testserver",
+    )
+
+    routine_probe = client.get("/api/v1/auth/session")
+    assert routine_probe.status_code == 401
+    assert audit_store.events == ()
+
+    missing_session = client.get("/api/v1/auth/sessions")
+    assert missing_session.status_code == 401
+    assert missing_session.json()["code"] == "owner_authentication_failed"
+
+    login = client.post(
+        "/api/v1/auth/session",
+        json={"credential": "synthetic-bootstrap-token-value-0001"},
+    )
+    assert login.status_code == 200
+    now = fixed_time + timedelta(minutes=1)
+    expired_session = client.get("/api/v1/auth/sessions")
+    assert expired_session.status_code == 401
+    assert expired_session.json()["code"] == "owner_authentication_failed"
+
+    assert [event.event_type for event in audit_store.events] == [
+        "auth.owner-session-denied.v1",
+        "auth.owner-session-denied.v1",
+    ]
+    assert [event.payload for event in audit_store.events] == [
+        {
+            "boundary": "owner-session",
+            "reason_code": "auth.owner-session.missing",
+            "request_authenticated": False,
+            "result": "denied",
+            "session_verified": False,
+        },
+        {
+            "boundary": "owner-session",
+            "reason_code": "auth.owner-session.expired",
+            "request_authenticated": False,
+            "result": "denied",
+            "session_verified": False,
+        },
+    ]
+    assert [record.content.action for record in audit_store.audit_records] == [
+        "auth.owner-session.deny",
+        "auth.owner-session.deny",
+    ]
+    assert [record.content.metadata for record in audit_store.audit_records] == [
+        {
+            "event_id": record_id("event", 1),
+            "reason_code": "auth.owner-session.missing",
+            "result": "denied",
+        },
+        {
+            "event_id": record_id("event", 2),
+            "reason_code": "auth.owner-session.expired",
+            "result": "denied",
+        },
+    ]
+    documents = tuple(event.model_dump_json() for event in audit_store.events) + tuple(
+        record.model_dump_json() for record in audit_store.audit_records
+    )
+    assert all("synthetic-bootstrap-token-value-0001" not in document for document in documents)
+    assert all("session-token" not in document for document in documents)
+    assert all("csrf-token" not in document for document in documents)
+
+
 def test_owner_lists_sessions_and_recently_revokes_others(fixed_time) -> None:
     now = fixed_time
     tokens = iter(

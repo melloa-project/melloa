@@ -204,6 +204,16 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     monkeypatch.setattr(core_app, "_create_export_workspace", tracked_export_workspace)
     client = TestClient(runtime.app, base_url="https://testserver")
     assert client.post("/api/v1/exports/preview").status_code == 401
+    assert runtime.event_audit_store.events[-1].event_type == (
+        "auth.owner-session-denied.v1"
+    )
+    assert runtime.event_audit_store.events[-1].payload == {
+        "boundary": "owner-session",
+        "reason_code": "auth.owner-session.missing",
+        "request_authenticated": False,
+        "result": "denied",
+        "session_verified": False,
+    }
 
     status = client.get("/api/v1/system/status")
     assert status.status_code == 200
@@ -239,8 +249,8 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
         if item["policy_id"] == "retention.audit-ledger"
     )
     assert audit_inventory["coverage"] == "complete"
-    assert audit_inventory["retained_objects"] == 0
-    assert audit_inventory["retained_bytes"] == 0
+    assert audit_inventory["retained_objects"] == 1
+    assert audit_inventory["retained_bytes"] > 0
     assert audit_inventory["deletion_receipts"] == 0
     assert audit_inventory["status_reason"] == "retention.inventory.audit_event_store"
     assert policies["retention.owner-conversation"]["deletion_control"] == (
@@ -439,7 +449,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     }
     audit_after_deletion = inventory_after_deletion["retention.audit-ledger"]
     assert audit_after_deletion["coverage"] == "complete"
-    assert audit_after_deletion["retained_objects"] == 3
+    assert audit_after_deletion["retained_objects"] == 4
     assert audit_after_deletion["retained_bytes"] > 0
     assert audit_after_deletion["oldest_retained_at"] is not None
     memory_after_deletion = inventory_after_deletion["retention.owner-memory"]

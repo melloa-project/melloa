@@ -16,6 +16,8 @@ from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
     IssuedOwnerSession,
+    OwnerSessionExpired,
+    OwnerSessionMissing,
     RecentAuthenticationRequired,
 )
 
@@ -98,15 +100,15 @@ class InMemoryOwnerSessionManager:
         require_recent: bool = False,
     ) -> AuthenticatedOwner:
         if not self._valid_secret(session_token):
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionMissing("owner authentication failed")
         session_digest = _digest(session_token)
         record = self._sessions.get(session_digest)
         if record is None:
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionMissing("owner authentication failed")
         now = self._clock()
         if now >= record.principal.expires_at:
             self._sessions.pop(session_digest, None)
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionExpired("owner authentication failed")
         if require_csrf:
             if not self._valid_secret(csrf_token) or not hmac.compare_digest(
                 _digest(csrf_token), record.csrf_digest
@@ -138,7 +140,7 @@ class InMemoryOwnerSessionManager:
             principal.session_id for principal in self.active_sessions()
         }
         if current_session_id not in active_session_ids:
-            raise AuthenticationError("owner authentication failed")
+            raise OwnerSessionMissing("owner authentication failed")
         revoked_digests = tuple(
             session_digest
             for session_digest, record in self._sessions.items()
