@@ -18,6 +18,7 @@ const defaultOutput = fileURLToPath(
 );
 const outputDirectory = process.env.MELLOA_SCREENSHOT_DIR ?? defaultOutput;
 await mkdir(outputDirectory, { recursive: true });
+const conversationTitle = "Plan my next meaningful step";
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
@@ -55,6 +56,43 @@ async function scrollIntoPageView(subjectSelector, block = "start") {
   }, block);
 }
 
+async function assertConversationStartersClearComposer() {
+  const messageScroll = page.locator(".message-scroll");
+  await messageScroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const lastStarterBox = await page.getByRole("button", { name: /Use what I have shared/ }).boundingBox();
+  const controlBox = await page.locator(".first-session-control").boundingBox();
+  const composerBox = await page.locator(".composer").boundingBox();
+  const hasHorizontalOverflow = await messageScroll.evaluate((element) => element.scrollWidth > element.clientWidth);
+  if (
+    lastStarterBox === null
+    || controlBox === null
+    || composerBox === null
+    || lastStarterBox.y + lastStarterBox.height > composerBox.y - 8
+    || controlBox.y + controlBox.height > composerBox.y - 8
+    || hasHorizontalOverflow
+  ) {
+    throw new Error("Conversation starters do not remain reachable above the mobile composer");
+  }
+  await messageScroll.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+}
+
+async function assertInitialTourActionVisible() {
+  const tourActionBox = await page.getByRole("button", { name: "Fill a no-network tour message" }).boundingBox();
+  const composerBox = await page.locator(".composer").boundingBox();
+  if (
+    tourActionBox === null
+    || composerBox === null
+    || tourActionBox.y < 0
+    || tourActionBox.y + tourActionBox.height > composerBox.y - 8
+  ) {
+    throw new Error("No-network tour action is not visible above the initial mobile composer");
+  }
+}
+
 try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Your conversation with Melli/ }).waitFor();
@@ -69,11 +107,18 @@ try {
   await page.getByText("Conversations", { exact: true }).waitFor();
 
   await page.getByRole("button", { name: "New conversation" }).click();
-  await page.getByLabel("Title").fill("Private MVP readiness");
+  await page.getByLabel("Title").fill(conversationTitle);
   await page.getByRole("button", { name: "Create conversation" }).click();
-  await page.getByRole("heading", { name: "Private MVP readiness" }).waitFor();
-  await page.getByRole("heading", { name: "Start with what matters now" }).waitFor();
-  await page.getByText("Use memory evidence", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: conversationTitle }).waitFor();
+  await page.getByRole("heading", { name: "What would help right now?" }).waitFor();
+  await page.getByText(/^Guardian (Normal|Offline)$/).first().waitFor();
+  await page.getByText("Changes unlocked", { exact: true }).first().waitFor();
+  await page.getByText(/Console cannot reconfigure Guardian/i).first().waitFor();
+  await page.getByText("No-network route = guided tour", { exact: true }).waitFor();
+  await page.getByText(/Route and disclosure stay visible/i).waitFor();
+  await page.getByText("Plan my next step", { exact: true }).waitFor();
+  await page.getByText("Use what I have shared", { exact: true }).waitFor();
+  await page.getByText("Eligible model required", { exact: true }).first().waitFor();
   await page.getByText("Conversation created.", { exact: true }).waitFor({
     state: "hidden",
     timeout: 7_000,
@@ -84,18 +129,29 @@ try {
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await assertInitialTourActionVisible();
   await page.screenshot({
     path: `${outputDirectory}/conversation-starters-mobile.png`,
   });
+  await assertConversationStartersClearComposer();
   await page.setViewportSize({ width: 1440, height: 960 });
 
-  await page.getByLabel("Message Melli").fill("Give me a concise private MVP readiness check.");
+  await page.getByRole("button", { name: "Fill a no-network tour message" }).click();
+  await page.getByLabel("Message Melli").waitFor({
+    state: "visible",
+  });
+  const guidedPrompt = await page.getByLabel("Message Melli").inputValue();
+  if (!guidedPrompt.includes("one fixed response and inspect its route, disclosure, evidence, policy, and recovery controls")) {
+    throw new Error("No-network tour prompt did not fill the composer");
+  }
   await page.getByRole("button", { name: "Send message" }).click();
   const response = page.getByText(/^Synthetic local reply\./);
   await response.waitFor({ timeout: 20_000 });
-  await page.locator(".message-row.melli").getByText("Synthetic fixture", { exact: true }).waitFor();
-  await response.click();
-  await page.getByRole("heading", { name: "Turn details" }).waitFor();
+  await page.locator(".message-row.melli").getByText("Guided tour fixture", { exact: true }).waitFor();
+  await page.locator(".message-row.melli").getByText("Fixed fixture · no network", { exact: true }).waitFor();
+  await page.getByText(/fixed response did not interpret your message or represent Melli thinking/i).waitFor();
+  await page.getByRole("button", { name: /^Why this response\? Inspect evidence for message message_/ }).click();
+  await page.getByRole("heading", { name: "Why this response?" }).waitFor();
   await page.getByRole("button", { name: /^Copy Turn ID turn_/ }).waitFor();
   await page.getByText("deterministic-fixture-v1", { exact: true }).first().waitFor();
   await page.getByText("Synthetic fixture", { exact: true }).first().waitFor();
@@ -103,6 +159,28 @@ try {
     path: `${outputDirectory}/conversation-desktop.png`,
     fullPage: true,
   });
+
+  await page.getByRole("button", { name: "Close inspector" }).click();
+  await page.getByRole("heading", { name: "Why this response?" }).waitFor({ state: "hidden" });
+  const missingTurnUrl = new URL(page.url());
+  missingTurnUrl.searchParams.set("turn", "turn_missing_visual_00000000000000000001");
+  await page.evaluate((nextPath) => {
+    window.history.pushState(null, "", nextPath);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, `${missingTurnUrl.pathname}${missingTurnUrl.search}`);
+  await page.getByText("Requested turn is not in this thread", { exact: true }).waitFor();
+  await page.getByText("turn_missing_visual_00000000000000000001", { exact: true }).waitFor();
+  await page.screenshot({
+    path: `${outputDirectory}/conversation-missing-turn-desktop.png`,
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: `${outputDirectory}/conversation-missing-turn-mobile.png`,
+  });
+  await page.getByRole("button", { name: "Clear turn link" }).click();
+  await page.getByText("Requested turn is not in this thread", { exact: true }).waitFor({ state: "hidden" });
+  await page.setViewportSize({ width: 1440, height: 960 });
 
   await page.getByRole("link", { name: "Activity" }).click();
   await page.getByRole("heading", { name: "Activity" }).waitFor();

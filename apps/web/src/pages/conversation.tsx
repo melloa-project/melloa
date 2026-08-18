@@ -42,9 +42,10 @@ import type {
   ConversationThread,
   ConversationTurn,
   ConversationTurnInspection,
+  SystemStatus,
 } from "../api";
 import { errorMessage, useMelloa } from "../app";
-import { Badge, Button, EmptyState, ErrorState, LoadingState, Modal } from "../components/ui";
+import { Badge, Button, ErrorState, LoadingState, Modal } from "../components/ui";
 import {
   asObject,
   asObjectArray,
@@ -61,18 +62,26 @@ import {
 
 const TERMINAL_PROCESSING_STATES = new Set(["completed", "dead", "cancelled"]);
 
+const noNetworkTourPrompt = {
+  label: "Fill a no-network tour message",
+  text: "Start the no-network tour. I want to see one fixed response and inspect its route, disclosure, evidence, policy, and recovery controls.",
+} as const;
+
 const starterPrompts = [
   {
-    label: "Readiness check",
-    text: "Give me a concise private MVP readiness check for this Melloa preview.",
+    label: "Plan my next step",
+    preview: "Turn a goal into a small, practical plan",
+    text: "Help me turn a goal into the next three concrete steps. Start by asking what outcome I want and which constraints matter.",
   },
   {
-    label: "Use memory evidence",
-    text: "What can you answer from the current seed memory, and what evidence will you cite?",
+    label: "Think through a decision",
+    preview: "Compare options on my terms",
+    text: "Help me think through a decision. Start by asking which options I am considering, what matters most to me, and what I will not trade away.",
   },
   {
-    label: "Inspect boundaries",
-    text: "Help me inspect what is private, durable, and still preview-only right now.",
+    label: "Use what I have shared",
+    preview: "Work from saved memory and cite it",
+    text: "Using only what I have shared and the evidence you can cite, help me identify a priority I should revisit. Tell me clearly what you do not know.",
   },
 ] as const;
 
@@ -87,7 +96,7 @@ const EMPTY_COMPOSER_STATE: ComposerState = {
 };
 
 export function ConversationPage() {
-  const { api, principal, canMutate, notify } = useMelloa();
+  const { api, principal, status, canMutate, notify } = useMelloa();
   const navigate = useNavigate();
   const { threadId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -491,14 +500,14 @@ export function ConversationPage() {
     <div className={`conversation-page ${inspectorOpen ? "inspector-open" : ""}`}>
       <aside className="thread-list" aria-label="Conversation threads">
         <div className="thread-list-header">
-          <div><span>Conversations</span><small>{threads.length} canonical thread{threads.length === 1 ? "" : "s"}</small></div>
+          <div><span>Conversations</span><small>{threads.length} private conversation{threads.length === 1 ? "" : "s"}</small></div>
           <Button aria-label="New conversation" onClick={() => setCreateOpen(true)} size="icon" tone="ghost">
             <Plus aria-hidden="true" size={18} />
           </Button>
         </div>
         {loadingThreads ? <LoadingState label="Loading conversations" /> : null}
         {!loadingThreads && threads.length === 0 ? (
-          <div className="thread-empty"><MessageCircleMore size={20} /><p>No conversations yet.</p></div>
+          <div className="thread-empty"><MessageCircleMore size={20} /><p>Ready for the first guided preview.</p></div>
         ) : null}
         <div className="thread-items">
           {threads.map((thread) => (
@@ -509,14 +518,14 @@ export function ConversationPage() {
               type="button"
             >
               <span className="thread-avatar"><Sparkles aria-hidden="true" size={16} /></span>
-              <span><strong>{thread.title}</strong><small>{titleCase(thread.sensitivity)} · {shortId(thread.thread_id)}</small></span>
+              <span><strong>{thread.title}</strong><small>{titleCase(thread.sensitivity)} · owner controlled</small></span>
               <ChevronRight aria-hidden="true" size={15} />
             </button>
           ))}
         </div>
       </aside>
 
-      <section className="conversation-main" aria-label="Canonical conversation">
+      <section className="conversation-main" aria-label="Owner conversation">
         {missingThreadId !== null ? (
           <div className="conversation-main-missing">
             <div className="conversation-missing-thread" role="status">
@@ -545,11 +554,12 @@ export function ConversationPage() {
             </div>
           </div>
         ) : selectedThread === null ? (
-          <EmptyState
-            action={<Button disabled={!canMutate} onClick={() => setCreateOpen(true)} tone="primary"><Plus size={16} /> Start a conversation</Button>}
-            description="Create a private first-party thread. Messages remain channel-neutral and inspectable."
-            icon={MessageCircleMore}
-            title="A quiet place to talk with Melli"
+          <FirstSessionGuide
+            canMutate={canMutate}
+            mode="create"
+            onCreateThread={() => setCreateOpen(true)}
+            onSelectStarterPrompt={selectStarterPrompt}
+            status={status}
           />
         ) : (
           <>
@@ -559,7 +569,14 @@ export function ConversationPage() {
                   <h1>{selectedThread.title}</h1>
                   <Badge tone="info">{titleCase(selectedThread.sensitivity)}</Badge>
                 </div>
-                <p>Canonical thread · {shortId(selectedThread.thread_id)}</p>
+                <div className="conversation-record-summary">
+                  <span>Private owner conversation</span>
+                  <details>
+                    <summary>Conversation details</summary>
+                    <span><strong>Canonical ID</strong><code>{selectedThread.thread_id}</code></span>
+                  </details>
+                </div>
+                <ConversationAuthorityStrip canMutate={canMutate} compact status={status} />
               </div>
               <div className="conversation-header-actions">
                 {pending ? <Badge tone="warning"><LoaderCircle className="spin" size={13} /> Processing</Badge> : <Badge tone="positive"><Zap size={13} /> Ready</Badge>}
@@ -568,8 +585,18 @@ export function ConversationPage() {
             </header>
 
             <div className="message-scroll">
-              {loadingConversation ? <LoadingState label="Loading canonical messages" /> : null}
-              {error === null ? null : <ErrorState message={error} />}
+              {loadingConversation ? <LoadingState label="Loading conversation" /> : null}
+              {error === null ? null : (
+                <ErrorState
+                  action={selectedThread === null ? undefined : (
+                    <Button onClick={() => void loadConversation(selectedThread.thread_id)} tone="primary">
+                      <RefreshCw aria-hidden="true" size={15} /> Retry conversation load
+                    </Button>
+                  )}
+                  message={`${error} The conversation was not changed; retry loading or open another thread.`}
+                  title="Conversation could not load"
+                />
+              )}
               {missingTurnId !== null ? (
                 <div className="conversation-missing-turn" role="status">
                   <CircleAlert aria-hidden="true" size={18} />
@@ -593,26 +620,13 @@ export function ConversationPage() {
                 </div>
               ) : null}
               {!loadingConversation && error === null && messages.length === 0 ? (
-                <EmptyState
-                  description="Ask a question or share context. Route, cost, disclosure, and evidence will be attached to Melli's reply."
-                  icon={Sparkles}
-                  title="Start with what matters now"
+                <FirstSessionGuide
+                  canMutate={canMutate}
+                  mode="prompt"
+                  onCreateThread={() => setCreateOpen(true)}
+                  onSelectStarterPrompt={selectStarterPrompt}
+                  status={status}
                 />
-              ) : null}
-              {!loadingConversation && error === null && messages.length === 0 ? (
-                <div className="starter-prompt-grid" aria-label="Starter prompts">
-                  {starterPrompts.map((prompt) => (
-                    <button
-                      className="starter-prompt"
-                      key={prompt.label}
-                      onClick={() => selectStarterPrompt(prompt.text)}
-                      type="button"
-                    >
-                      <Sparkles aria-hidden="true" size={15} />
-                      <span><strong>{prompt.label}</strong><small>{prompt.text}</small></span>
-                    </button>
-                  ))}
-                </div>
               ) : null}
               <div className="message-list">
                 {messages.map((message) => {
@@ -620,24 +634,38 @@ export function ConversationPage() {
                   const status = processingByMessage.get(message.message_id);
                   const turn = turnByOutputMessage.get(message.message_id);
                   const routeBadge = isOwner || turn === undefined ? null : transcriptRouteBadge(turn, processingByMessage);
+                  const syntheticFixture = routeBadge?.kind === "synthetic";
                   const messageDeliveries = deliveriesByMessage.get(message.message_id) ?? [];
                   return (
                     <article className={`message-row ${isOwner ? "owner" : "melli"}`} key={message.message_id}>
                       <div className="message-avatar">
-                        {isOwner ? <UserRound aria-hidden="true" size={17} /> : <Sparkles aria-hidden="true" size={17} />}
+                        {isOwner ? <UserRound aria-hidden="true" size={17} /> : syntheticFixture ? <Bot aria-hidden="true" size={17} /> : <Sparkles aria-hidden="true" size={17} />}
                       </div>
-                      <button className="message-content" onClick={() => inspectMessage(message)} type="button">
+                      <div className="message-content">
                         <div className="message-meta">
-                          <strong>{isOwner ? "You" : "Melli"}</strong>
+                          <strong>{isOwner ? "You" : syntheticFixture ? "Guided tour fixture" : "Melli"}</strong>
                           <span>{formatInstant(message.created_at)}</span>
                           {!isOwner && message.citation_ids.length > 0 ? <Badge tone="violet"><BookOpenCheck size={12} /> {message.citation_ids.length} cited</Badge> : null}
                           {routeBadge === null ? null : <Badge tone={routeBadge.tone}>{routeBadge.label}</Badge>}
                         </div>
                         <p>{messageBody(message)}</p>
-                        {turn === undefined ? null : (
-                          <span className="inspect-hint"><FileSearch size={13} /> Inspect route and provenance</span>
-                        )}
-                      </button>
+                        {syntheticFixture ? (
+                          <p className="synthetic-response-note"><Info aria-hidden="true" size={14} /> This fixed response did not interpret your message or represent Melli thinking.</p>
+                        ) : null}
+                      </div>
+                      {turn === undefined && status === undefined ? null : (
+                        <div className="message-actions">
+                          <Button
+                            aria-label={`${turn === undefined ? "View processing details" : "Why this response? Inspect evidence"} for message ${message.message_id}`}
+                            onClick={() => inspectMessage(message)}
+                            size="sm"
+                            tone="ghost"
+                          >
+                            <FileSearch aria-hidden="true" size={14} />
+                            {turn === undefined ? "View processing details" : "Why this response?"}
+                          </Button>
+                        </div>
+                      )}
                       {status === undefined ? null : (
                         <ProcessingPill canMutate={canMutate} status={status} onResume={() => void resumeMessage(status)} />
                       )}
@@ -687,9 +715,9 @@ export function ConversationPage() {
         )}
       </section>
 
-      <aside className={`inspector ${inspectorOpen ? "visible" : ""}`} aria-label="Turn inspector">
+      <aside className={`inspector ${inspectorOpen ? "visible" : ""}`} aria-label="Conversation evidence and recovery details">
         <div className="inspector-header">
-          <div><p className="eyebrow">Inspectable record</p><h2>{selectedDeliveryWorkId !== null ? "Delivery" : selectedTurnId === null ? "Processing" : "Turn details"}</h2></div>
+          <div><p className="eyebrow">Evidence and control</p><h2>{selectedDeliveryWorkId !== null ? "Delivery" : selectedTurnId === null ? "Processing" : "Why this response?"}</h2></div>
           <Button onClick={closeInspector} size="icon" tone="ghost"><PanelRightClose size={18} /><span className="sr-only">Close inspector</span></Button>
         </div>
         <div className="inspector-body">
@@ -719,13 +747,13 @@ export function ConversationPage() {
             />
           ) : null}
           {!inspectionLoading && inspection === null && selectedProcessing === null && selectedDelivery === null ? (
-            <div className="inspector-placeholder"><Info size={20} /><p>Select a message to inspect its durable record.</p></div>
+            <div className="inspector-placeholder"><Info size={20} /><p>Choose a response, processing, or delivery detail action to inspect its durable record.</p></div>
           ) : null}
         </div>
       </aside>
 
       <Modal
-        description="Threads are canonical Melloa records, independent of browser or Telegram sessions."
+        description="Conversation records stay independent of browser or Telegram sessions."
         onClose={() => setCreateOpen(false)}
         open={createOpen}
         title="New conversation"
@@ -746,7 +774,130 @@ export function ConversationPage() {
   );
 }
 
+function FirstSessionGuide({
+  canMutate,
+  mode,
+  onCreateThread,
+  onSelectStarterPrompt,
+  status,
+}: {
+  readonly canMutate: boolean;
+  readonly mode: "create" | "prompt";
+  readonly onCreateThread: () => void;
+  readonly onSelectStarterPrompt: (prompt: string) => void;
+  readonly status: SystemStatus | null;
+}) {
+  const prompting = mode === "prompt";
+  return (
+    <section className="first-session-guide" aria-labelledby="first-session-title">
+      <div className="first-session-copy">
+        <p className="eyebrow">{prompting ? "Your conversation" : "Private by default"}</p>
+        <h2 id="first-session-title">{prompting ? "What would help right now?" : "Talk to Melli. Stay in control."}</h2>
+        <p>{prompting
+          ? "Choose a useful starting point or write your own. You can edit every word before sending; model-required jobs and the fixed tour are clearly labeled."
+          : "Create a private conversation for a real question, plan, or decision. You choose every message and can inspect how each response was made."}</p>
+      </div>
+
+      {prompting ? (
+        <div className="first-session-primary-action">
+          <Button
+            onClick={() => onSelectStarterPrompt(noNetworkTourPrompt.text)}
+            tone="primary"
+          >
+            <ArrowDown aria-hidden="true" size={15} /> {noNetworkTourPrompt.label}
+          </Button>
+          <span>Fastest safe path: send one fixed fixture response, then inspect route, disclosure, policy, and recovery records.</span>
+        </div>
+      ) : null}
+
+      <aside className="preview-mode-note" aria-label="No-network guided tour">
+        <Bot aria-hidden="true" size={18} />
+        <div>
+          <strong>No-network route = guided tour</strong>
+          <p>Its fixed response does not interpret your words or represent Melli thinking. Route and disclosure stay visible; use an eligible model route for an actual response.</p>
+        </div>
+        <Badge tone="violet">Fixed fixture</Badge>
+      </aside>
+
+      {prompting ? null : <ConversationAuthorityStrip canMutate={canMutate} status={status} />}
+
+      {prompting ? (
+        <>
+          <div className="starter-prompt-heading">
+            <div>
+              <strong>Bring a real job to Melli</strong>
+              <small>These starters need an eligible model route; the fixed tour cannot answer them.</small>
+            </div>
+            <Badge tone="info">Eligible model required</Badge>
+          </div>
+          <div className="starter-prompt-grid" aria-label="Starter prompts">
+            {starterPrompts.map((prompt) => (
+              <button
+                className="starter-prompt"
+                key={prompt.label}
+                onClick={() => onSelectStarterPrompt(prompt.text)}
+                type="button"
+              >
+                <Sparkles aria-hidden="true" size={15} />
+                <span>
+                  <strong>{prompt.label}</strong>
+                  <small>{prompt.preview}</small>
+                  <Badge tone="info">Eligible model required</Badge>
+                  <em>{prompt.text}</em>
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="first-session-control"><ArrowDown aria-hidden="true" size={14} /> A starter only fills the composer. Edit it, then choose Send; nothing runs before you do.</p>
+        </>
+      ) : (
+        <div className="first-session-create">
+          <Button disabled={!canMutate} onClick={onCreateThread} tone="primary">
+            <Plus aria-hidden="true" size={16} /> Start a private conversation
+          </Button>
+          <span>{canMutate ? "You choose the first message after it opens." : "Unlock owner changes before creating a conversation."}</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ConversationAuthorityStrip({
+  canMutate,
+  compact = false,
+  status,
+}: {
+  readonly canMutate: boolean;
+  readonly compact?: boolean;
+  readonly status: SystemStatus | null;
+}) {
+  const guardianLabel = status === null ? "Guardian unverified" : `Guardian ${titleCase(status.guardian.mode)}`;
+  const guardianDetail = status === null
+    ? "Guardian remains independent. Signed status unavailable; do not infer authority."
+    : `Guardian remains independent. Read-only signed status, sequence ${status.guardian.sequence}.`;
+  const actionDetail = status === null
+    ? "External action availability is unverified."
+    : status.external_actions_enabled
+      ? "External actions may be available through policy checks."
+      : "External actions are disabled by current runtime policy.";
+  return (
+    <div className={`conversation-authority-strip ${compact ? "compact" : ""}`} aria-label="Conversation authority state">
+      <span>
+        <ShieldCheck aria-hidden="true" size={14} />
+        <strong>{guardianLabel}</strong>
+        <small>{guardianDetail} Console cannot reconfigure Guardian.</small>
+      </span>
+      <span>
+        {canMutate ? <Zap aria-hidden="true" size={14} /> : <WifiOff aria-hidden="true" size={14} />}
+        <strong>{canMutate ? "Changes unlocked" : "Read only"}</strong>
+        <small>{canMutate ? actionDetail : "Recent owner authentication is required before creating, sending, or resuming."}</small>
+      </span>
+    </div>
+  );
+}
+
 type TranscriptRouteBadge = {
+  readonly kind: "external" | "private" | "synthetic";
   readonly label: string;
   readonly tone: "positive" | "warning" | "violet";
 };
@@ -768,12 +919,12 @@ function transcriptRouteBadge(
       const routeId = readString(summary, "route_id");
       const providerId = readString(summary, "provider_id");
       if (providerId === "provider.synthetic" || routeId.startsWith("model.fake.")) {
-        return { label: "Synthetic fixture", tone: "violet" };
+        return { kind: "synthetic", label: "Fixed fixture · no network", tone: "violet" };
       }
       if (summary.external_disclosure === true) {
-        return { label: "External route", tone: "warning" };
+        return { kind: "external", label: "External model route", tone: "warning" };
       }
-      return { label: "Private route", tone: "positive" };
+      return { kind: "private", label: "Private model route", tone: "positive" };
     }
   }
   return null;
@@ -864,14 +1015,23 @@ export function TurnInspector({
     <div className="inspector-sections">
       <section className="inspector-hero">
         <div className="route-icon"><Bot size={19} /></div>
-        <div><strong>{metadata.modelId}</strong><span>{metadata.providerId}</span></div>
+        <div>
+          <strong>{synthetic ? "Fixed no-network tour" : metadata.modelId}</strong>
+          <span>{synthetic ? "Not an intelligent response to your message" : metadata.providerId}</span>
+        </div>
         <Badge tone={synthetic ? "violet" : metadata.externalDisclosure ? "warning" : "positive"}>
           {synthetic ? "Synthetic fixture" : metadata.externalDisclosure ? "External" : "Local"}
         </Badge>
       </section>
 
+      <p className={`response-explanation ${synthetic ? "synthetic" : ""}`}>
+        {synthetic
+          ? "This response came from a deterministic fixture. It did not interpret your message; this record previews routing, evidence, and owner controls."
+          : "This record shows which model route produced the response, what left the device, what it cost, and which evidence it cited."}
+      </p>
+
       <section className="inspector-section">
-        <h3>Route</h3>
+        <h3>Response route</h3>
         <dl className="detail-list">
           <div>
             <dt>Route</dt>
@@ -890,6 +1050,8 @@ export function TurnInspector({
               </span>
             </dd>
           </div>
+          <div><dt>Model</dt><dd>{metadata.modelId}</dd></div>
+          <div><dt>Provider</dt><dd>{metadata.providerId}</dd></div>
           <div><dt>Location</dt><dd>{titleCase(metadata.location)}</dd></div>
           <div><dt>Disclosure</dt><dd>{metadata.externalDisclosure ? "Recorded external disclosure" : "No external disclosure"}</dd></div>
           <div><dt>Latency</dt><dd>{formatDurationMs(metadata.latencyMs)}</dd></div>
@@ -1016,7 +1178,16 @@ function DeliveryInspector({
           <div><dt>Available</dt><dd>{formatInstant(delivery.available_at)}</dd></div>
           <div><dt>Completed</dt><dd>{formatInstant(delivery.completed_at)}</dd></div>
         </dl>
-        {dead ? <Button disabled={!canMutate} onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume delivery with bounded retries</Button> : null}
+        {dead ? (
+          <>
+            <p className="recovery-note">
+              {canMutate
+                ? "Resume adds a bounded delivery retry budget while preserving the failed receipt trail."
+                : "Recent owner authentication is required before delivery work can be resumed."}
+            </p>
+            <Button disabled={!canMutate} onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume delivery with bounded retries</Button>
+          </>
+        ) : null}
       </section>
       <section className="inspector-section">
         <div className="inspector-section-title"><h3>Attempts</h3><Badge>{delivery.attempts.length}</Badge></div>
@@ -1148,7 +1319,16 @@ function ProcessingInspector({
           <div><dt>Available</dt><dd>{formatInstant(status.available_at)}</dd></div>
           <div><dt>Resumptions</dt><dd>{status.resumptions.length}</dd></div>
         </dl>
-        {status.state === "dead" ? <Button disabled={!canMutate} onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume with bounded retries</Button> : null}
+        {status.state === "dead" ? (
+          <>
+            <p className="recovery-note">
+              {canMutate
+                ? "Resume adds a bounded model retry budget while preserving the failed attempt history."
+                : "Recent owner authentication is required before model work can be resumed."}
+            </p>
+            <Button disabled={!canMutate} onClick={onResume} tone="primary"><RotateCcw size={15} /> Resume with bounded retries</Button>
+          </>
+        ) : null}
       </section>
       <section className="inspector-section">
         <h3>Attempts</h3>

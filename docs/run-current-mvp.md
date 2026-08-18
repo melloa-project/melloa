@@ -12,8 +12,26 @@ With Telegram explicitly enabled, the same canonical loop also supports:
 
 > private `/start` → Owner Console confirmation → Telegram text → canonical conversation → model route → exact policy-authorized reply to the same pairing
 
+## First run: take the no-network path
+
+On a first visit, use the smallest complete path. It needs no Docker daemon, model download, API key, Telegram account, or private deployment state:
+
+| Guide section | First-run choice |
+|---|---|
+| Prerequisites and bootstrap | Install Python, uv, Node.js, and Go; clone the two public sibling repositories; run `make bootstrap` |
+| 1. Disposable owner paths | Follow as written |
+| 2. Guardian | Build it independently, initialize disposable keys, and leave it in signed `offline` mode |
+| 3. Model route | Set `model_args=()` and `codex_args=()`; the UI labels the deterministic synthetic route clearly |
+| 4. Telegram | Skip it and set `telegram_args=()` |
+| 5. Core persistence | Set `database_args=()` and start the loopback core |
+| 6–7. Owner Console | Start the production web server, log in, create a conversation, send a disposable message, and inspect the turn |
+| 8. Export | Download and validate the owner export while the process-local core is still running |
+| Stop and clean up | Stop both processes and remove the disposable state directory |
+
+After that loop works, add **one optional boundary at a time**—local Ollama, PostgreSQL restart durability, isolated Codex CLI, or Telegram—and verify the corresponding disclosure and health state before combining them. The remainder of this page provides the exact commands, expected evidence, limitations, and troubleshooting for every path.
+
 !!! warning "Local preview, not a personal-data deployment"
-    The default path is entirely process-local. The optional PostgreSQL path preserves hashed owner sessions and append-only revocations, canonical conversations, turn/model provenance, memory corrections, assembled audit append records, reply/delivery work, Telegram pairing authority, normalized intake receipts, poll offsets, and pre-submission reply recovery across a core restart. Provider health observations, Telegram challenge-send observation, attachment quarantine bytes, event/audit coverage for additional mutation categories, atomic source/audit coupling beyond PostgreSQL sessions, and backup remain preview-grade, ephemeral, unassembled, or unavailable. Active-session inventory performs bounded expired-session cleanup in both process-local and PostgreSQL modes; PostgreSQL cleanup uses a database-owned function and leaves audit evidence intact. Process-local and PostgreSQL session issuance, ordinary logout, and sign-out-other-sessions revocation emit content-free event/audit records; PostgreSQL couples them in the same transaction as their source mutation, and process-local auth appends through the configured audit store before mutating in-memory state. Failed credential exchanges, missing/expired session denials outside routine session-status probing, CSRF/recent-auth mutation denials, owner memory correction, state transition, assertion-content deletion, Telegram pairing confirmation/revocation, and owner export preview generation also emit content-free event/audit records, but those records are not yet atomically coupled to the source mutations across stores. Session audit records include only internal session IDs, authentication method, lifecycle or denial state, event ID, and result; pairing audit records include internal pairing/candidate IDs and the adapter ID; export-preview audit records include only the export ID, format/version, coverage counts, encryption/blob/SQL flags, limitation IDs, event ID, actor, action, and result. The Timeline projects only the owner-export audit projection with export ID, source event ID, aggregate counts, and format/encryption flags, not auth/security audit events or raw audit payloads. They do not include credentials, token material, Telegram user/chat IDs, confirmation codes, source addresses, user agents, message text, prompts, raw model output, assertion values, bundle contents, export file paths, archive paths, or content hashes. Owner-conversation, owner-memory, owner-delivery, Telegram-quarantine, and audit-store retention inventory are aggregate-only and backed by canonical stores, the delivery store, the configured quarantine backend, or the configured append store; an empty audit-store count does not mean every action is audited yet. This is not a backup-erasure claim. A deterministic synthetic route remains enabled as a visibly labelled fallback. Do not use personal, sensitive, or production data.
+    The default path loses its state when the core stops. PostgreSQL adds only the explicitly reported restart-durability boundaries; it is not a backup, production deployment, or complete audit system. Use disposable data, keep every server on loopback, and read [Current limitations](#current-limitations) before enabling an optional integration.
 
 ## Prerequisites
 
@@ -44,6 +62,8 @@ make bootstrap
 ```
 
 If the repositories already exist, start in the `melloa` repository and run only `make bootstrap`. No paid API key, Telegram token, database, Docker daemon, or public hostname is required for the default path.
+
+If `uv` fails with `UnknownIssuer` on a managed network and the organization CA is already installed in the system trust store, use `UV_SYSTEM_CERTS=true make bootstrap`. Never bypass TLS verification or accept an unexpected certificate; stop and inspect the network trust path if the issuer is not one you expect.
 
 ## 1. Create the disposable owner paths
 
@@ -103,7 +123,18 @@ uv run melloa guardian-status \
 
 Expected output includes `"mode": "offline"`, `"sequence": 2`, and `"key_id": "guardian.status-v1"`. The main runtime receives no Guardian private key, transition command, signing API, or host-control authority.
 
-## 3. Start local Qwen through Ollama
+## 3. Choose a model route
+
+For the first-run no-network path, enable neither optional route:
+
+```bash
+model_args=()
+codex_args=()
+```
+
+The deterministic fixture remains available and visibly labelled. It proves the complete conversation, provenance, policy, inspection, and export loop without pretending to be a real intelligence route.
+
+### Optional: start local Qwen through Ollama
 
 This is the recommended route because it requires no per-token billing and makes no external disclosure. Install Ollama using its upstream instructions, then pull the model:
 
@@ -132,10 +163,9 @@ model_args=(
 )
 ```
 
-!!! tip "Synthetic-only smoke path"
-    Ollama is optional. Run `model_args=()` instead to omit the local route. If the configured endpoint later becomes unavailable or returns invalid structured output, routing fails visibly and falls back to the next explicitly ordered route, then to the labelled synthetic route.
+If the configured endpoint later becomes unavailable or returns invalid structured output, routing fails visibly and falls back to the next explicitly ordered route, then to the labelled synthetic route.
 
-### Alternative: experimental subscription-backed Codex CLI
+### Optional: experimental subscription-backed Codex CLI
 
 Start with this route disabled:
 
@@ -477,8 +507,8 @@ Do not browse directly to port `8000`: the console server keeps browser/API traf
 
 1. Paste the value printed from `$MELLOA_MVP_STATE/owner-credential` into **Owner credential**.
 2. Select **Open Owner Console**. The first authenticated screen is **Conversation**.
-3. Select the plus button beside **Conversations**, create a thread, and send a message. Empty threads offer local starter prompts that fill the composer without sending automatically. The browser keeps each draft and retry idempotency key in page memory scoped to the selected canonical thread, so switching threads cannot send another thread's prepared text.
-4. Select Melli's reply to open **Turn details**.
+3. Select the plus button beside **Conversations** and create a thread. For the default no-network path, select **Fill a no-network tour message**, review or edit the text it places in the composer, then select **Send message**. The other starters are labelled **Eligible model required** because the fixed fixture cannot answer planning, decision, or memory questions. Every starter only fills and focuses the composer; none sends automatically. The browser keeps each draft and retry idempotency key in page memory scoped to the selected canonical thread, so switching threads cannot send another thread's prepared text.
+4. Verify the output is labelled **Guided tour fixture** and **Fixed fixture · no network**, not Melli. It must say that the fixed response did not interpret your message. Select its separate **Why this response?** action to open the evidence inspector; the response body itself is intentionally not an action.
 5. Verify route ID, provider, model, processing location, disclosure state, latency, available usage/cost metadata, evidence, decision record, and every route attempt. Codex turns explicitly say **Unreported** for tokens and cost.
 6. Open **Providers**. A healthy Ollama setup shows **Local Qwen via Ollama** with its privacy scope, provider-retention policy, modality, quality profile, token ceilings, and reliability. A configured Codex route is labelled **Experimental Codex CLI**, **External disclosure**, **Read-only sandbox**, **Ephemeral session**, **Approval policy: never**, and **No Melloa authority** with the same route constraints. **Deterministic synthetic fixture** remains explicitly marked as not being a real intelligence route.
 7. Open **Timeline** to inspect newest-first canonical records without message text or model output. When the selected window contains more records than the response bound, the summary shows both the matching count and how many newest records are displayed, and **Limits** includes **Newest Events Only**. Then open **Activity** to inspect the model run ledger and **Operations** to see the exact persistence boundary. The default shows process-memory queue/storage degradation. PostgreSQL mode shows healthy durable queue/canonical and Telegram control storage, a live database component, degraded remaining process-local state, and disabled backup rather than a false all-durable claim.
@@ -597,9 +627,9 @@ These checked-in references are generated from the same loopback MVP and contain
 | State | Reference | Verify |
 |---|---|---|
 | Desktop login | [login desktop](assets/current-mvp/login-desktop.png) | calm private-access screen, application-authentication copy, independent Guardian boundary |
-| Desktop conversation starters | [conversation starters desktop](assets/current-mvp/conversation-starters-desktop.png) | empty canonical thread offers privacy-safe starter prompts that fill the composer without sending automatically |
-| Mobile conversation starters | [conversation starters mobile](assets/current-mvp/conversation-starters-mobile.png) | starter prompts remain reachable in a narrow empty thread without covering the composer or bottom navigation |
-| Desktop conversation | [conversation desktop](assets/current-mvp/conversation-desktop.png) | conversation-first layout, compact authority bar, route/provenance inspector, visible synthetic fallback when Ollama is absent |
+| Desktop conversation starters | [conversation starters desktop](assets/current-mvp/conversation-starters-desktop.png) | empty private thread separates the no-network guided tour from real-job starters that require an eligible model; every action only fills the composer |
+| Mobile conversation starters | [conversation starters mobile](assets/current-mvp/conversation-starters-mobile.png) | the no-network tour action is visible above the fixed composer, while model-required starters remain reachable without horizontal overflow or bottom-navigation overlap |
+| Desktop conversation | [conversation desktop](assets/current-mvp/conversation-desktop.png) | fixed output is attributed to the guided-tour fixture rather than Melli, with a separate **Why this response?** action for route, disclosure, evidence, policy, cost, and durable IDs |
 | Desktop activity | [activity desktop](assets/current-mvp/activity-desktop.png) | owner-readable model ledger with run totals, local/external filters, no-disclosure local route state, and route/turn actions |
 | Mobile activity | [activity mobile](assets/current-mvp/activity-mobile.png) | readable model-run ledger, disclosure filter state, run identifiers, and footer boundary without bottom-navigation overlap |
 | Desktop timeline | [timeline desktop](assets/current-mvp/timeline-desktop.png) | chronological content-free conversation, processing, delivery, model, and owner-export audit records with filter and aggregate-count disclosure |
@@ -723,7 +753,11 @@ Never work around a collision by binding `0.0.0.0` or a public address.
 ## Current limitations
 
 - The default path remains entirely in memory and is discarded on core restart. PostgreSQL is explicit and optional, never an implicit dependency or fallback.
-- PostgreSQL mode durably backs hashed owner sessions and append-only logout revocations with bounded expired-row cleanup, canonical conversation, retrieval/model provenance, memory correction history, owner assertion-content deletion tombstones/rebuild work, aggregate owner-conversation, owner-memory, and owner-delivery retention inventory, assembled audit append records, reply/delivery work, Telegram pairing and revocation authority, normalized updates/receipts, monotonic poll offsets, and pre-submission reply reconstruction. Provider health, Telegram challenge-send observation, attachment quarantine bytes, backup, and event/audit emission beyond the assembled coverage for owner authentication/security denials, owner memory mutations, Telegram pairing lifecycle changes, owner export preview generation, and owner-session lifecycle changes remain process-local, synthetic, unassembled, unstored, or unconfigured as reported. Process-local and PostgreSQL session issuance/logout revocation emit content-free event/audit records; PostgreSQL preserves them after restart and couples them atomically with session state, while process-local auth rolls back its in-memory mutation when audit append fails. Failed credential exchanges, missing/expired owner-session denials, CSRF/recent-auth mutation denials, owner memory correction, state transition, assertion-content deletion, Telegram pairing confirmation/revocation, and owner export preview generation also emit content-free event/audit records; durable PostgreSQL mode preserves them after restart, but comprehensive action auditing and atomic cross-store coupling beyond sessions remain pending. The Timeline view is bounded to current-MVP canonical conversation, reply-processing, outbound-delivery, model-activity, and owner-export audit projection records; it is not yet a complete observations/interventions life timeline or a raw audit browser. Session audit records include only internal session IDs, authentication method or denial boundary, lifecycle/denial state, reason code, event ID, and result; pairing audit records include internal pairing/candidate IDs and the adapter ID; export-preview audit records include only the export ID, format/version, coverage counts, encryption/blob/SQL flags, limitation IDs, event ID, actor, action, and result. Timeline excludes auth/security audit events and raw audit payloads, and exposes only export ID, source event ID, aggregate counts, format flags, and status for export-preview audit correlation. They do not include credentials, token material, Telegram user/chat IDs, confirmation codes, source addresses, user agents, message text, prompts, raw model output, assertion values, bundle contents, export file paths, archive paths, or content hashes. Owner-delivery retention inventory reports aggregate outbound work, attempt, and resumption records without message content. Telegram-quarantine retention inventory reports aggregate retained objects, retained bytes, deletion receipts, and oldest retained timestamp from the configured attachment backend; audit-store inventory reports only append-store record counts and bytes. Assertion content deletion removes the retained value from the canonical memory table and leaves content-free evidence; it does not claim immediate physical erasure from backups or external copies.
+- PostgreSQL mode durably backs hashed owner sessions and append-only revocations with bounded expired-row cleanup, canonical conversation and model provenance, memory correction/deletion evidence, aggregate retention inventory, assembled audit records, reply/delivery work, Telegram pairing authority, normalized updates/receipts, poll offsets, and pre-submission reply reconstruction. Provider health, Telegram challenge-send observation, attachment bytes, backup, and all unlisted mutation/audit categories remain process-local, synthetic, unassembled, unstored, or unconfigured as reported.
+- Content-free audit coverage currently includes authentication/security denials, owner-session lifecycle, canonical owner-message acceptance/resume, outbound-delivery enqueue/resume, owner memory mutations, Telegram pairing lifecycle, and owner export preview generation. PostgreSQL session issue/revoke couples source and audit in one transaction; process-local authentication appends audit before session mutation. Conversation, delivery, memory, pairing, and export still append audit after a separate source-store call. An audit failure can therefore follow a committed mutation; idempotent conversation and delivery retries recover evidence without repeating model execution or external send, but comprehensive action auditing and broader cross-store atomicity remain pending.
+- Audit evidence uses internal IDs, bounded status/count/decision metadata, and content-free reason codes. It excludes credentials, tokens, Telegram user/chat IDs, confirmation codes, source addresses, user agents, message text, destinations, idempotency keys, prompts, citations/evidence content, raw model output, external-disclosure payloads, assertion values, bundle contents, file/blob paths, content hashes, and action hashes.
+- Timeline is a bounded current-MVP view over canonical conversation, reply processing, outbound delivery, model activity, and owner-export audit projections. It is neither a complete life timeline nor a raw security-audit browser; auth/security audit records remain outside that view.
+- Retention inventory is aggregate-only. Owner delivery reports work/attempt/resumption counts without content; Telegram quarantine reports aggregate objects/bytes/deletion receipts; audit inventory reports only record counts and bytes. Assertion content deletion removes the retained canonical value and leaves content-free evidence, but does not claim immediate physical erasure from backups or external copies.
 - The deterministic synthetic route is always present as a test and recovery fallback.
 - Local/private OpenAI-compatible HTTP routes and one experimental subscription-backed Codex CLI route are implemented behind the same gateway. Claude Code and ACP routes remain future explicitly configured gateway kinds.
 - The Codex route is an ephemeral read-only CLI invocation, not a production host-isolation boundary. It uses only its dedicated `CODEX_HOME` authentication, receives no Melloa/Guardian/policy/capability authority, and is eligible only in Guardian `normal`; nevertheless the executable runs as the current OS user and must not be trusted with a personal-data host.

@@ -2,10 +2,44 @@
 
 **Original research date:** 15 August 2026  
 **Decision update:** 16 August 2026  
-**Status:** Architecture v0.2 with M0 complete and M1 implementation in progress; not production-ready
+**Status:** Architecture v0.2 with M0 complete and an owner-facing M1 preview; not production-ready
+
 **Scope:** A long-lived, owner-controlled personal AI operating system, with **Melloa** as the system and **Melli** as its primary persistent personal intelligence
 
-This suite answers the master research brief by treating the enduring product as a closed loop:
+> **License status:** No public source license has been selected yet. The code is readable, but reuse, redistribution, and outside contributions are not authorized until the repository owner adds explicit license terms.
+
+Melloa is a local-first system for building a durable relationship between an owner and a personal intelligence without giving a model ambient authority. Conversations, memory, provenance, policy, and recovery belong to the owner and survive changes in models, providers, workers, and interfaces.
+
+## Run it locally
+
+The current preview gives you a private Owner Console, a canonical conversation with Melli, visible route and disclosure evidence, inspectable memory, owner export, and a separately signed Guardian status. Its safe default is loopback-only, uses synthetic data, and makes no model-provider or Telegram network call.
+
+You need Python 3.13+, [uv 0.12.0](https://docs.astral.sh/uv/), Node.js 22+, Go 1.24+, Bash, and the public `melloa` and `melloa-guardian` repositories as siblings. Docker, API keys, Telegram, Ollama, cameras, and private deployment state are not required for the default path.
+
+```bash
+git clone https://github.com/melloa-project/melloa.git
+git clone https://github.com/melloa-project/melloa-guardian.git
+cd melloa
+make bootstrap
+```
+
+If `uv` reports `UnknownIssuer` on a managed network and the organization CA is already trusted by your system, retry with `UV_SYSTEM_CERTS=true make bootstrap`. Do not disable TLS verification; an unexpected issuer is a reason to stop and inspect the network trust path.
+
+Continue with **[Run the current MVP](docs/run-current-mvp.md)**. The guide starts with a first-run route map, creates only disposable credentials and Guardian state, then walks through login, conversation, inspection, export, and cleanup.
+
+Contributors can verify the checkout with:
+
+```bash
+make check
+make integration
+make recovery
+```
+
+The last two commands require Docker and use only synthetic data. No private repository or real credential is a build dependency.
+
+## Why it exists
+
+Melloa treats the enduring product as a closed loop:
 
 > human goals → observations → interpretation → memory → policy-constrained reasoning → action → observed outcome → evaluation → evolution
 
@@ -13,16 +47,11 @@ The decisive recommendation remains a **local-first modular monolith with a dura
 
 ## Implementation status
 
-M0 provides strict versioned contracts, a deny-first policy evaluator, PostgreSQL 18 migrations and append-only audit controls, signed read-only Guardian status consumption, deterministic fake adapters, pinned CI, and an encrypted clean-restore drill. M1 now adds authenticated canonical conversation, durable leased retry/resume state for accepted inbound messages and exact-authority outbound delivery, durable turn and disclosure records, immutable memory correction/contestation, owner memory content deletion with durable tombstone evidence, canonical aggregate retention inventory for conversation, memory, and delivery records, owner activity plus health/media inspection, provider-neutral routes for local OpenAI-compatible runtimes and an explicitly bounded experimental subscription-backed Codex CLI, an optional real Telegram Bot API channel, and a modern conversation-first Owner Console.
+M0 provides strict versioned contracts, deny-first policy, PostgreSQL 18 migrations and append-only audit controls, signed read-only Guardian status consumption, deterministic fake adapters, pinned CI, and an encrypted clean-restore drill.
 
-```bash
-make bootstrap
-make check
-make integration
-make recovery
-```
+The M1 preview adds authenticated channel-neutral conversation, durable retry/resume records, model-route and disclosure inspection, correction-aware memory with content-deletion tombstones, retention and health views, owner export, optional local OpenAI-compatible routing, a bounded experimental Codex CLI route, optional Telegram long polling, and a responsive Owner Console. Defaults remain visibly synthetic and process-local; optional PostgreSQL supplies only the restart-durability boundaries the runtime reports. Backup, broader audit coverage, production host controls, camera capture, and several lifecycle controls remain incomplete.
 
-The explicit `serve-mvp` command can route conversation through a configured local OpenAI-compatible endpoint or an optional experimental Codex CLI subscription route, and can enable Telegram Bot API long polling, private owner pairing, canonical text ingestion, and policy-authorized replies. Codex runs only from an exact configured executable with a private working directory and `CODEX_HOME`, fixed read-only/no-approval/ephemeral flags, visible external disclosure, and no Guardian, deterministic-policy, or capability authority. The deterministic model and Telegram fixtures remain visibly labelled no-network defaults. Application stores remain process-local by default; an explicit private core-role DSN enables partial PostgreSQL restart durability for canonical conversations/model provenance, memory correction history and content-deletion evidence, assembled audit append records, reply/delivery work, Telegram pairing authority, normalized intake receipts, poll offsets, and pre-submission reply recovery. `export-mvp` and `import-validate` provide a validated JSONL/schema/checksum ownership-export preview for canonical conversation, redacted delivery status, retention reports, model-activity, and memory-inspection records, while truthfully excluding encryption, blobs, SQL snapshots, and production backup guarantees. Sessions, provider observations, Telegram challenge-send observation, attachment bytes, event/audit emission beyond assembled owner memory mutations, and backup remain visibly ephemeral, incomplete, or unavailable. The web server binds loopback only and keeps browser/API traffic same-origin. The main runtime has no Guardian transition or signing API. Start with the canonical [run the current MVP](docs/run-current-mvp.md) guide; see also [M0 implementation evidence](docs/24-m0-implementation.md), [M1 implementation evidence](docs/25-m1-implementation.md), [development](docs/development.md), and [the recovery runbook](docs/operations/m0-recovery.md).
+The main runtime receives no Guardian signing key, transition command, or host-control authority. The complete implemented boundaries and remaining gates live in [M0 implementation evidence](docs/24-m0-implementation.md), [M1 implementation evidence](docs/25-m1-implementation.md), the [M1 implementation threat review](docs/26-m1-threat-review.md), the [M1 observability and operational-evidence design](docs/27-m1-observability-operational-evidence.md), [current MVP operations](docs/operations/current-mvp.md), and [the recovery runbook](docs/operations/m0-recovery.md).
 
 ## v0.2 decisions
 
@@ -34,25 +63,15 @@ This release preserves the v0.1 research and makes three product decisions expli
 
 The authoritative update and precedence rule are recorded in [v0.2 decisions](docs/23-v0.2-decisions.md), [ADR-013](docs/adr/ADR-013-melloa-naming-and-intellectual-lineage.md), and [ADR-014](docs/adr/ADR-014-private-owner-console-and-conversation.md).
 
-## Start here
+## Learn progressively
 
-1. [v0.2 decisions](docs/23-v0.2-decisions.md)
-2. [Executive vision](docs/01-executive-vision.md)
-3. [Design principles and requirements](docs/02-design-principles-requirements.md)
-4. [Precise conceptual model](docs/03-conceptual-model.md)
-5. [Chosen V1 architecture](docs/05-chosen-v1-architecture.md)
-6. [Owner Console, conversation, and clients](docs/12-telegram-clients.md)
-7. [Final synthesis and implementation milestones](docs/22-final-synthesis.md)
-8. [All diagrams](docs/diagrams.md)
-9. [Requirement traceability](docs/00-traceability.md)
-10. [Implementation agent instructions](AGENTS.md)
-11. [Minimal implementation-agent prompt](IMPLEMENTATION_AGENT_PROMPT.md)
-12. [Consolidated single-file edition](CONSOLIDATED.md)
-13. [Validation report](VALIDATION.md)
-14. [M0 implementation evidence](docs/24-m0-implementation.md)
-15. [M1 implementation evidence](docs/25-m1-implementation.md)
-16. [Run the current MVP](docs/run-current-mvp.md)
-17. [Development and verification](docs/development.md)
+1. **Use it:** [run the current MVP](docs/run-current-mvp.md), then use [development and verification](docs/development.md) when you want to contribute.
+2. **Understand the idea:** read the [executive vision](docs/01-executive-vision.md), [design principles](docs/02-design-principles-requirements.md), and [conceptual model](docs/03-conceptual-model.md).
+3. **Understand the boundaries:** read the [v0.2 decisions](docs/23-v0.2-decisions.md), [chosen V1 architecture](docs/05-chosen-v1-architecture.md), and [Owner Console and client architecture](docs/12-telegram-clients.md).
+4. **Go deeper:** use the [final synthesis](docs/22-final-synthesis.md), [diagram catalogue](docs/diagrams.md), [ADRs](docs/adr/index.md), and [requirement traceability](docs/00-traceability.md).
+5. **Inspect evidence:** see the [validation report](VALIDATION.md), [M0 evidence](docs/24-m0-implementation.md), [M1 evidence](docs/25-m1-implementation.md), [M1 threat review](docs/26-m1-threat-review.md), and [M1 observability acceptance design](docs/27-m1-observability-operational-evidence.md).
+
+The [consolidated edition](CONSOLIDATED.md) supports linear offline reading. Project-owned work follows the [pre-release compatibility process](docs/compatibility.md) and [AGENTS.md](AGENTS.md). These rules do not open outside contribution intake while the license decision remains unresolved.
 
 ## Decision in one page
 
@@ -97,7 +116,7 @@ V1 is useful only when all of these are true:
 - The modular files under `docs/` are canonical. `CONSOLIDATED.md` is generated by `tools/build_consolidated.py` for linear reading.
 - `tools/validate_spec.py` checks local links and fragments, MkDocs navigation, Markdown fences, source anchors, Mermaid block directives, the retained brief hash, unfinished-draft markers, and key arithmetic.
 - `VALIDATION.md` and `validation.json` record the executed architecture checks. `MANIFEST.sha256` covers release files except itself and transient build state.
-- A full MkDocs/JavaScript Mermaid render remains a CI publication check; it was not available in the packaging environment.
+- `make check` performs strict MkDocs and architecture validation. CI also exercises the authenticated production Owner Console journey, captures responsive visual evidence, verifies PostgreSQL and encrypted recovery, and publishes the validated docs site from `main`.
 
 ## Source discipline
 

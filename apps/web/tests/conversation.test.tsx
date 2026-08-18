@@ -10,6 +10,7 @@ import type {
   ConversationTurn,
   ConversationTurnInspection,
   DeliveryWorkStatus,
+  SystemStatus,
 } from "../src/api";
 import { ConversationPage } from "../src/pages/conversation";
 
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   resumeMessage: vi.fn(),
   resumeDelivery: vi.fn(),
   notify: vi.fn(),
+  status: null as SystemStatus | null,
   canMutate: true,
 }));
 
@@ -44,6 +46,9 @@ vi.mock("../src/app", () => {
     get canMutate() {
       return mocks.canMutate;
     },
+    get status() {
+      return mocks.status;
+    },
     notify: mocks.notify,
   };
   return {
@@ -62,6 +67,21 @@ const thread: ConversationThread = {
   retention_policy: "retention.owner-conversation",
   created_at: "2026-08-16T12:00:00Z",
   updated_at: "2026-08-16T12:00:02Z",
+};
+
+const systemStatus: SystemStatus = {
+  service: "melloa-core",
+  milestone: "M1-preview",
+  generated_at: "2026-08-16T12:00:00Z",
+  public_ingress: false,
+  external_actions_enabled: false,
+  guardian: {
+    mode: "normal",
+    sequence: 7,
+    changed_at: "2026-08-16T11:59:00Z",
+    receipt_hash: "sha256:guardian-receipt",
+    key_id: "guardian.status-v1",
+  },
 };
 
 const otherThread: ConversationThread = {
@@ -274,6 +294,7 @@ describe("ConversationPage", () => {
     ]) {
       mock.mockReset();
     }
+    mocks.status = systemStatus;
     mocks.canMutate = true;
     mocks.listThreads.mockResolvedValue([thread]);
     mocks.listMessages.mockResolvedValue([ownerMessage, outputMessage]);
@@ -304,12 +325,24 @@ describe("ConversationPage", () => {
     );
 
     expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
+    expect(screen.getAllByText("Guardian Normal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Console cannot reconfigure Guardian/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Changes unlocked").length).toBeGreaterThan(0);
     const response = await screen.findByText("A grounded response.");
-    const inspectButton = response.closest("button");
-    expect(inspectButton).not.toBeNull();
-    fireEvent.click(inspectButton as HTMLButtonElement);
+    expect(response.closest("button")).toBeNull();
+    fireEvent.click(response);
+    expect(mocks.inspectTurn).not.toHaveBeenCalled();
 
-    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    const conversationDetails = screen.getByText("Conversation details").closest("details");
+    expect(conversationDetails).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("Conversation details"));
+    expect(conversationDetails).toHaveAttribute("open");
+    expect(screen.getByText(thread.thread_id)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
+
+    expect(await screen.findByRole("heading", { name: "Why this response?" })).toBeInTheDocument();
+    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
     expect(screen.getByText("No external disclosure")).toBeInTheDocument();
     expect(screen.getByText("assertion_01")).toBeInTheDocument();
     expect(screen.getByText("£0.00")).toBeInTheDocument();
@@ -349,9 +382,9 @@ describe("ConversationPage", () => {
     );
 
     const firstRender = renderConversation();
-    const firstResponse = await screen.findByText("A grounded response.");
-    fireEvent.click(firstResponse.closest("button") as HTMLButtonElement);
-    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    await screen.findByText("A grounded response.");
+    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
+    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Open route contract for model.local.qwen" }));
 
@@ -359,9 +392,9 @@ describe("ConversationPage", () => {
     firstRender.unmount();
 
     renderConversation();
-    const secondResponse = await screen.findByText("A grounded response.");
-    fireEvent.click(secondResponse.closest("button") as HTMLButtonElement);
-    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    await screen.findByText("A grounded response.");
+    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
+    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Open route contract for route attempt model.local.qwen" }));
 
@@ -379,8 +412,8 @@ describe("ConversationPage", () => {
       </MemoryRouter>,
     );
 
-    const response = await screen.findByText("A grounded response.");
-    fireEvent.click(response.closest("button") as HTMLButtonElement);
+    await screen.findByText("A grounded response.");
+    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
     expect(await screen.findByText("Turn ledger")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `Copy Turn ID ${turn.turn_id}` }));
 
@@ -408,10 +441,10 @@ describe("ConversationPage", () => {
       </MemoryRouter>,
     );
 
-    const response = await screen.findByText("A grounded response.");
-    fireEvent.click(response.closest("button") as HTMLButtonElement);
+    await screen.findByText("A grounded response.");
+    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
 
-    expect(await screen.findByText("codex-subscription-model")).toBeInTheDocument();
+    expect(await screen.findAllByText("codex-subscription-model")).not.toHaveLength(0);
     expect(screen.getAllByText("Unreported")).toHaveLength(2);
     expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
   });
@@ -434,11 +467,13 @@ describe("ConversationPage", () => {
       </MemoryRouter>,
     );
 
-    const response = await screen.findByText("A grounded response.");
-    fireEvent.click(response.closest("button") as HTMLButtonElement);
+    await screen.findByText("A grounded response.");
+    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
 
-    expect(await screen.findByText("deterministic-fixture-v1")).toBeInTheDocument();
+    expect(await screen.findByText("Fixed no-network tour")).toBeInTheDocument();
+    expect(screen.getByText("deterministic-fixture-v1")).toBeInTheDocument();
     expect(screen.getByText("Synthetic fixture")).toBeInTheDocument();
+    expect(screen.getByText(/This response came from a deterministic fixture/i)).toBeInTheDocument();
     expect(screen.getByText("No external disclosure")).toBeInTheDocument();
   });
 
@@ -483,7 +518,12 @@ describe("ConversationPage", () => {
     const response = await screen.findByText("A grounded response.");
     const row = response.closest("article");
     expect(row).toBeInstanceOf(HTMLElement);
-    expect(within(row as HTMLElement).getByText("Synthetic fixture")).toBeInTheDocument();
+    expect(response.closest("button")).toBeNull();
+    expect(within(row as HTMLElement).getByText("Guided tour fixture")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Fixed fixture · no network")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText(/did not interpret your message or represent Melli thinking/i)).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("Melli", { exact: true })).not.toBeInTheDocument();
+    fireEvent.click(response);
     expect(mocks.inspectTurn).not.toHaveBeenCalled();
   });
 
@@ -498,26 +538,55 @@ describe("ConversationPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Start with what matters now" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "What would help right now?" })).toBeInTheDocument();
+    expect(screen.getByText("No-network route = guided tour")).toBeInTheDocument();
+    expect(screen.getByText(/fixed response does not interpret your words or represent Melli thinking/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Private owner conversation")).not.toHaveLength(0);
+    expect(screen.getByText(/Guardian remains independent/i)).toBeInTheDocument();
+    expect(screen.getByText(/Route and disclosure stay visible/i)).toBeInTheDocument();
+    expect(screen.getByText("A starter only fills the composer. Edit it, then choose Send; nothing runs before you do.")).toBeInTheDocument();
+    expect(screen.getByText("Bring a real job to Melli")).toBeInTheDocument();
+    expect(screen.getAllByText("Eligible model required")).toHaveLength(4);
     const starters = screen.getByLabelText("Starter prompts");
-    fireEvent.click(within(starters).getByRole("button", { name: /Readiness check/i }));
-    expect(screen.getByLabelText("Message Melli")).toHaveValue(
-      "Give me a concise private MVP readiness check for this Melloa preview.",
-    );
+    expect(within(starters).getByRole("button", { name: /Plan my next step.*Eligible model required/i })).toBeInTheDocument();
+    expect(within(starters).getByRole("button", { name: /Think through a decision.*Eligible model required/i })).toBeInTheDocument();
+    expect(within(starters).getByRole("button", { name: /Use what I have shared.*Eligible model required/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Fill a no-network tour message" }));
+    await waitFor(() => expect(screen.getByLabelText("Message Melli")).toHaveValue(
+      "Start the no-network tour. I want to see one fixed response and inspect its route, disclosure, evidence, policy, and recovery controls.",
+    ));
 
-    fireEvent.click(within(starters).getByRole("button", { name: /Use memory evidence/i }));
+    fireEvent.click(within(starters).getByRole("button", { name: /Use what I have shared/i }));
 
-    expect(screen.getByLabelText("Message Melli")).toHaveValue(
-      "What can you answer from the current seed memory, and what evidence will you cite?",
-    );
+    await waitFor(() => expect(screen.getByLabelText("Message Melli")).toHaveValue(
+      "Using only what I have shared and the evidence you can cite, help me identify a priority I should revisit. Tell me clearly what you do not know.",
+    ));
     expect(mocks.postMessage).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
     await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
       thread.thread_id,
-      "What can you answer from the current seed memory, and what evidence will you cite?",
+      "Using only what I have shared and the evidence you can cite, help me identify a priority I should revisit. Tell me clearly what you do not know.",
       expect.any(String),
     ));
+  });
+
+  it("starts from a guided owner job before any conversation exists", async () => {
+    mocks.listThreads.mockResolvedValue([]);
+    render(
+      <MemoryRouter initialEntries={["/conversation"]}>
+        <Routes><Route path="/conversation/:threadId?" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Talk to Melli. Stay in control." })).toBeInTheDocument();
+    expect(screen.getByText("Guardian Normal")).toBeInTheDocument();
+    expect(screen.getByText(/Console cannot reconfigure Guardian/i)).toBeInTheDocument();
+    expect(screen.getByText("No-network route = guided tour")).toBeInTheDocument();
+    expect(screen.getByText(/Create a private conversation for a real question/i)).toBeInTheDocument();
+    expect(screen.getByText(/Guardian remains independent/i)).toBeInTheDocument();
+    expect(screen.getByText(/Route and disclosure stay visible/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start a private conversation" })).toBeEnabled();
   });
 
   it("keeps composer drafts and retry keys scoped to the selected thread", async () => {
@@ -553,6 +622,56 @@ describe("ConversationPage", () => {
       "First thread draft.",
       expect.any(String),
     ));
+  });
+
+  it("keeps owner input and the canonical submission key after a provider send error", async () => {
+    mocks.postMessage.mockRejectedValueOnce(new Error("provider route unavailable"));
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Keep this exact draft." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledTimes(1));
+    const firstSubmissionKey = mocks.postMessage.mock.calls[0]?.[2];
+    expect(typeof firstSubmissionKey).toBe("string");
+    expect(screen.getByLabelText("Message Melli")).toHaveValue("Keep this exact draft.");
+    expect(mocks.notify).toHaveBeenCalledWith(
+      "provider route unavailable Retrying will reuse the same canonical submission.",
+      "error",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.postMessage.mock.calls[1]).toEqual([
+      thread.thread_id,
+      "Keep this exact draft.",
+      firstSubmissionKey,
+    ]);
+  });
+
+  it("explains conversation load failure and retries without changing the thread", async () => {
+    mocks.listMessages.mockRejectedValueOnce(new Error("core unavailable"));
+    render(
+      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
+        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Conversation could not load" })).toBeInTheDocument();
+    expect(screen.getByText(/The conversation was not changed; retry loading or open another thread/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Melli")).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry conversation load" }));
+
+    expect(await screen.findByText("A grounded response.")).toBeInTheDocument();
+    expect(mocks.listMessages).toHaveBeenCalledWith(thread.thread_id);
+    expect(mocks.listMessages).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the latest selected conversation when an older thread load resolves last", async () => {
@@ -597,8 +716,8 @@ describe("ConversationPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Turn details" })).toBeInTheDocument();
-    expect(await screen.findByText("qwen3:8b")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Why this response?" })).toBeInTheDocument();
+    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
     expect(mocks.inspectTurn).toHaveBeenCalledWith(thread.thread_id, turn.turn_id);
   });
 
@@ -656,8 +775,8 @@ describe("ConversationPage", () => {
       </MemoryRouter>,
     );
 
-    const ownerPrompt = await screen.findByText("What should I focus on?");
-    fireEvent.click(ownerPrompt.closest("button") as HTMLButtonElement);
+    await screen.findByText("What should I focus on?");
+    fireEvent.click(screen.getByRole("button", { name: `View processing details for message ${ownerMessage.message_id}` }));
 
     expect(await screen.findByRole("heading", { name: "Processing" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `Copy Processing work ID ${deadProcessing.work_id}` }));
@@ -735,12 +854,14 @@ describe("ConversationPage", () => {
     fireEvent.click(replyResume);
     expect(mocks.resumeMessage).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText("What should I focus on?"));
+    fireEvent.click(screen.getByRole("button", { name: `View processing details for message ${ownerMessage.message_id}` }));
     expect(await screen.findByRole("heading", { name: "Processing" })).toBeInTheDocument();
+    expect(screen.getByText("Recent owner authentication is required before model work can be resumed.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Resume with bounded retries/i })).toBeDisabled();
 
     fireEvent.click(screen.getByText("Delivery failed · inspect"));
     expect(await screen.findByRole("heading", { name: "Delivery" })).toBeInTheDocument();
+    expect(screen.getByText("Recent owner authentication is required before delivery work can be resumed.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Resume delivery with bounded retries/i })).toBeDisabled();
     expect(mocks.resumeDelivery).not.toHaveBeenCalled();
   });
