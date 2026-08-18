@@ -4,13 +4,17 @@ This is the one canonical path for running the current owner-facing Melloa MVP. 
 
 Use [the current MVP operations runbook](operations/current-mvp.md) as the operator checklist for health validation, export validation, release evidence, incident response, and cleanup boundaries around this startup path.
 
-The result is a usable loop:
+With an eligible model route, the result is a usable loop:
 
 > owner login → canonical conversation → provider-neutral model route → Melli reply → route, disclosure, latency, token, cost, evidence, and decision inspection
 
+The default no-network path exercises the same owner controls and evidence without claiming semantic help:
+
+> owner login → canonical conversation → fixed guided-tour response → explicit non-Melli label → route, disclosure, cost, evidence, and decision inspection
+
 With Telegram explicitly enabled, the same canonical loop also supports:
 
-> private `/start` → Owner Console confirmation → Telegram text → canonical conversation → model route → exact policy-authorized reply to the same pairing
+> private `/start` → Owner Console confirmation → Telegram text → canonical conversation → route result → exact policy-authorized reply to the same pairing
 
 ## First run: take the no-network path
 

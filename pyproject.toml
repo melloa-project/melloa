@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27,<2"]
+requires = ["editables==0.5", "hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -21,6 +21,10 @@ dependencies = [
 melloa = "melloa.apps.cli:main"
 
 [dependency-groups]
+build = [
+  "editables==0.5",
+  "hatchling==1.32.0",
+]
 dev = [
   "jsonschema>=4.25,<5",
   "mypy>=1.17,<2",

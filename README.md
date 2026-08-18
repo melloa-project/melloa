@@ -12,7 +12,7 @@ Melloa is a local-first system for building a durable relationship between an ow
 
 ## Run it locally
 
-The current preview gives you a private Owner Console, a canonical conversation with Melli, visible route and disclosure evidence, inspectable memory, owner export, and a separately signed Guardian status. Its safe default is loopback-only, uses synthetic data, and makes no model-provider or Telegram network call.
+The current preview gives you a private Owner Console, a guided no-network tour of canonical conversation and its evidence, an optional eligible-model path for an actual Melli response, inspectable memory, owner export, and a separately signed Guardian status. Its safe default is loopback-only, uses synthetic data, and makes no model-provider or Telegram network call.
 
 You need Python 3.13+, [uv 0.12.0](https://docs.astral.sh/uv/), Node.js 22+, Go 1.24+, Bash, and the public `melloa` and `melloa-guardian` repositories as siblings. Docker, API keys, Telegram, Ollama, cameras, and private deployment state are not required for the default path.
 
@@ -27,7 +27,7 @@ If `uv` reports `UnknownIssuer` on a managed network and the organization CA is 
 
 Continue with **[Run the current MVP](docs/run-current-mvp.md)**. The guide starts with a first-run route map, creates only disposable credentials and Guardian state, then walks through login, conversation, inspection, export, and cleanup.
 
-Contributors can verify the checkout with:
+Verify the checkout with:
 
 ```bash
 make check

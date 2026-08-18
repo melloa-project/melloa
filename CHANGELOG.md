@@ -2,8 +2,18 @@
 
 ## M1 implementation — in progress
 
-- Reworked the public docs homepage and navigation around the runnable owner journey, real Owner Console evidence, a compact trust diagram, honest preview limits, and progressive architectural depth.
-- Published the M1 threat review, observability/operational-evidence acceptance design, and pre-release compatibility process without implying production readiness, stable support, a license grant, or open contribution intake.
+- Added the explicit `serve-mvp` owner-facing preview with loopback-only core/web serving, signed Guardian reads, process-local defaults, and optional restricted-role PostgreSQL restart durability.
+- Added provider-neutral local OpenAI-compatible routing, a bounded experimental Codex CLI adapter with isolated configuration and no Melloa authority, and visibly labelled deterministic fallback.
+- Added optional real Telegram Bot API long polling, private owner pairing, canonical text ingestion, durable offsets/work where PostgreSQL is enabled, and exact policy-authorized replies.
+- Added hashed owner-session persistence, append-only revocation evidence, active-session inventory, credential-bound rotation behavior, and recent-authenticated sign-out-other-sessions control.
+- Added chronological owner timeline, export-audit projection, expanded activity/providers/operations/settings views, responsive mobile states, and authenticated production-build browser smoke evidence.
+- Added canonical owner export with JSONL, copied schemas, checksums, dry-run validation, live browser ZIP download, and an optional AES-256-GCM/Scrypt encrypted package round trip.
+- Added owner assertion-content deletion that removes retained value while preserving metadata, state history, content-free tombstone, rebuild obligation, and honest backup-expiry disclosure.
+- Added content-free accepted/denied audit evidence for canonical owner-message acceptance/resume and outbound-delivery enqueue/resume, including durable PostgreSQL proof and honest post-mutation audit-failure recovery tests.
+- Published an evidence-backed M1 implementation threat review and pre-release compatibility process without implying production readiness, stable support, a license grant, or open contribution intake.
+- Published the M1 observability and operational-evidence acceptance design, separating durable audit truth from diagnostic telemetry and defining no-network, redaction, cardinality, failure-semantics, and preview-SLO boundaries.
+- Added a deterministic, no-network CycloneDX 1.6 dependency inventory for committed Python runtime/development/docs/build locks, the npm lock, and Guardian Go modules, with source/checksum evidence and a short-lived CI artifact; CI actions, runner/OS toolchains, containers, and signed provenance remain outside its claim.
+- Reworked newcomer entry points around the safe no-network journey, refreshed current validation evidence, made validation statistics independent of local test artifacts, and added non-mutating generated checks for the consolidated reading edition and validation snapshot.
 - Added authenticated owner sessions, secure cookie/CSRF boundaries, and channel-neutral private conversation APIs.
 - Added canonical idempotent conversation turns and deterministic policy-aware model routing with disclosure-aware fallback records.
 - Added policy-scoped, provenance-ranked retrieval manifests and carried validated citation/evidence IDs through model context, output messages, and structured turns.

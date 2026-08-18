@@ -83,7 +83,7 @@ hide:
 
 ### What you can do now
 
-- Talk to Melli in an authenticated, channel-neutral conversation that is not owned by a model provider or chat client.
+- Take an authenticated no-network tour of the canonical conversation immediately, then talk to Melli after configuring an eligible model route; neither path is owned by a model provider or chat client.
 - Inspect which model route ran, what memory evidence was selected, whether anything left the machine, and what it cost.
 - Review, correct, dispute, retract, or content-delete memory while preserving provenance and deletion evidence.
 - Inspect provider health, delivery attempts, retention coverage, operational status, and a content-free owner timeline.
@@ -173,7 +173,7 @@ Record the decisions made after the v0.1 research without rewriting its evidence
 ### Naming and intellectual lineage
 
 - **Meliorism** names the guiding philosophy: deliberate effort can improve the world and the owner's life.
-- **Melloa** names the open-source system, runtime, protocols, storage, policy framework, capabilities, deployment environment, and public project.
+- **Melloa** names the system, runtime, protocols, storage, policy framework, capabilities, deployment environment, and intended public project. Public source visibility does not make it open source until the owner adds explicit license terms.
 - **Melli** names the primary persistent personal intelligence within a deployment. Its identity remains distinct from any process, model, provider, or chat session.
 - **Guardian** remains the independent owner-controlled safety, restriction, shutdown, and recovery plane.
 - **Otto** is reserved as an optional philosophical reference to the Extended Mind thought experiment. It does not create a V1 memory agent, service, role, or synthetic owner.
@@ -672,7 +672,7 @@ Otherwise use an ephemeral specialist worker.
 #### Adopted vocabulary
 
 - **Meliorism** is the philosophy and purpose.
-- **Melloa** is the system, open-source project, and public technical name.
+- **Melloa** is the system, intended public project, and public technical name. Its source is currently readable, but it is not open source until explicit license terms are added.
 - **Melli** is the primary persistent intelligence in the owner's deployment.
 - **Guardian** is the independent owner-controlled control plane.
 - **Otto** is reserved as a subtle Extended Mind reference and is not assigned to a V1 subsystem.
@@ -3738,7 +3738,7 @@ Owner feedback is scarce and costly. Use it deliberately:
 
 ### Purpose
 
-Keep one engineer able to understand and evolve Melloa years later, while making the open-source system reproducible and contribution-friendly from the beginning.
+Keep one engineer able to understand and evolve Melloa years later, while making the intended public project reproducible and contribution-friendly from the beginning. The source is currently readable but is not open source, and contribution intake remains paused, until the owner adds explicit license terms.
 
 ### Repository strategy
 
@@ -3967,6 +3967,8 @@ Commands print exact changed resources and next recovery step. Destructive comma
 
 ### Open-source baseline
 
+The current publicly readable preview has implemented the compatibility, dependency-source, checksum-manifest, and committed-lock CycloneDX dependency-inventory parts of this baseline. The inventory is neither a signed release nor complete build provenance. The preview has also not met the first item: explicit license selection remains an owner decision, and the preserved conduct-policy proposal has not been adopted, so this is still a target baseline rather than a claim that the repositories are open source.
+
 - OSI-approved license selected before code acceptance.
 - `SECURITY.md` with private vulnerability reporting and supported versions.
 - Contributor guide, code of conduct, architecture map, dependency rules, and release process.
@@ -3985,7 +3987,8 @@ Commands print exact changed resources and next recovery step. Destructive comma
 - Three-repository trust layout, monorepo dependency checks, Python/SQL/TypeScript toolchains, migration and schema discipline.
 - Separate Guardian protection.
 - MkDocs/Markdown/Mermaid, ADRs, runbooks, and source register.
-- A small coherent CLI and synthetic open-source fixtures.
+- A small coherent CLI and synthetic public fixtures.
+- Deterministic committed Python runtime/development/docs/build, npm, and Guardian Go dependency inventory emitted as a no-network CycloneDX CI artifact, with toolchain/provenance exclusions stated explicitly.
 
 ### Design for
 
@@ -6111,7 +6114,7 @@ The architecture requires stable distinctions between system, persistent intelli
 ### Decision
 
 - **Meliorism** is the guiding philosophy and purpose.
-- **Melloa** is the open-source system and public technical project.
+- **Melloa** is the system and intended public technical project. The repository is not open source until the owner adds explicit license terms.
 - **Melli** is the primary persistent intelligence in an owner's deployment.
 - **Guardian** remains the independent owner-controlled control plane.
 - **Otto** is reserved as an optional Extended Mind reference and is not assigned to a V1 subsystem, synthetic owner, or mandatory agent.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Keep one engineer able to understand and evolve Melloa years later, while making the open-source system reproducible and contribution-friendly from the beginning.
+Keep one engineer able to understand and evolve Melloa years later, while making the intended public project reproducible and contribution-friendly from the beginning. The source is currently readable but is not open source, and contribution intake remains paused, until the owner adds explicit license terms.
 
 ## Repository strategy
 
@@ -231,6 +231,8 @@ Commands print exact changed resources and next recovery step. Destructive comma
 
 ## Open-source baseline
 
+The current publicly readable preview has implemented the compatibility, dependency-source, checksum-manifest, and committed-lock CycloneDX dependency-inventory parts of this baseline. The inventory is neither a signed release nor complete build provenance. The preview has also not met the first item: explicit license selection remains an owner decision, and the preserved conduct-policy proposal has not been adopted, so this is still a target baseline rather than a claim that the repositories are open source.
+
 - OSI-approved license selected before code acceptance.
 - `SECURITY.md` with private vulnerability reporting and supported versions.
 - Contributor guide, code of conduct, architecture map, dependency rules, and release process.
@@ -249,7 +251,8 @@ Commands print exact changed resources and next recovery step. Destructive comma
 - Three-repository trust layout, monorepo dependency checks, Python/SQL/TypeScript toolchains, migration and schema discipline.
 - Separate Guardian protection.
 - MkDocs/Markdown/Mermaid, ADRs, runbooks, and source register.
-- A small coherent CLI and synthetic open-source fixtures.
+- A small coherent CLI and synthetic public fixtures.
+- Deterministic committed Python runtime/development/docs/build, npm, and Guardian Go dependency inventory emitted as a no-network CycloneDX CI artifact, with toolchain/provenance exclusions stated explicitly.
 
 ## Design for
 

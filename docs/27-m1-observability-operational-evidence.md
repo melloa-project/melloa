@@ -172,8 +172,8 @@ These are preview acceptance targets, not public service promises:
 
 ## Recommended Sequence
 
-1. Finish Steward clean evidence and Forge SBOM work so release artifacts can be
-   trusted.
+1. Treat clean generated evidence and the locked dependency inventory as release
+   prerequisites.
 2. Implement the audit/telemetry contract and mutation failure-semantics matrix.
 3. Add local low-cardinality health and queue metrics from existing owner status
    projections.

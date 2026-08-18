@@ -21,7 +21,7 @@ hide:
 
 ## What you can do now
 
-- Talk to Melli in an authenticated, channel-neutral conversation that is not owned by a model provider or chat client.
+- Take an authenticated no-network tour of the canonical conversation immediately, then talk to Melli after configuring an eligible model route; neither path is owned by a model provider or chat client.
 - Inspect which model route ran, what memory evidence was selected, whether anything left the machine, and what it cost.
 - Review, correct, dispute, retract, or content-delete memory while preserving provenance and deletion evidence.
 - Inspect provider health, delivery attempts, retention coverage, operational status, and a content-free owner timeline.

@@ -96,7 +96,7 @@ Otherwise use an ephemeral specialist worker.
 ### Adopted vocabulary
 
 - **Meliorism** is the philosophy and purpose.
-- **Melloa** is the system, open-source project, and public technical name.
+- **Melloa** is the system, intended public project, and public technical name. Its source is currently readable, but it is not open source until explicit license terms are added.
 - **Melli** is the primary persistent intelligence in the owner's deployment.
 - **Guardian** is the independent owner-controlled control plane.
 - **Otto** is reserved as a subtle Extended Mind reference and is not assigned to a V1 subsystem.

@@ -1,24 +1,25 @@
-# Validation report — Melloa v0.2 and M0
+# Validation report — Melloa v0.2 current implementation
 
-**Generated:** 2026-08-16  
+**Generated:** 2026-08-18
+
 **Validated root:** `.`
 
 ## Result
 
-All automated architecture checks and synthetic M0 acceptance gates passed. This is implementation evidence, not a production-readiness claim.
+All current automated architecture checks, deterministic core and web gates, PostgreSQL integration tests, Guardian checks, authenticated browser smoke, owner-export validation, and encrypted clean-restore acceptance gates passed. This is implementation evidence for the synthetic/local preview, not a production-readiness or personal-data deployment claim.
 
 ## Package statistics
 
-- Files inspected: **186**
-- Canonical Markdown files: **53**
-- Canonical Markdown word count: **44,947**
-- Mermaid blocks: **30**
-- Local Markdown links checked: **200**
-- MkDocs navigation targets checked: **48**
+- Files inspected: **341**
+- Canonical Markdown files: **59**
+- Canonical Markdown word count: **67,982**
+- Mermaid blocks: **31**
+- Local Markdown links checked: **258**
+- MkDocs navigation targets checked: **53**
 - Primary-source anchors available: **67**
-- Source references found: **98**
+- Source references found: **92**
 
-## Checks
+## Architecture checks
 
 - PASS — `balanced_markdown_fences`
 - PASS — `no_placeholder_markers`
@@ -29,18 +30,21 @@ All automated architecture checks and synthetic M0 acceptance gates passed. This
 - PASS — `master_brief_hash_matches`
 - PASS — `quantitative_sanity_checks`
 
-## M0 acceptance gates
+## Implementation acceptance gates
 
 | Gate | Result |
 |---|---|
-| Python quality | PASS — Ruff, strict mypy, and 46 unit tests with 91.65% branch-aware coverage |
-| Generated contracts | PASS — JSON Schemas and migration digest manifest match their sources |
-| Owner Console | PASS — TypeScript check, three Node tests, and static build |
-| PostgreSQL | PASS — PostgreSQL 18 migration apply/check and four integration tests |
-| Recovery | PASS — encrypted restic repository scan, integrity check, clean restore, and denied read-only mutation |
-| Guardian | PASS — Go formatting, vet, tests, build, deterministic transition journal, and signed projection |
-| Guardian interoperability | PASS — Melloa independently verified stopped and offline Ed25519 projections and their receipt chain |
+| Python quality | PASS — Ruff, strict mypy across 79 source files, and 497 unit tests with 90.32% branch-aware coverage |
+| Generated contracts | PASS — JSON Schemas and the ten-version migration digest manifest match their sources; release manifest matches a clean Git export |
+| Owner Console | PASS — TypeScript check, 158 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
+| Owner journey | PASS — signed Guardian status, login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, and responsive navigation |
+| PostgreSQL | PASS — all ten migrations applied with none pending; 17 restart, role, idempotency, conversation, memory, delivery, Telegram-state, audit, and session integration tests passed |
+| Owner export | PASS — canonical export and dry-run import validation; AES-256-GCM/Scrypt package encryption and decrypt-validate round trip |
+| Recovery | PASS — encrypted restic repository plaintext scan, integrity check, clean PostgreSQL restore, and denied read-only mutation |
+| Guardian | PASS — Go formatting, vet, tests, reproducible-path build, deterministic transition journal, and signed `stopped` → `offline` projection consumed read-only by Melloa |
 | Documentation | PASS — strict MkDocs build and architecture validator |
+
+The Docker acceptance gates used the exact digest-pinned pgvector/PostgreSQL and restic image contents declared by the repository. Where the local Docker daemon could not reach Docker Hub through the host proxy, those exact remote digests were verified and imported before running the unchanged harnesses.
 
 ## Master research brief integrity
 
@@ -51,11 +55,12 @@ The original supplied research brief remains byte-for-byte unchanged.
 
 ## Errors
 
-- None
+- None in the executed gates.
 
 ## Remaining checks and decisions
 
-- Browser-executed JavaScript Mermaid rendering was not exercised by the static MkDocs build.
-- External URLs were researched but are not network-probed by this local validator.
-- A source license must be owner-selected before accepting external code or publishing a release.
-- Real console authentication, host recovery, and Guardian deployment remain owner-reviewed M1/deployment work.
+- A public source license still requires an explicit repository-owner decision. Until then, the public code is readable but reuse, redistribution, and outside contributions are not authorized.
+- Browser-executed Mermaid rendering was not exercised by the static MkDocs build.
+- External documentation URLs are not network-probed by the architecture validator.
+- Real Ollama, Codex subscription, Telegram Bot API, camera, private-network, host Guardian controls, and owner deployment overlays were not exercised by this no-network acceptance run.
+- Production backup schedules, offsite recovery-key custody, private host recovery, and personal-data operation remain deployment work and cannot be inferred from synthetic clean-restore evidence.

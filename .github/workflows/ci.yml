@@ -54,7 +54,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: melloa-project/melloa-guardian
+          ref: 2006fef8b2f6deeed84da8ba8ccf03fb40672441
           path: .ci/melloa-guardian
+      - name: Generate deterministic dependency SBOM
+        run: |
+          make sbom \
+            GUARDIAN_ROOT=.ci/melloa-guardian \
+            SBOM_OUTPUT="$RUNNER_TEMP/melloa-dependency-sbom.cdx.json"
+          make sbom-check \
+            GUARDIAN_ROOT=.ci/melloa-guardian \
+            SBOM_OUTPUT="$RUNNER_TEMP/melloa-dependency-sbom.cdx.json"
+      - name: Upload dependency SBOM artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dependency-sbom
+          path: ${{ runner.temp }}/melloa-dependency-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Install pinned uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
@@ -166,9 +182,9 @@ jobs:
           enable-cache: true
           cache-suffix: ${{ github.job }}
       - name: Install locked documentation dependencies
-        run: UV_CACHE_DIR=.cache/uv uv sync --frozen --no-dev --group docs
+        run: make bootstrap-docs
       - name: Build strict documentation site
-        run: UV_CACHE_DIR=.cache/uv uv run mkdocs build --strict
+        run: make docs
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
       - name: Upload GitHub Pages artifact

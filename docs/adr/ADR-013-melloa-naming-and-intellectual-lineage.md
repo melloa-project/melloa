@@ -10,7 +10,7 @@ The architecture requires stable distinctions between system, persistent intelli
 ## Decision
 
 - **Meliorism** is the guiding philosophy and purpose.
-- **Melloa** is the open-source system and public technical project.
+- **Melloa** is the system and intended public technical project. The repository is not open source until the owner adds explicit license terms.
 - **Melli** is the primary persistent intelligence in an owner's deployment.
 - **Guardian** remains the independent owner-controlled control plane.
 - **Otto** is reserved as an optional Extended Mind reference and is not assigned to a V1 subsystem, synthetic owner, or mandatory agent.

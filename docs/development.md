@@ -10,15 +10,40 @@
 
 No model key, Telegram token, camera, public domain, owner deployment repository, or personal data is needed for bootstrap, verification, or the default no-network MVP. A disposable mode-`0600` token file is optional only when exercising the real Telegram Bot API path.
 
+## Newcomer path
+
+If this is your first checkout, run `make bootstrap`, then follow [Run the current MVP](run-current-mvp.md) using its no-network first-run choices. That path builds the independent Guardian, starts the loopback core and production Owner Console, completes an authenticated synthetic conversation, inspects provenance and disclosures, validates an owner export, and cleans up disposable state.
+
+The checks below are project and release gates. They are deliberately broader than what is required merely to try the preview; they do not open outside contribution intake.
+
 ## Bootstrap
 
 ```bash
 make bootstrap
 ```
 
-This installs locked Python and web dependencies. `.env.example` contains paths only. Put local secret files under an owner-controlled runtime directory with mode `0600`; do not put values in `.env` or command arguments.
+This source-gates the locks, installs all frozen Python dependency groups without the project, then builds the local project with only its exact locked Hatchling backend and installs web dependencies with lifecycle scripts disabled. `.env.example` contains paths only. Put local secret files under an owner-controlled runtime directory with mode `0600`; do not put values in `.env` or command arguments.
 
 Repository configuration resolves Python and web packages only from the reviewed public PyPI and npm registries. `make dependency-sources` rejects lockfiles containing any other dependency host before bootstrap attempts network access.
+
+## Dependency inventory and SBOM
+
+CI generates a deterministic CycloneDX 1.6 dependency inventory from the committed Python runtime, development, documentation, and build declarations reconciled to `uv.lock`, the npm lock, and the independent Guardian Go manifests without resolving anything over the network. It records locked source/checksum evidence, has no timestamp or random serial number, and is uploaded as the short-lived `dependency-sbom` CI artifact.
+
+With both publicly readable repositories checked out as siblings, reproduce it locally with:
+
+```bash
+python3 tools/check_dependency_sources.py
+python3 tools/generate_dependency_sbom.py \
+  --guardian-root ../melloa-guardian \
+  --output dist/melloa-dependency-sbom.cdx.json
+python3 tools/generate_dependency_sbom.py \
+  --guardian-root ../melloa-guardian \
+  --output dist/melloa-dependency-sbom.cdx.json \
+  --check
+```
+
+The generated `dist/` artifact is intentionally not a canonical source file or a substitute for a signed release/provenance statement. It covers committed Melloa Python runtime/development/docs/build dependencies, npm packages, and Guardian Go modules. It does not inventory GitHub Actions, runner or operating-system toolchains, containers, deployment state, or prove which bytes executed. Guardian currently has no third-party Go requirements, so its module and Go version are recorded with a zero dependency count.
 
 ## Fast checks
 
@@ -58,7 +83,7 @@ Run generation only when intentionally changing a model or adding a migration. C
 
 ## Run the owner-facing MVP
 
-Use [Run the current MVP](run-current-mvp.md) as the sole setup and smoke guide. It includes disposable Guardian initialization, mode-`0600` owner authentication, optional Ollama/Qwen, isolated experimental Codex CLI, and Telegram Bot API configuration, exact core and console commands, expected URLs and visual states, limitations, cleanup, and troubleshooting.
+Use [Run the current MVP](run-current-mvp.md) as the canonical setup and smoke guide. It starts with the default no-network route map, then covers disposable Guardian initialization, mode-`0600` owner authentication, optional Ollama/Qwen, isolated experimental Codex CLI, Telegram Bot API configuration, exact core and console commands, expected URLs and visual states, limitations, cleanup, and troubleshooting.
 
 The ordinary `melloa serve` command remains the fail-closed M0 status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional partial PostgreSQL restart durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
 
