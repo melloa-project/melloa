@@ -1,11 +1,10 @@
-site_name: Melloa Architecture Specification
-site_description: Research-backed architecture for a long-lived personal AI operating system
+site_name: Melloa
+site_description: Owner-controlled, local-first personal AI architecture and runtime
 site_url: "https://melloa-project.github.io/melloa/"
 repo_url: "https://github.com/melloa-project/melloa"
 theme:
   name: material
   features:
-    - navigation.sections
     - navigation.top
     - content.code.copy
 markdown_extensions:
@@ -20,42 +19,47 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
   - Home: index.md
-  - v0.2 adopted decisions: 23-v0.2-decisions.md
-  - M0 implementation: 24-m0-implementation.md
-  - M1 implementation (in progress): 25-m1-implementation.md
-  - Run the current MVP: run-current-mvp.md
-  - Development: development.md
-  - Contracts:
-      - Guardian protocol: contracts/guardian-protocol.md
-  - Operations:
+  - Try the preview:
+      - Run the current MVP: run-current-mvp.md
       - Current MVP operations: operations/current-mvp.md
+      - Development and verification: development.md
+  - Current status:
+      - v0.2 adopted decisions: 23-v0.2-decisions.md
+      - M0 implementation: 24-m0-implementation.md
+      - M1 implementation (in progress): 25-m1-implementation.md
+      - M1 threat review: 26-m1-threat-review.md
+      - M1 observability and operational evidence: 27-m1-observability-operational-evidence.md
+      - Pre-release compatibility: compatibility.md
+  - Product foundations:
+      - Executive vision: 01-executive-vision.md
+      - Principles and requirements: 02-design-principles-requirements.md
+      - Conceptual model: 03-conceptual-model.md
+      - Alternative architectures: 04-alternative-architectures.md
+      - Chosen V1 architecture: 05-chosen-v1-architecture.md
+      - Final synthesis: 22-final-synthesis.md
+  - Architecture and trust:
+      - Events, memory, and data: 06-events-memory-data.md
+      - Agents, models, and goals: 07-agents-models-goals.md
+      - Capabilities, policy, autonomy: 08-capabilities-policy-autonomy.md
+      - Security and prompt injection: 09-security-threat-injection.md
+      - Secrets, control plane, kill switch: 10-secrets-control-kill-switch.md
+      - Camera and hardware: 11-camera-perception-hardware.md
+      - Owner Console, conversation, and clients: 12-telegram-clients.md
+      - Self-modification and CI: 13-self-modification-git-ci.md
+      - Deployment and networking: 14-deployment-networking-infrastructure.md
+      - Observability and recovery: 15-observability-reliability-dr.md
+      - Privacy, retention, export, cost: 16-privacy-retention-export-cost.md
+      - Testing and simulation: 17-testing-evaluation-simulation.md
+      - Guardian protocol: contracts/guardian-protocol.md
       - M0 recovery drill: operations/m0-recovery.md
-  - Traceability: 00-traceability.md
-  - Vision: 01-executive-vision.md
-  - Principles and requirements: 02-design-principles-requirements.md
-  - Conceptual model: 03-conceptual-model.md
-  - Alternatives: 04-alternative-architectures.md
-  - Chosen V1: 05-chosen-v1-architecture.md
-  - Events, memory, and data: 06-events-memory-data.md
-  - Agents, models, and goals: 07-agents-models-goals.md
-  - Capabilities, policy, autonomy: 08-capabilities-policy-autonomy.md
-  - Security and prompt injection: 09-security-threat-injection.md
-  - Secrets, control plane, kill switch: 10-secrets-control-kill-switch.md
-  - Camera and hardware: 11-camera-perception-hardware.md
-  - Owner Console, conversation, and clients: 12-telegram-clients.md
-  - Self-modification and CI: 13-self-modification-git-ci.md
-  - Deployment and networking: 14-deployment-networking-infrastructure.md
-  - Observability and recovery: 15-observability-reliability-dr.md
-  - Privacy, retention, export, cost: 16-privacy-retention-export-cost.md
-  - Testing and simulation: 17-testing-evaluation-simulation.md
-  - Repository, languages, docs, DX: 18-repository-languages-docs-dx.md
-  - Onboarding, runbooks, roadmap: 19-onboarding-runbooks-roadmap.md
-  - Risk register: 20-risk-register.md
-  - Reviewers and open questions: 21-reviewers-open-questions-rejected.md
-  - Final synthesis: 22-final-synthesis.md
-  - v0.2 adopted decisions: 23-v0.2-decisions.md
-  - Diagram catalogue: diagrams.md
-  - ADRs:
+  - Build and roadmap:
+      - Repository, languages, docs, DX: 18-repository-languages-docs-dx.md
+      - Onboarding, runbooks, roadmap: 19-onboarding-runbooks-roadmap.md
+      - Risk register: 20-risk-register.md
+      - Reviewers and open questions: 21-reviewers-open-questions-rejected.md
+      - Requirement traceability: 00-traceability.md
+      - Diagram catalogue: diagrams.md
+  - Decisions:
       - Index: adr/index.md
       - ADR-001 Event-oriented ledger: adr/ADR-001-event-oriented-provenance-ledger.md
       - ADR-002 PostgreSQL and jobs: adr/ADR-002-postgresql-primary-store-and-jobs.md
@@ -71,5 +75,6 @@ nav:
       - ADR-012 Private networking: adr/ADR-012-private-network-no-public-ingress.md
       - ADR-013 Naming and lineage: adr/ADR-013-melloa-naming-and-intellectual-lineage.md
       - ADR-014 Owner Console and conversation: adr/ADR-014-private-owner-console-and-conversation.md
-  - Research method: research/method-and-limitations.md
-  - Primary sources: research/primary-sources.md
+  - Research:
+      - Method and limitations: research/method-and-limitations.md
+      - Primary sources: research/primary-sources.md

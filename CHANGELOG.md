@@ -2,6 +2,8 @@
 
 ## M1 implementation — in progress
 
+- Reworked the public docs homepage and navigation around the runnable owner journey, real Owner Console evidence, a compact trust diagram, honest preview limits, and progressive architectural depth.
+- Published the M1 threat review, observability/operational-evidence acceptance design, and pre-release compatibility process without implying production readiness, stable support, a license grant, or open contribution intake.
 - Added authenticated owner sessions, secure cookie/CSRF boundaries, and channel-neutral private conversation APIs.
 - Added canonical idempotent conversation turns and deterministic policy-aware model routing with disclosure-aware fallback records.
 - Added policy-scoped, provenance-ranked retrieval manifests and carried validated citation/evidence IDs through model context, output messages, and structured turns.

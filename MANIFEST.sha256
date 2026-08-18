@@ -5,8 +5,8 @@ c41f34048914d5e4b39e5e4e4f1e5d6b4fab6747bbf38c21d0835985907e3188  ./.github/work
 f14b4987904bcb5814e4459a057ed4d20f58a633152288a761214dcd28780b56  ./.nvmrc
 02e735b3dfe1c32833eb550b7ff8ffa17f5f2bc3fa1e7bae61a8f5a3883ce398  ./.python-version
 a7fffe0e798c17e5c1ff001a25846892cea1341145111e535b03637c97dd2579  ./AGENTS.md
-65e30e5079bbe2bfed200a907c1c81650ad7338cd2a5e504e13e265fbdac3f26  ./CHANGELOG.md
-f6ca82c9e9da9f103fc80a96f41ea2e01119d702af0282bfb8d6a9f6a611cd27  ./CONSOLIDATED.md
+45ad265d309ab3e2c5671fa0762468f67148fb6897444d4d0ffaf2a9d8a40608  ./CHANGELOG.md
+ccee6d55abc01b9f927e096f3df50a4baa8baeb7104fe7284d7c71e8ea537683  ./CONSOLIDATED.md
 18b83e73c92039fd05cf3d7f8a158cf9e5e6a4d45675529749ff8b9301ddd55b  ./CONTRIBUTING.md
 dad31822f08fa134f602faea18c1cfff01254768770c0bdc04df67759094d11c  ./IMPLEMENTATION_AGENT_PROMPT.md
 0555da968164833e708b140b79ab45b9bcb81647b0ec0b0150a7b4c89ac4ce65  ./Makefile
@@ -78,6 +78,8 @@ afde7c16ec2b3582a3497aef8b95a34fcd1192eb739a41a4d6b1b21b199ed165  ./docs/21-revi
 44a3db513e0454571ab58ba1cd330327664e02dc30e572ebaf4f6a18210031f7  ./docs/23-v0.2-decisions.md
 a98b2657cf236c2c0b16d0a85611fd2566cff6448d68d74932fd0c275f133758  ./docs/24-m0-implementation.md
 01ab53e94d9164a3a451822f6426539edaa93d5f200c4bd298940a0e04883ae5  ./docs/25-m1-implementation.md
+574010963430742a8c9b779e59559e765241923e830df5e6d62d87300a42f8cf  ./docs/26-m1-threat-review.md
+3aaa35949e691cb0bf392e9a71d344d7a4fefcedf81b0c4cbc5f97024b876958  ./docs/27-m1-observability-operational-evidence.md
 926510904a18d0f582bc498e6d7a780e1aa9c61d2e67e94d380622b751e68260  ./docs/adr/ADR-001-event-oriented-provenance-ledger.md
 725fd9f2048fa570db36387aeae26d5821a549cd2a56af09659037ff018562aa  ./docs/adr/ADR-002-postgresql-primary-store-and-jobs.md
 31517d8fc1cb8bb74ae96a6222e839322b398da126d1aa89d9df63089eb6ca78  ./docs/adr/ADR-003-policy-aware-model-routing.md
@@ -114,10 +116,11 @@ f83170e66410db8f5aee02ba5c23392d1bd27cc31232994b1b8318ec30c98b52  ./docs/assets/
 7250f6073980721b4e573a2f0cd6d193642b633d1d2070e21c6ab973722aa92c  ./docs/assets/current-mvp/timeline-audit-mobile.png
 8b999ecce555c5f9403446af11ea4cd40116a4e8017d1a5d62f31f9f564afcf3  ./docs/assets/current-mvp/timeline-desktop.png
 668cbad5ac8f7004638954863de8290a983009b2e075f899d5f5b87e4011520a  ./docs/assets/current-mvp/timeline-mobile.png
+1997791eed030bd61aa9a14407c429b80ca7e58218f26bfbf7e6d6bd06a16f4b  ./docs/compatibility.md
 719d7783764df03d3177b0476cf8ca004347313aeb4f5270eb77c7cab20fe88e  ./docs/contracts/guardian-protocol.md
 7e4f3c0a7a54e2f2698e65852137ef521323250899858e8058aa12a334c4bf3a  ./docs/development.md
 5cdbe61a0ff1816b998f09b44f8e25ca27bd81fc7afee25a8e1eea38971c9efb  ./docs/diagrams.md
-ceceedca56a9accccdcc2753b4777c1459b0346a7b65786d961c1ae517b2aaad  ./docs/index.md
+b1fdcddf9198f792a35f3f73c47abd4f712a068c1c0d8f258e85c121802b366e  ./docs/index.md
 03157d34aa3933479fef9f49af1e53881c658c05c1a8fac77471356fce1bcc9a  ./docs/operations/current-mvp.md
 83356a5c21b81ba5a6810598025ea70c48c87da9a27af91f33f9f75e9bfa004c  ./docs/operations/m0-recovery.md
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
@@ -136,7 +139,7 @@ f9891c35a5c51728853522b39ab2aaa140eb9208cb11bb11f469304578f20afb  ./migrations/0
 be220e027758f090d43ca174641913274f2c42e55bdc4444a2f1c46f0fdf4d9a  ./migrations/0009_m1_owner_sessions.sql
 cfd3a48c57378693b0c4d2a39362f1318c08cec404f12b0224188c137e56492d  ./migrations/0010_m1_owner_session_retention_cleanup.sql
 f3b0dc3d4fc0834d2f8c7f6fb7fcb2698352995f1310b8a1d6532cee69f20a14  ./migrations/manifest.json
-0f5c3b3fbb1eba64910dd8227e7667585b4acd0cd0e83f1a2db87beb9e99b224  ./mkdocs.yml
+8785f1ff104dc4b02322a8b35ae7c724eeea5397864295f05410805b3cd5e767  ./mkdocs.yml
 7b432e46167423afcfaf71513561dd22756cf5bbd1c1565f268f669056ccd7cd  ./pyproject.toml
 48e45686b7fb2d6d52c378514515fbc61c90bfd28723b1c7393d286c4a44741a  ./schemas/actions/authorization-request-v1.json
 4481e15b42dedcb83d176a1f9cfd8d333b9af38e0a52ec2cfd3fc31ffb84583c  ./schemas/actions/policy-decision-v1.json
