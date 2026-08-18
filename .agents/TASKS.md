@@ -12,8 +12,8 @@ Primary owner journey:
 - **Acceptance:** Guardian is still independently built and signed; its private key or mutation command is never passed to the core; core and same-origin console become ready or fail with a corrective message; Ctrl-C stops children and removes disposable credentials/state; automated tests cover startup failure, readiness, shutdown, and secret-safe output; README and Pages use this as the canonical first run.
 - **Owner/claim:** Director — launcher, launcher tests, Makefile, canonical onboarding docs; no overlap with F-004.
 - **Reviewer:** Lens after implementation.
-- **Integration:** implementation frozen; real Guardian/core/web start and cleanup exercised; full local `make check` green; Lens acceptance pending.
-- **Next:** commit/push, then verify exact-SHA CI and Pages.
+- **Integration:** shipped in `299d4ae` with signal-safe supervised cleanup in `40e5a15`; Lens accepted the slice; exact-SHA verification, PostgreSQL recovery, authenticated visual smoke, cleanup, docs publication, and the public Pages content are green.
+- **Next:** complete; D-002 owns the next P0 journey gap.
 
 ### F-004 — Audit truth and diagnostic telemetry contract
 
@@ -21,15 +21,15 @@ Primary owner journey:
 - **Acceptance:** exhaustive fail-closed matrix; typed bounded signals only; sink failures never block accepted work; focused tests, Ruff, and affected unit suite pass; no runtime wiring or gauges.
 - **Owner/claim:** Forge — `src/melloa/{application/telemetry.py,domain/observability.py,ports/telemetry.py}` and `tests/unit/test_observability.py` only.
 - **Reviewer:** Lens after frozen handoff.
-- **Integration:** Forge handoff complete with 35 focused and 539 no-coverage unit tests passing; independent technical acceptance pending; this slice must not delay D-001.
-- **Next:** integrate as a separate commit only if Lens accepts it.
+- **Integration:** Forge handoff and Lens acceptance are complete; the clean combined tree passes 554 unit tests at 90.35% coverage, strict typing/lint, web checks, generated evidence, and strict docs.
+- **Next:** commit and push separately, then verify its exact SHA.
 
 ### L-001 — Independent product/release acceptance
 
 - **Outcome:** concrete P0/P1 gaps and observable criteria from a newcomer traversal, followed by an explicit verdict on each frozen slice.
 - **Owner/claim:** Lens — read-only across product files.
-- **Integration:** initial verdict rejected the release on first-run productization and durability; D-001 re-review is active.
-- **Next:** D-001 verdict, bounded F-004 verdict, then pushed CI and Pages.
+- **Integration:** D-001 and F-004 are accepted; D-001's bounded release follow-ups are complete. The full product remains no-ship on durable recovery, real Melli value, and release identity.
+- **Next:** independently review D-002 after its owner recovery journey is observable.
 
 ## Next product blockers
 
