@@ -12,7 +12,7 @@ No model key, Telegram token, camera, public domain, owner deployment repository
 
 ## Newcomer path
 
-If this is your first checkout, run `make bootstrap`, then follow [Run the current MVP](run-current-mvp.md) using its no-network first-run choices. That path builds the independent Guardian, starts the loopback core and production Owner Console, completes an authenticated synthetic conversation, inspects provenance and disclosures, validates an owner export, and cleans up disposable state.
+If this is your first checkout, run `make preview`, then follow [Start Melloa locally](getting-started.md). That command installs locked dependencies, builds the independent Guardian and production Owner Console, starts the private services, and cleans up disposable state on exit. The walkthrough completes an authenticated conversation, inspects provenance and disclosures, and validates an owner export.
 
 The checks below are project and release gates. They are deliberately broader than what is required merely to try the preview; they do not open outside contribution intake.
 
@@ -83,7 +83,7 @@ Run generation only when intentionally changing a model or adding a migration. C
 
 ## Run the owner-facing MVP
 
-Use [Run the current MVP](run-current-mvp.md) as the canonical setup and smoke guide. It starts with the default no-network route map, then covers disposable Guardian initialization, mode-`0600` owner authentication, optional Ollama/Qwen, isolated experimental Codex CLI, Telegram Bot API configuration, exact core and console commands, expected URLs and visual states, limitations, cleanup, and troubleshooting.
+Use [Start Melloa locally](getting-started.md) as the canonical setup and smoke guide. Use [Configure advanced local routes and durable state](run-current-mvp.md) only when you need the individual Guardian/core/console commands, optional Ollama/Qwen, PostgreSQL, isolated Codex CLI, or Telegram configuration.
 
 The ordinary `melloa serve` command remains the fail-closed M0 status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional partial PostgreSQL restart durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
 

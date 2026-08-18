@@ -2,6 +2,7 @@
 
 ## M1 implementation — in progress
 
+- Added `make preview` as the canonical owner journey: it verifies and builds Guardian independently, creates signed offline disposable state, starts the core and production Owner Console, reports the exact safety/persistence contract and first action, and stops all children plus removes credentials/state on `Ctrl-C`; CI now exercises this same launcher.
 - Added the explicit `serve-mvp` owner-facing preview with loopback-only core/web serving, signed Guardian reads, process-local defaults, and optional restricted-role PostgreSQL restart durability.
 - Added provider-neutral local OpenAI-compatible routing, a bounded experimental Codex CLI adapter with isolated configuration and no Melloa authority, and visibly labelled deterministic fallback.
 - Added optional real Telegram Bot API long polling, private owner pairing, canonical text ingestion, durable offsets/work where PostgreSQL is enabled, and exact policy-authorized replies.

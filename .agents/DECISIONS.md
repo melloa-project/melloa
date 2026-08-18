@@ -1,0 +1,7 @@
+# Product decisions
+
+- **The product spine is the owner journey, not the subsystem map** → newcomers need one observable path from promise to safe shutdown → active work is prioritized by missing or confusing journey states.
+- **The canonical first run is a disposable private preview** → it reaches conversation, evidence, control, and export without provider credentials or production claims → real routes, PostgreSQL, Telegram, and deployment are progressive depth.
+- **One owner-invoked launcher may orchestrate disposable preview processes** → manual shell assembly currently obscures the product and creates avoidable failure points → the launcher may create temporary Guardian material and invoke its separate CLI, but passes only signed status and the public key to Melloa, never gives the core Guardian mutation authority, and destroys preview state on exit.
+- **Guided output is labelled fixture output, not a Melli answer** → first value must demonstrate the real conversation/evidence loop without pretending deterministic text is intelligence → an eligible configured model is required before the UI calls a response Melli's.
+- **Audit truth and telemetry remain separate** → diagnostics cannot replace durable owner/security evidence → telemetry is bounded, best-effort, and non-authoritative.

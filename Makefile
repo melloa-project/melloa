@@ -1,12 +1,25 @@
 UV_CACHE_DIR ?= .cache/uv
 UV := UV_CACHE_DIR=$(UV_CACHE_DIR) uv
 GUARDIAN_ROOT ?= ../melloa-guardian
+PREVIEW_STATE_DIR ?=
+PREVIEW_STATE_ARG := $(if $(strip $(PREVIEW_STATE_DIR)),--state-dir "$(PREVIEW_STATE_DIR)")
 SBOM_OUTPUT ?= dist/melloa-dependency-sbom.cdx.json
 
-.PHONY: bootstrap bootstrap-docs bootstrap-python check check-generated dependency-sources docs integration lint recovery sbom sbom-check spec test typecheck web
+.PHONY: bootstrap bootstrap-docs bootstrap-python check check-generated dependency-sources docs integration lint preview recovery sbom sbom-check spec test typecheck web
 
 bootstrap: bootstrap-python
 	npm --prefix apps/web ci --ignore-scripts
+
+preview:
+	@test -f "$(GUARDIAN_ROOT)/go.mod" || { \
+		echo "Guardian checkout not found at $(GUARDIAN_ROOT). Clone https://github.com/melloa-project/melloa-guardian.git beside this repository." >&2; \
+		exit 2; \
+	}
+	$(MAKE) bootstrap
+	$(MAKE) -C "$(GUARDIAN_ROOT)" check build
+	npm --prefix apps/web run build
+	$(UV) run --frozen --no-sync python -m melloa.apps.local_preview \
+		--guardian-root "$(GUARDIAN_ROOT)" $(PREVIEW_STATE_ARG)
 
 bootstrap-python: dependency-sources
 	$(UV) sync --frozen --all-groups --no-install-project

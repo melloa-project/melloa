@@ -19,14 +19,15 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
   - Home: index.md
-  - Try the preview:
-      - Run the current MVP: run-current-mvp.md
-      - Current MVP operations: operations/current-mvp.md
+  - Start and use Melloa:
+      - Start locally: getting-started.md
+      - Configure advanced routes and state: run-current-mvp.md
+      - Local operations: operations/current-mvp.md
       - Development and verification: development.md
   - Current status:
       - v0.2 adopted decisions: 23-v0.2-decisions.md
       - M0 implementation: 24-m0-implementation.md
-      - M1 implementation (in progress): 25-m1-implementation.md
+      - M1 implementation evidence: 25-m1-implementation.md
       - M1 threat review: 26-m1-threat-review.md
       - M1 observability and operational evidence: 27-m1-observability-operational-evidence.md
       - Pre-release compatibility: compatibility.md

@@ -90,51 +90,23 @@ jobs:
           cache-dependency-path: .ci/melloa-guardian/go.mod
       - name: Install locked application dependencies
         run: make bootstrap
-      - name: Build and verify independent Guardian
-        run: make -C .ci/melloa-guardian check build
-      - name: Start signed offline MVP fixture
+      - name: Start canonical signed offline preview
         shell: bash
         run: |
           set -euo pipefail
           state="$RUNNER_TEMP/melloa-mvp"
-          install -d -m 0700 "$state"
-          umask 077
-          python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$state/owner-credential"
-          chmod 0600 "$state/owner-credential"
-          guardian=".ci/melloa-guardian/bin/guardianctl"
-          guardian_flags=(
-            --status-file "$state/guardian-status.json"
-            --audit-file "$state/guardian-audit.jsonl"
-            --private-key-file "$state/guardian-private.pem"
-            --public-key-file "$state/guardian-public.pem"
-            --lock-file "$state/guardian.lock"
-          )
-          "$guardian" init --instance-id ci-mvp-guardian --key-id guardian.status-v1 "${guardian_flags[@]}"
-          "$guardian" transition --mode offline --reason ci.visual_smoke "${guardian_flags[@]}"
-          setsid uv run melloa serve-mvp \
-            --status "$state/guardian-status.json" \
-            --public-key "$state/guardian-public.pem" \
-            --owner-credential-file "$state/owner-credential" \
-            --model-route-config config/routes/ollama-qwen.example.json \
-            --host 127.0.0.1 \
-            --port 8000 \
-            > "$RUNNER_TEMP/melloa-core.log" 2>&1 &
-          echo "$!" > "$RUNNER_TEMP/melloa-core.pid"
+          setsid make preview \
+            GUARDIAN_ROOT=.ci/melloa-guardian \
+            PREVIEW_STATE_DIR="$state" \
+            > "$RUNNER_TEMP/melloa-preview.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/melloa-preview.pid"
           echo "MELLOA_OWNER_CREDENTIAL_FILE=$state/owner-credential" >> "$GITHUB_ENV"
-          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 \
-            http://127.0.0.1:8000/health/ready >/dev/null
-      - name: Build and start production Owner Console
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm --prefix apps/web run build
-          setsid env \
-            MELLOA_CORE_URL=http://127.0.0.1:8000 \
-            MELLOA_WEB_PORT=8787 \
-            npm --prefix apps/web start > "$RUNNER_TEMP/melloa-web.log" 2>&1 &
-          echo "$!" > "$RUNNER_TEMP/melloa-web.pid"
-          curl --fail --silent --show-error --retry 30 --retry-connrefused --retry-delay 1 \
-            http://127.0.0.1:8787/ >/dev/null
+          if ! curl --fail --silent --show-error --retry 60 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:8787/ >/dev/null; then
+            cat "$RUNNER_TEMP/melloa-preview.log" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error http://127.0.0.1:8000/health/ready >/dev/null
       - name: Install headless Chromium
         run: npm --prefix apps/web exec -- playwright install --with-deps chromium
       - name: Capture authenticated desktop and mobile states
@@ -148,17 +120,20 @@ jobs:
           path: ${{ runner.temp }}/melloa-screenshots
           if-no-files-found: error
           retention-days: 14
-      - name: Stop visual fixture
+      - name: Stop canonical preview
         if: always()
         shell: bash
         run: |
-          for process in web core; do
-            pid_file="$RUNNER_TEMP/melloa-$process.pid"
-            if [[ -s "$pid_file" ]]; then
-              kill -- "-$(cat "$pid_file")" 2>/dev/null || true
-            fi
+          pid_file="$RUNNER_TEMP/melloa-preview.pid"
+          if [[ -s "$pid_file" ]]; then
+            kill -- "-$(cat "$pid_file")" 2>/dev/null || true
+          fi
+          for _ in {1..20}; do
+            [[ ! -e "$RUNNER_TEMP/melloa-mvp" ]] && exit 0
+            sleep 0.25
           done
-          sleep 1
+          echo "Preview state was not removed during shutdown" >&2
+          exit 1
 
   publish-docs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

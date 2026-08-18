@@ -1,8 +1,8 @@
-# Run the current MVP
+# Configure advanced local routes and durable state
 
-This is the one canonical path for running the current owner-facing Melloa MVP. It starts an independently built disposable Guardian fixture, the Melloa core with process-local stores by default or optional PostgreSQL restart durability, one optional real local Qwen route through Ollama, one optional experimental subscription-backed Codex CLI route, an optional real Telegram Bot API channel, and the same-origin Owner Console.
+This is the advanced operator path after the canonical [`make preview`](getting-started.md) journey works. It exposes the individual Guardian, core, console, model, database, and channel controls needed to add a real local Qwen route through Ollama, optional PostgreSQL restart durability, an isolated subscription-backed Codex CLI route, or the optional Telegram Bot API adapter.
 
-Use [the current MVP operations runbook](operations/current-mvp.md) as the operator checklist for health validation, export validation, release evidence, incident response, and cleanup boundaries around this startup path.
+Use one optional boundary at a time and repeat the conversation, explanation, inspection, export, and recovery checks before combining them. Use [the local operations runbook](operations/current-mvp.md) for health validation, incident response, release evidence, and cleanup.
 
 With an eligible model route, the result is a usable loop:
 
@@ -16,11 +16,11 @@ With Telegram explicitly enabled, the same canonical loop also supports:
 
 > private `/start` → Owner Console confirmation → Telegram text → canonical conversation → route result → exact policy-authorized reply to the same pairing
 
-## First run: take the no-network path
+## Reproduce the manual baseline
 
-On a first visit, use the smallest complete path. It needs no Docker daemon, model download, API key, Telegram account, or private deployment state:
+Use [Start Melloa locally](getting-started.md) for the product path. The table below maps that launcher's safe defaults to the manual process controls used by this advanced guide:
 
-| Guide section | First-run choice |
+| Guide section | Manual baseline choice |
 |---|---|
 | Prerequisites and bootstrap | Install Python, uv, Node.js, and Go; clone the two public sibling repositories; run `make bootstrap` |
 | 1. Disposable owner paths | Follow as written |

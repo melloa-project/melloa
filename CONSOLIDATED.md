@@ -71,15 +71,14 @@ hide:
 
 **Melloa** is the system. **Melli** is the persistent personal intelligence that lives through it. A model call is temporary; the owner's relationship, canonical conversation, memory, provenance, policies, and corrections are not.
 
-[Try the local preview](run-current-mvp.md){ .md-button .md-button--primary }
+[Start Melloa locally](getting-started.md){ .md-button .md-button--primary }
 [See what works today](25-m1-implementation.md){ .md-button }
 
 [![The Melloa Owner Console conversation view showing a canonical conversation and its route and provenance inspector](assets/current-mvp/conversation-desktop.png)](assets/current-mvp/conversation-desktop.png)
 
 *The current private Owner Console: canonical conversation on the left, route, disclosure, provenance, cost, and policy evidence on the right. The pictured route is the clearly labelled no-network synthetic fallback.*
 
-!!! warning "Usable preview, not production-ready"
-    The default path runs on loopback with synthetic data and process-local state. Optional PostgreSQL adds only the restart-durability boundaries the runtime reports. No public source license has been selected yet, so the repository is readable but reuse, redistribution, and outside contributions are not authorized.
+The fastest path is a private, no-network owner journey with explicit boundaries: signed Guardian status, process-local disposable state, and a fixed response labelled as a fixture rather than Melli. It reaches conversation, explanation, inspection, export, and clean shutdown without Docker, provider credentials, or personal data.
 
 ### What you can do now
 
@@ -90,16 +89,16 @@ hide:
 - Download and validate a canonical owner-data export, with an optional encrypted package wrapper.
 - Keep the independent Guardian in signed `offline`, `read-only`, `no-actions`, `normal`, `stopped`, or `recovery` modes without giving Melloa its signing key or transition authority.
 
-The safe first run needs the two public sibling repositories, Python, uv, Node.js, and Go. It needs no Docker daemon, model key, Telegram account, camera, or private deployment repository.
+The local run needs the two public sibling repositories, Python, uv, Node.js, and Go. It needs no Docker daemon, model key, Telegram account, camera, or private deployment repository.
 
 ```bash
 git clone https://github.com/melloa-project/melloa.git
 git clone https://github.com/melloa-project/melloa-guardian.git
 cd melloa
-make bootstrap
+make preview
 ```
 
-Continue with [Run the current MVP](run-current-mvp.md) for disposable Guardian setup, login, conversation, inspection, export, and cleanup.
+The command prints the Owner Console URL, disposable credential, first action, runtime contract, and cleanup behavior. Follow [Start Melloa locally](getting-started.md) for the complete owner walkthrough.
 
 ### How the pieces fit together
 
@@ -151,12 +150,13 @@ More desktop and mobile reference states are linked from [Expected visual states
 
 ### Learn at your own depth
 
-1. **Use it:** [Run the current MVP](run-current-mvp.md).
+1. **Use it:** [Start Melloa locally](getting-started.md).
 2. **Understand the product:** [Executive vision](#doc-01-executive-vision), [design principles](#doc-02-design-principles-requirements), and [conceptual model](#doc-03-conceptual-model).
 3. **Understand the boundaries:** [v0.2 decisions](#doc-23-v0-2-decisions), [chosen V1 architecture](#doc-05-chosen-v1-architecture), and [M1 threat review](26-m1-threat-review.md).
 4. **See the system visually:** [Architecture diagram catalogue](#doc-diagrams).
 5. **Inspect implementation evidence:** [M0](24-m0-implementation.md), [M1](25-m1-implementation.md), [observability and operational evidence](27-m1-observability-operational-evidence.md), and the [current validation report](https://github.com/melloa-project/melloa/blob/main/VALIDATION.md).
-6. **Work on the project:** [Development and verification](development.md) and the [pre-release compatibility process](compatibility.md).
+6. **Add integrations:** [Configure advanced local routes and durable state](run-current-mvp.md).
+7. **Work on the project:** [Development and verification](development.md) and the [pre-release compatibility process](compatibility.md).
 
 The deeper research remains available, but it is no longer the front door. Start with the product, then follow the layer of detail you need.
 

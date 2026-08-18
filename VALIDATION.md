@@ -10,12 +10,12 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 ## Package statistics
 
-- Files inspected: **341**
-- Canonical Markdown files: **59**
-- Canonical Markdown word count: **67,982**
-- Mermaid blocks: **31**
-- Local Markdown links checked: **258**
-- MkDocs navigation targets checked: **53**
+- Files inspected: **346**
+- Canonical Markdown files: **62**
+- Canonical Markdown word count: **68,702**
+- Mermaid blocks: **32**
+- Local Markdown links checked: **246**
+- MkDocs navigation targets checked: **54**
 - Primary-source anchors available: **67**
 - Source references found: **92**
 
@@ -34,10 +34,10 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 | Gate | Result |
 |---|---|
-| Python quality | PASS — Ruff, strict mypy across 79 source files, and 497 unit tests with 90.32% branch-aware coverage |
+| Python quality | PASS — Ruff, strict mypy across 80 source files, and 518 unit tests with 90.26% branch-aware coverage |
 | Generated contracts | PASS — JSON Schemas and the ten-version migration digest manifest match their sources; release manifest matches a clean Git export |
 | Owner Console | PASS — TypeScript check, 158 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
-| Owner journey | PASS — signed Guardian status, login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, and responsive navigation |
+| Owner journey | PASS — the canonical launcher creates signed offline Guardian state, starts the private core and production console, reports its contract and next action, then covers login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, responsive navigation, and verified cleanup |
 | PostgreSQL | PASS — all ten migrations applied with none pending; 17 restart, role, idempotency, conversation, memory, delivery, Telegram-state, audit, and session integration tests passed |
 | Owner export | PASS — canonical export and dry-run import validation; AES-256-GCM/Scrypt package encryption and decrypt-validate round trip |
 | Recovery | PASS — encrypted restic repository plaintext scan, integrity check, clean PostgreSQL restore, and denied read-only mutation |

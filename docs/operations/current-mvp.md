@@ -4,7 +4,7 @@
 
 Operate and validate the current owner-facing MVP preview without turning it into an implied production deployment. This runbook covers the reviewed loopback process-local path, the optional partial PostgreSQL restart-durability path, current export validation, visual smoke evidence, and incident response for the preview.
 
-Use [Run the current MVP](../run-current-mvp.md) for the step-by-step start commands. This page is the operator checklist for deciding whether the running preview is healthy enough to demonstrate, inspect, or continue developing.
+Use [Start Melloa locally](../getting-started.md) for the canonical launch and owner journey. Use [Configure advanced local routes and durable state](../run-current-mvp.md) for individual process commands. This page is the operator checklist for deciding whether a run is healthy enough to demonstrate, inspect, or continue developing.
 
 ## Boundaries
 
@@ -65,7 +65,7 @@ For the running web path, use **Operations -> Export -> Download current ZIP**, 
 uv run melloa import-validate --bundle-dir <unzipped-export-dir>
 ```
 
-For the CLI path, use the commands in [Run the current MVP](../run-current-mvp.md#8-export-and-validate-owner-data):
+For the CLI path, use the commands in [Configure advanced local routes and durable state](../run-current-mvp.md#8-export-and-validate-owner-data):
 
 ```bash
 uv run melloa export-mvp ...

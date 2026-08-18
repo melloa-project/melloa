@@ -1,10 +1,10 @@
 {
   "generated_on": "2026-08-18",
   "root": ".",
-  "file_count": 341,
-  "markdown_file_count": 59,
-  "markdown_word_count": 67982,
-  "mermaid_block_count": 31,
+  "file_count": 346,
+  "markdown_file_count": 62,
+  "markdown_word_count": 68702,
+  "mermaid_block_count": 32,
   "source_reference_count": 92,
   "source_anchor_count": 67,
   "source_ids_used": [
@@ -139,8 +139,8 @@
     "S66",
     "S67"
   ],
-  "nav_target_count": 53,
-  "local_link_count": 258,
+  "nav_target_count": 54,
+  "local_link_count": 246,
   "master_brief_sha256": "a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9",
   "expected_master_brief_sha256": "a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9",
   "checks": {
