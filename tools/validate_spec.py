@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Standard-library structural validation for the Melloa specification suite."""
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import re
+import sys
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -20,10 +22,26 @@ SOURCE_ANCHOR_RE = re.compile(r'<a\s+id=["\'](S\d{2})["\']\s*></a>', re.I)
 PLACEHOLDER_RE = re.compile(r"\b(?:TODO|TBD|FIXME|PLACEHOLDER)\b|lorem ipsum", re.I)
 NAV_PATH_RE = re.compile(r"^\s*-\s+[^:]+:\s+([^#][^\s]+\.md)\s*$")
 MERMAID_STARTS = {
-    "flowchart", "graph", "sequenceDiagram", "stateDiagram", "stateDiagram-v2",
-    "classDiagram", "erDiagram", "journey", "gantt", "timeline", "mindmap",
-    "quadrantChart", "requirementDiagram", "C4Context", "C4Container",
-    "C4Component", "C4Dynamic", "C4Deployment", "architecture-beta", "xychart-beta",
+    "flowchart",
+    "graph",
+    "sequenceDiagram",
+    "stateDiagram",
+    "stateDiagram-v2",
+    "classDiagram",
+    "erDiagram",
+    "journey",
+    "gantt",
+    "timeline",
+    "mindmap",
+    "quadrantChart",
+    "requirementDiagram",
+    "C4Context",
+    "C4Container",
+    "C4Component",
+    "C4Dynamic",
+    "C4Deployment",
+    "architecture-beta",
+    "xychart-beta",
 }
 IGNORED_DIRECTORY_NAMES = {
     ".cache",
@@ -32,11 +50,14 @@ IGNORED_DIRECTORY_NAMES = {
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
+    "__pycache__",
     "dist",
     "htmlcov",
     "node_modules",
     "site",
 }
+IGNORED_FILE_NAMES = {".coverage", "com1.txt"}
+
 
 @dataclass
 class ValidationResult:
@@ -104,7 +125,43 @@ def anchors_for_markdown(text: str) -> set[str]:
 
 
 def is_ignored(path: Path, root: Path) -> bool:
-    return any(part in IGNORED_DIRECTORY_NAMES for part in path.relative_to(root).parts)
+    relative = path.relative_to(root)
+    return path.name in IGNORED_FILE_NAMES or any(
+        part in IGNORED_DIRECTORY_NAMES for part in relative.parts
+    )
+
+
+def validation_snapshot_matches(path: Path, payload: dict[str, object]) -> bool:
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(stored, dict):
+        return False
+    expected = dict(payload)
+    stored.pop("generated_on", None)
+    expected.pop("generated_on", None)
+    return stored == expected
+
+
+def validation_report_matches(path: Path, payload: dict[str, object]) -> bool:
+    try:
+        lines = set(path.read_text(encoding="utf-8").splitlines())
+        expected = {
+            f"- Files inspected: **{int(payload['file_count']):,}**",
+            f"- Canonical Markdown files: **{int(payload['markdown_file_count']):,}**",
+            f"- Canonical Markdown word count: **{int(payload['markdown_word_count']):,}**",
+            f"- Mermaid blocks: **{int(payload['mermaid_block_count']):,}**",
+            f"- Local Markdown links checked: **{int(payload['local_link_count']):,}**",
+            "- MkDocs navigation targets checked: "
+            f"**{int(payload['nav_target_count']):,}**",
+            "- Primary-source anchors available: "
+            f"**{int(payload['source_anchor_count']):,}**",
+            f"- Source references found: **{int(payload['source_reference_count']):,}**",
+        }
+    except (KeyError, OSError, TypeError, ValueError):
+        return False
+    return expected <= lines
 
 
 def markdown_files(root: Path) -> list[Path]:
@@ -170,7 +227,9 @@ def validate(root: Path, expected_hash: str) -> ValidationResult:
             if fragment and resolved.suffix.lower() == ".md":
                 anchors = anchor_cache.get(resolved)
                 if anchors is None:
-                    anchors = anchors_for_markdown(resolved.read_text(encoding="utf-8", errors="replace"))
+                    anchors = anchors_for_markdown(
+                        resolved.read_text(encoding="utf-8", errors="replace")
+                    )
                     anchor_cache[resolved] = anchors
                 if fragment not in anchors:
                     local_links_ok = False
@@ -196,7 +255,11 @@ def validate(root: Path, expected_hash: str) -> ValidationResult:
         mermaid_blocks.extend((p, block) for block in iter_mermaid_blocks(text))
     mermaid_ok = True
     for idx, (p, block) in enumerate(mermaid_blocks, 1):
-        lines = [line.strip() for line in block.splitlines() if line.strip() and not line.strip().startswith("%%")]
+        lines = [
+            line.strip()
+            for line in block.splitlines()
+            if line.strip() and not line.strip().startswith("%%")
+        ]
         if not lines:
             mermaid_ok = False
             errors.append(f"Empty Mermaid block #{idx} in {p.relative_to(root)}")
@@ -204,10 +267,14 @@ def validate(root: Path, expected_hash: str) -> ValidationResult:
         first = lines[0].split()[0]
         if first not in MERMAID_STARTS:
             mermaid_ok = False
-            errors.append(f"Unknown Mermaid directive '{first}' in {p.relative_to(root)} block #{idx}")
+            errors.append(
+                f"Unknown Mermaid directive '{first}' in {p.relative_to(root)} block #{idx}"
+            )
         if "-." in block and ".x->" in block:
             mermaid_ok = False
-            errors.append(f"Known-invalid Mermaid cross-edge syntax in {p.relative_to(root)} block #{idx}")
+            errors.append(
+                f"Known-invalid Mermaid cross-edge syntax in {p.relative_to(root)} block #{idx}"
+            )
 
     # Source references and anchors.
     all_text = "\n".join(texts.values())
@@ -239,7 +306,9 @@ def validate(root: Path, expected_hash: str) -> ValidationResult:
     if not quantitative_ok:
         errors.append("Quantitative sanity check failed")
 
-    word_count = sum(len(re.findall(r"\b\w[\w’'\-]*\b", text, re.UNICODE)) for text in texts.values())
+    word_count = sum(
+        len(re.findall(r"\b\w[\w\u2019'\-]*\b", text, re.UNICODE)) for text in texts.values()
+    )
     checks = {
         "balanced_markdown_fences": fence_ok,
         "no_placeholder_markers": placeholders_ok,
@@ -251,11 +320,16 @@ def validate(root: Path, expected_hash: str) -> ValidationResult:
         "quantitative_sanity_checks": quantitative_ok,
     }
     if all(checks.values()):
-        warnings.append("Full MkDocs/JavaScript Mermaid rendering was not executed in this environment; run it in CI before publication.")
-        warnings.append("External URLs were researched but are not network-probed by this local validator.")
+        warnings.append(
+            "Full MkDocs/JavaScript Mermaid rendering was not executed in this "
+            "environment; run it in CI before publication."
+        )
+        warnings.append(
+            "External URLs were researched but are not network-probed by this local validator."
+        )
 
     return ValidationResult(
-        generated_on=str(date.today()),
+        generated_on=str(datetime.now(UTC).date()),
         root=".",
         file_count=len(allfiles),
         markdown_file_count=len(mdfiles),
@@ -278,15 +352,40 @@ def validate(root: Path, expected_hash: str) -> ValidationResult:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default=Path(__file__).resolve().parents[1], type=Path)
-    parser.add_argument("--json", dest="json_path", type=Path)
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument("--json", dest="json_path", type=Path)
+    output_group.add_argument("--check-json", dest="check_json_path", type=Path)
+    parser.add_argument("--check-report", dest="check_report_path", type=Path)
     args = parser.parse_args()
     expected = "a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9"
     result = validate(args.root.resolve(), expected)
     payload = asdict(result)
     if args.json_path:
-        args.json_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        args.json_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    snapshot_matches = args.check_json_path is None or validation_snapshot_matches(
+        args.check_json_path,
+        payload,
+    )
+    if not snapshot_matches:
+        print(f"{args.check_json_path} is stale", file=sys.stderr)
+    report_matches = args.check_report_path is None or validation_report_matches(
+        args.check_report_path,
+        payload,
+    )
+    if not report_matches:
+        print(f"{args.check_report_path} is stale", file=sys.stderr)
     print(json.dumps(payload, indent=2, ensure_ascii=False))
-    return 0 if not result.errors and all(result.checks.values()) else 1
+    return (
+        0
+        if not result.errors
+        and all(result.checks.values())
+        and snapshot_matches
+        and report_matches
+        else 1
+    )
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Build the single-file reading edition from the canonical modular Markdown suite."""
+
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
@@ -13,30 +15,33 @@ ORDER = [
     DOCS / "index.md",
     DOCS / "23-v0.2-decisions.md",
     DOCS / "00-traceability.md",
-    *[DOCS / f"{i:02d}-{name}.md" for i, name in [
-        (1, "executive-vision"),
-        (2, "design-principles-requirements"),
-        (3, "conceptual-model"),
-        (4, "alternative-architectures"),
-        (5, "chosen-v1-architecture"),
-        (6, "events-memory-data"),
-        (7, "agents-models-goals"),
-        (8, "capabilities-policy-autonomy"),
-        (9, "security-threat-injection"),
-        (10, "secrets-control-kill-switch"),
-        (11, "camera-perception-hardware"),
-        (12, "telegram-clients"),
-        (13, "self-modification-git-ci"),
-        (14, "deployment-networking-infrastructure"),
-        (15, "observability-reliability-dr"),
-        (16, "privacy-retention-export-cost"),
-        (17, "testing-evaluation-simulation"),
-        (18, "repository-languages-docs-dx"),
-        (19, "onboarding-runbooks-roadmap"),
-        (20, "risk-register"),
-        (21, "reviewers-open-questions-rejected"),
-        (22, "final-synthesis"),
-    ]],
+    *[
+        DOCS / f"{i:02d}-{name}.md"
+        for i, name in [
+            (1, "executive-vision"),
+            (2, "design-principles-requirements"),
+            (3, "conceptual-model"),
+            (4, "alternative-architectures"),
+            (5, "chosen-v1-architecture"),
+            (6, "events-memory-data"),
+            (7, "agents-models-goals"),
+            (8, "capabilities-policy-autonomy"),
+            (9, "security-threat-injection"),
+            (10, "secrets-control-kill-switch"),
+            (11, "camera-perception-hardware"),
+            (12, "telegram-clients"),
+            (13, "self-modification-git-ci"),
+            (14, "deployment-networking-infrastructure"),
+            (15, "observability-reliability-dr"),
+            (16, "privacy-retention-export-cost"),
+            (17, "testing-evaluation-simulation"),
+            (18, "repository-languages-docs-dx"),
+            (19, "onboarding-runbooks-roadmap"),
+            (20, "risk-register"),
+            (21, "reviewers-open-questions-rejected"),
+            (22, "final-synthesis"),
+        ]
+    ],
     DOCS / "diagrams.md",
     DOCS / "adr" / "index.md",
     *sorted((DOCS / "adr").glob("ADR-*.md")),
@@ -105,7 +110,7 @@ def title_for(path: Path) -> str:
     return path.stem.replace("-", " ").title()
 
 
-def main() -> None:
+def rendered_consolidated() -> str:
     missing = [p for p in ORDER if not p.exists()]
     if missing:
         raise SystemExit("Missing source files: " + ", ".join(map(str, missing)))
@@ -113,12 +118,20 @@ def main() -> None:
     contents = [
         "# Melloa Architecture Specification v0.2 — Consolidated Edition",
         "",
-        "**Original research date:** 15 August 2026  ",
-        "**Decision update:** 16 August 2026  ",
-        "**Status:** Recommended architecture and research baseline; not production implementation  ",
-        "**Canonical form:** The modular Markdown suite in `melloa-architecture-spec-v0.2/`; this file is a generated reading edition.",
+        "**Original research date:** 15 August 2026",
         "",
-        "The supplied master research brief is preserved verbatim in the packaged suite. The v0.2 adopted decisions are authoritative where they intentionally supersede v0.1 product-priority wording. Contemporary facts, provider policies, prices, and named technologies are dated research snapshots and must be revalidated at implementation time.",
+        "**Decision update:** 16 August 2026",
+        "",
+        "**Status:** Architecture v0.2 with implementation evidence; not production-ready",
+        "",
+        "**Canonical form:** The modular Markdown suite under `docs/`; this file is a "
+        "generated reading edition.",
+        "",
+        "The supplied master research brief is preserved verbatim in the packaged suite. "
+        "The v0.2 adopted decisions are authoritative where they intentionally supersede "
+        "v0.1 product-priority wording. Contemporary facts, provider policies, prices, and "
+        "named technologies are dated research snapshots and must be revalidated at "
+        "implementation time.",
         "",
         "## Contents",
         "",
@@ -130,13 +143,32 @@ def main() -> None:
     for idx, path in enumerate(ORDER):
         contents.append(f'<a id="{ANCHORS[path.resolve()]}"></a>')
         contents.append("")
-        contents.append(transform(path, path.read_text(encoding="utf-8", errors="replace")).rstrip())
+        contents.append(
+            transform(
+                path,
+                path.read_text(encoding="utf-8", errors="replace"),
+            ).rstrip()
+        )
         if idx != len(ORDER) - 1:
             contents.extend(["", "---", ""])
 
-    OUTPUT.write_text("\n".join(contents).rstrip() + "\n", encoding="utf-8")
-    print(OUTPUT)
+    return "\n".join(contents).rstrip() + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    expected = rendered_consolidated()
+    if args.check:
+        if not OUTPUT.exists() or OUTPUT.read_text(encoding="utf-8") != expected:
+            print("CONSOLIDATED.md is stale")
+            return 1
+    else:
+        OUTPUT.write_text(expected, encoding="utf-8")
+        print(OUTPUT)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
