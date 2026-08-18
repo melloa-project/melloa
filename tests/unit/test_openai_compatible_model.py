@@ -171,7 +171,9 @@ def test_gateway_invokes_bounded_json_completion_and_accounts_usage(fixed_time) 
     assert result.external_disclosure is False
 
 
-def test_gateway_health_is_redacted_and_token_file_is_owner_only(tmp_path, fixed_time) -> None:
+def test_gateway_health_requires_exact_configured_model_and_redacts_failures(
+    tmp_path, fixed_time
+) -> None:
     token_file = tmp_path / "model-token"
     token_file.write_text("private-test-token", encoding="utf-8")
     token_file.chmod(0o600)
@@ -180,7 +182,7 @@ def test_gateway_health_is_redacted_and_token_file_is_owner_only(tmp_path, fixed
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal seen_authorization
         seen_authorization = request.headers.get("Authorization", "")
-        return httpx.Response(200, json={"data": []})
+        return httpx.Response(200, json={"data": [{"id": "qwen-test"}]})
 
     gateway = OpenAICompatibleModelGateway(
         _config(authorization_token_file=token_file),
@@ -196,6 +198,83 @@ def test_gateway_health_is_redacted_and_token_file_is_owner_only(tmp_path, fixed
     unavailable = gateway.health()
     assert unavailable.state is ModelRouteHealthState.UNAVAILABLE
     assert unavailable.reason_code == "model.endpoint_unavailable"
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        {},
+        {"data": []},
+        {"data": "qwen-test"},
+        {"data": [{}]},
+        {"data": [{"id": 7}]},
+        {"data": [{"id": ""}]},
+    ),
+)
+def test_gateway_health_rejects_absent_empty_or_malformed_models_data(document, fixed_time) -> None:
+    gateway = OpenAICompatibleModelGateway(
+        _config(),
+        clock=lambda: fixed_time,
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=document)),
+    )
+
+    health = gateway.health()
+
+    assert health.state is ModelRouteHealthState.UNAVAILABLE
+    assert health.reason_code == "model.models_response_invalid"
+
+
+@pytest.mark.parametrize(
+    ("available_ids", "expected_state", "expected_reason"),
+    (
+        (
+            ["qwen-test-v2", "QWEN-TEST"],
+            ModelRouteHealthState.UNAVAILABLE,
+            "model.configured_model_unavailable",
+        ),
+        (
+            ["other-model", "qwen-test"],
+            ModelRouteHealthState.HEALTHY,
+            "model.endpoint_ready",
+        ),
+    ),
+)
+def test_gateway_health_uses_an_exact_model_id_match(
+    available_ids, expected_state, expected_reason, fixed_time
+) -> None:
+    gateway = OpenAICompatibleModelGateway(
+        _config(),
+        clock=lambda: fixed_time,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={"data": [{"id": model_id} for model_id in available_ids]},
+            )
+        ),
+    )
+
+    health = gateway.health()
+
+    assert health.state is expected_state
+    assert health.reason_code == expected_reason
+
+
+def test_gateway_health_rejects_moving_alias_for_pinned_instruct_model(fixed_time) -> None:
+    gateway = OpenAICompatibleModelGateway(
+        _config(model_id="qwen3:4b-instruct-2507-q4_K_M"),
+        clock=lambda: fixed_time,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={"data": [{"id": "qwen3:4b"}]},
+            )
+        ),
+    )
+
+    health = gateway.health()
+
+    assert health.state is ModelRouteHealthState.UNAVAILABLE
+    assert health.reason_code == "model.configured_model_unavailable"
 
 
 def test_route_config_loader_rejects_non_regular_files_and_accepts_example(tmp_path) -> None:

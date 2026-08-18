@@ -6,7 +6,7 @@ Melloa keeps conversation, memory, evidence, policy, corrections, and owner cont
 
 ## Start locally
 
-The local path is a complete, disposable tour of the Owner Console. It uses a separately built, signed Guardian in offline mode, makes no external model call, and labels its fixed guided output honestly.
+The default local path is a complete, disposable tour of the Owner Console. It uses a separately built, signed Guardian in offline mode, makes no external model call, and labels its fixed guided output honestly.
 
 You need Linux or macOS, Bash, Python 3.13+, [uv 0.12.0](https://docs.astral.sh/uv/), Node.js 22+, and Go 1.24+:
 
@@ -28,6 +28,15 @@ In the console:
 5. download and validate an owner export from **Operations**.
 
 Press `Ctrl-C` when you are done. Melloa stops both services and removes the disposable credential and preview state.
+
+To talk to Melli through the reviewed on-device route, install Ollama, pull the exact model, and select it explicitly:
+
+```bash
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+make preview PREVIEW_MODEL=ollama
+```
+
+The dated `qwen3:4b-instruct-2507-q4_K_M` tag avoids moving-alias drift and is suited to bounded structured conversation output. The launcher requires that exact ID to appear in Ollama's loopback OpenAI-compatible model list before it starts Melloa. The terminal then says that owner text and selected memory go to that on-device model, with no external disclosure; the deterministic route remains only as a visibly labelled fallback. This path still uses disposable process-local Melloa state.
 
 The full walkthrough and recovery guidance are in **[Start Melloa locally](docs/getting-started.md)**.
 

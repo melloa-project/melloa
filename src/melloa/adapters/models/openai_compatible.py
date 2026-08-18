@@ -175,13 +175,37 @@ class OpenAICompatibleModelGateway:
                 "models",
                 timeout_seconds=self.config.health_timeout_ms / 1_000,
             )
-            self._response_document(response)
+            document = self._response_document(response)
         except Exception:
             return ModelGatewayHealth(
                 state=ModelRouteHealthState.UNAVAILABLE,
                 checked_at=checked_at,
                 latency_ms=max(0, round((monotonic() - started) * 1_000)),
                 reason_code="model.endpoint_unavailable",
+            )
+        models = document.get("data")
+        if (
+            not isinstance(models, list)
+            or not models
+            or any(
+                not isinstance(model, dict)
+                or not isinstance(model.get("id"), str)
+                or not model["id"]
+                for model in models
+            )
+        ):
+            return ModelGatewayHealth(
+                state=ModelRouteHealthState.UNAVAILABLE,
+                checked_at=checked_at,
+                latency_ms=max(0, round((monotonic() - started) * 1_000)),
+                reason_code="model.models_response_invalid",
+            )
+        if not any(model["id"] == self.config.model_id for model in models):
+            return ModelGatewayHealth(
+                state=ModelRouteHealthState.UNAVAILABLE,
+                checked_at=checked_at,
+                latency_ms=max(0, round((monotonic() - started) * 1_000)),
+                reason_code="model.configured_model_unavailable",
             )
         return ModelGatewayHealth(
             state=ModelRouteHealthState.HEALTHY,

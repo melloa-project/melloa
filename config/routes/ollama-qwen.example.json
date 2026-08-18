@@ -3,7 +3,7 @@
   "route_id": "model.local.ollama-qwen",
   "display_name": "Local Qwen via Ollama",
   "provider_id": "provider.ollama-local",
-  "model_id": "qwen3:4b",
+  "model_id": "qwen3:4b-instruct-2507-q4_K_M",
   "base_url": "http://127.0.0.1:11434/v1",
   "processing_location": "device",
   "allowed_sensitivities": [

@@ -2,7 +2,7 @@
 
 This is the shortest complete Melloa owner journey: start a private console, have a canonical conversation, inspect why the system responded, review owner-visible evidence, export your state, and stop cleanly.
 
-The local run is deliberately safe and truthful. It binds only to loopback, uses disposable process-local state, keeps Guardian separately signed in `offline` mode, makes no external model call, and labels the guided response as a fixed fixture rather than Melli.
+The default local run is deliberately safe and truthful. It binds only to loopback, uses disposable process-local state, keeps Guardian separately signed in `offline` mode, makes no external model call, and labels the guided response as a fixed fixture rather than Melli. An explicit selector adds one reviewed on-device model without changing those authority or persistence boundaries.
 
 ## What you need
 
@@ -13,7 +13,7 @@ The local run is deliberately safe and truthful. It binds only to loopback, uses
 - Go 1.24 or newer;
 - the public Melloa and Guardian repositories as sibling directories.
 
-Docker, PostgreSQL, API keys, model downloads, Telegram, cameras, and private deployment state are not required.
+Docker, PostgreSQL, API keys, model downloads, Telegram, cameras, and private deployment state are not required for the default tour. The optional Melli path below additionally requires Ollama and the reviewed `qwen3:4b-instruct-2507-q4_K_M` model.
 
 ## Start the complete preview
 
@@ -55,6 +55,28 @@ Do not disable TLS verification. An unexpected issuer is a reason to inspect the
 5. Review the text and choose **Send message**.
 
 The response must be labelled **Guided tour fixture** and **Fixed fixture · no network**. It explicitly says that the fixed response did not interpret the message and does not represent Melli thinking. That honesty is part of the product contract: the tour proves canonical conversation, policy, provenance, and inspection without pretending a deterministic fixture is useful intelligence.
+
+## Talk to Melli on this device
+
+Install Ollama using its upstream instructions, then pull the reviewed model:
+
+```bash
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+```
+
+The dated instruct tag avoids moving-alias drift and is suited to bounded structured conversation output.
+
+Start the same product journey with the explicit model selector:
+
+```bash
+make preview PREVIEW_MODEL=ollama
+```
+
+The launcher queries Ollama's loopback OpenAI-compatible `/v1/models` endpoint and requires the exact `qwen3:4b-instruct-2507-q4_K_M` model ID. If Ollama is stopped or the model is absent, startup fails with the exact `ollama serve` or `ollama pull qwen3:4b-instruct-2507-q4_K_M` recovery command. It never treats an empty model list as healthy.
+
+When startup succeeds, the terminal contract says that owner text and selected memory evidence are sent to the named model on this device, that no external-provider disclosure occurs, and that Melloa remains process-local and disposable. In the console, choose one of the **Eligible model required** starters, edit it, and send it. A successful reply is labelled **Melli**; **Why this response?** must show route `model.local.ollama-qwen`, provider `provider.ollama-local`, model `qwen3:4b-instruct-2507-q4_K_M`, location **Device**, and no external disclosure.
+
+The deterministic route remains available only as a visibly labelled fallback. If Qwen fails during generation or returns invalid structured output, the reply says **Guided tour fixture** rather than silently presenting fixture text as Melli. Inspect **Route attempts** for the redacted failure and fallback order.
 
 ## Understand why it happened
 
@@ -106,6 +128,8 @@ Common recovery paths:
 | Port `8000` or `8787` is occupied | Stop the local process using that port, then rerun the command. |
 | Console says the private core is unavailable | Return to the launcher terminal; it reports a stopped or unhealthy child and cleans up. |
 | Guardian status is rejected | Stop. Rebuild the sibling Guardian checkout and start a fresh preview; never edit signed JSON. |
+| `PREVIEW_MODEL=ollama` cannot reach the endpoint | Start Ollama with `ollama serve`, then rerun the same preview command. |
+| Ollama does not list `qwen3:4b-instruct-2507-q4_K_M` | Run `ollama pull qwen3:4b-instruct-2507-q4_K_M`, then rerun the same preview command. |
 | Browser mutation controls are locked | Re-enter the owner credential through **Unlock changes**; the CSRF proof exists only in page memory. |
 
 ### Prove durable recovery before keeping owner state
@@ -120,7 +144,7 @@ This Docker-backed gate creates a complete PostgreSQL owner journey, encrypts a 
 
 ## Add real capability one boundary at a time
 
-Once this path is familiar, use [Configure advanced local routes and durable state](run-current-mvp.md) to add one reviewed boundary at a time:
+Once this path is familiar, use [Configure advanced local routes and durable state](run-current-mvp.md) to add one reviewed boundary at a time. The on-device Ollama route above is the canonical first addition; the advanced runbook exposes its individual process commands.
 
 1. a local Ollama/Qwen model route;
 2. PostgreSQL owner-state durability and the clean-restore proof;

@@ -6,13 +6,13 @@
 
 ## Result
 
-All current automated architecture checks, deterministic core and web gates, PostgreSQL integration tests, Guardian checks, authenticated browser smoke, owner-export validation, and encrypted clean-restore acceptance gates passed. This is implementation evidence for the synthetic/local preview, not a production-readiness or personal-data deployment claim.
+All current automated architecture checks, deterministic core and web gates, PostgreSQL integration tests, Guardian checks, authenticated browser smoke, reviewed on-device Ollama route, owner-export validation, and encrypted clean-restore acceptance gates passed. This is implementation evidence for the local preview, not a production-readiness or personal-data deployment claim.
 
 ## Package statistics
 
-- Files inspected: **352**
+- Files inspected: **353**
 - Canonical Markdown files: **62**
-- Canonical Markdown word count: **69,574**
+- Canonical Markdown word count: **70,715**
 - Mermaid blocks: **32**
 - Local Markdown links checked: **248**
 - MkDocs navigation targets checked: **54**
@@ -34,10 +34,11 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 | Gate | Result |
 |---|---|
-| Python quality | PASS — Ruff, strict mypy across 83 source files, and 557 unit tests with 90.35% branch-aware coverage |
+| Python quality | PASS — Ruff, strict mypy across 83 source files, and 572 unit tests with 90.37% branch-aware coverage |
 | Generated contracts | PASS — JSON Schemas and the ten-version migration digest manifest match their sources; release manifest matches a clean Git export |
 | Owner Console | PASS — TypeScript check, 158 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
 | Owner journey | PASS — the canonical launcher creates signed offline Guardian state, starts the private core and production console, reports its contract and next action, then covers login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, responsive navigation, and verified cleanup |
+| On-device Melli | PASS — the SHA-256-verified official Ollama `0.32.14` artifact advertised the exact dated `qwen3:4b-instruct-2507-q4_K_M` model; the authenticated browser-origin starter journey completed one device attempt with 140 input tokens, 55 output tokens, zero configured cost, no external disclosure, matching retrieval evidence, non-fixture output, and verified credential/state cleanup |
 | PostgreSQL | PASS — all ten migrations applied with none pending; 17 restart, role, idempotency, conversation, memory, delivery, Telegram-state, audit, and session integration tests passed |
 | Owner export | PASS — canonical export and dry-run import validation; AES-256-GCM/Scrypt package encryption and decrypt-validate round trip |
 | Recovery | PASS — all ten migrations, authenticated conversation/explanation/model evidence, memory correction/deletion, durable sessions/audit, encrypted restic integrity, clean PostgreSQL restore, post-restore owner API traversal, denied read-only mutation, and verified cleanup with a bounded receipt |
@@ -62,5 +63,5 @@ The original supplied research brief remains byte-for-byte unchanged.
 - A public source license still requires an explicit repository-owner decision. Until then, the public code is readable but reuse, redistribution, and outside contributions are not authorized.
 - Browser-executed Mermaid rendering was not exercised by the static MkDocs build.
 - External documentation URLs are not network-probed by the architecture validator.
-- Real Ollama, Codex subscription, Telegram Bot API, camera, private-network, host Guardian controls, and owner deployment overlays were not exercised by this no-network acceptance run.
+- Codex subscription, Telegram Bot API, camera, private-network, host Guardian controls, and owner deployment overlays were not exercised by this acceptance run.
 - Production backup schedules, offsite recovery-key custody, private host recovery, and personal-data operation remain deployment work and cannot be inferred from synthetic clean-restore evidence.

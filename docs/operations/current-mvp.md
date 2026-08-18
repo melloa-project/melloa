@@ -35,6 +35,8 @@ Use [Start Melloa locally](../getting-started.md) for the canonical launch and o
 6. Start the web console with `MELLOA_CORE_URL` pointing at that loopback core.
 7. Open the web console through the web port, not the core port.
 
+For the reviewed on-device path, `make preview PREVIEW_MODEL=ollama` performs steps 1–7 after requiring the exact dated `qwen3:4b-instruct-2507-q4_K_M` model from Ollama's loopback endpoint. Plain `make preview` deliberately performs no model network call.
+
 Record the core startup JSON with the incident/change notes for the run. It is intentionally non-secret and describes persistence mode, configured routes, Telegram mode, and disabled boundaries.
 
 ## Health Validation
@@ -50,6 +52,7 @@ Then verify these owner-visible states:
 
 - **Conversation** accepts a disposable message and the turn inspector shows route attempts, disclosure, evidence, policy decision, latency, and available usage data.
 - **Providers** labels synthetic fallback clearly and reports any Ollama or Codex route without exposing credentials or private paths.
+- An enabled Ollama route is healthy only when `/v1/models` contains its exact configured model ID; an empty or malformed list is unavailable.
 - **Timeline** shows bounded content-free canonical records; **Timeline -> Audit** shows only the owner-export audit projection after an export preview is generated.
 - **Memory** can inspect the seed assertion; deletion removes retained assertion content while preserving tombstone and rebuild evidence.
 - **Operations** reports process-local, PostgreSQL, backup, retention, and export readiness without overstating durability.

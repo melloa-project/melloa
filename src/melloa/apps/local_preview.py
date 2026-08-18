@@ -25,6 +25,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from melloa.adapters.guardian.file import FileGuardianStatusReader
+from melloa.adapters.models.openai_compatible import (
+    OpenAICompatibleModelGateway,
+    OpenAICompatibleRouteConfig,
+    load_openai_compatible_route_config,
+)
+from melloa.domain.models import ModelRouteHealthState, ProcessingLocation
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_GUARDIAN_ROOT = ROOT.parent / "melloa-guardian"
@@ -168,8 +174,12 @@ def initialize_guardian(
         raise PreviewError("Guardian preview did not enter the required offline mode")
 
 
-def core_command(paths: PreviewPaths, port: int) -> tuple[str, ...]:
-    return (
+def core_command(
+    paths: PreviewPaths,
+    port: int,
+    model_route_config: Path | None = None,
+) -> tuple[str, ...]:
+    command = (
         sys.executable,
         "-m",
         "melloa.apps.cli",
@@ -184,6 +194,66 @@ def core_command(paths: PreviewPaths, port: int) -> tuple[str, ...]:
         "127.0.0.1",
         "--port",
         str(port),
+    )
+    if model_route_config is None:
+        return command
+    return (*command, "--model-route-config", str(model_route_config))
+
+
+def load_preview_model_route(path: Path) -> tuple[Path, OpenAICompatibleRouteConfig]:
+    resolved = _required_file(
+        path.expanduser(),
+        "Local model route config is not a readable regular file.",
+    )
+    try:
+        config = load_openai_compatible_route_config(resolved)
+    except (OSError, ValueError) as error:
+        raise PreviewError("Local model route config could not be validated.") from error
+    if config.processing_location is not ProcessingLocation.DEVICE:
+        raise PreviewError("Local preview accepts only a DEVICE model route config.")
+    return resolved, config
+
+
+def preflight_model_route(config: OpenAICompatibleRouteConfig) -> None:
+    health = OpenAICompatibleModelGateway(config).health()
+    if health.state is ModelRouteHealthState.HEALTHY:
+        return
+    if config.provider_id == "provider.ollama-local":
+        raise PreviewError(
+            "The configured on-device Ollama model is not ready. Run `ollama serve` "
+            f"and `ollama pull {config.model_id}`, then retry "
+            f"(reason: {health.reason_code})."
+        )
+    raise PreviewError(
+        f"The configured on-device model is not ready (reason: {health.reason_code})."
+    )
+
+
+def preview_contract(config: OpenAICompatibleRouteConfig | None) -> str:
+    if config is None:
+        return (
+            "Preview contract: loopback only · signed Guardian offline · no external "
+            "model calls · process-local disposable state · guided output is not Melli."
+        )
+    return (
+        "Preview contract: loopback services · signed Guardian offline · owner text and "
+        f"selected memory go to the on-device {config.display_name} model "
+        f"({config.model_id}) · no external disclosure · labelled synthetic fallback "
+        "remains · process-local disposable state."
+    )
+
+
+def preview_next_action(config: OpenAICompatibleRouteConfig | None) -> str:
+    if config is None:
+        return (
+            'Open the console, paste the credential, create a conversation, and choose '
+            '"Fill a no-network tour message." Then inspect "Why this response?" '
+            "and download an export from Operations."
+        )
+    return (
+        "Open the console, paste the credential, create a conversation, and choose "
+        'one of the "Eligible model required" starters. Edit and send it, then inspect '
+        '"Why this response?" for the on-device route and no external disclosure.'
     )
 
 
@@ -324,6 +394,15 @@ def _validate_port(value: str) -> int:
 
 
 def run_preview(args: argparse.Namespace) -> int:
+    route_paths = tuple(getattr(args, "model_route_config", ()))
+    if len(route_paths) > 1:
+        raise PreviewError("Local preview accepts at most one model route config.")
+    model_route_path: Path | None = None
+    model_route_config: OpenAICompatibleRouteConfig | None = None
+    if route_paths:
+        model_route_path, model_route_config = load_preview_model_route(route_paths[0])
+        preflight_model_route(model_route_config)
+
     guardian_root = args.guardian_root.expanduser().resolve()
     guardian_binary = _required_file(
         guardian_root / "bin/guardianctl",
@@ -350,7 +429,7 @@ def run_preview(args: argparse.Namespace) -> int:
 
         core = _start_process(
             "Melloa core",
-            core_command(paths, args.core_port),
+            core_command(paths, args.core_port, model_route_path),
             paths.core_log,
         )
         processes.append(core)
@@ -381,11 +460,8 @@ def run_preview(args: argparse.Namespace) -> int:
             "\nMelloa is ready.\n"
             f"\n  Owner Console:  {console_url}"
             f"\n  Owner credential: {credential}"
-            "\n\nOpen the console, paste the credential, create a conversation, and choose "
-            "\"Fill a no-network tour message.\" Then inspect \"Why this response?\" "
-            "and download an export from Operations."
-            "\n\nPreview contract: loopback only · signed Guardian offline · no external "
-            "model calls · process-local disposable state · guided output is not Melli."
+            f"\n\n{preview_next_action(model_route_config)}"
+            f"\n\n{preview_contract(model_route_config)}"
             "\nPress Ctrl-C to stop both services and delete the credential and preview state.\n",
             flush=True,
         )
@@ -418,6 +494,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Create preview state at this new path instead of a secure temporary path.",
+    )
+    parser.add_argument(
+        "--model-route-config",
+        type=Path,
+        action="append",
+        default=[],
+        help="Use one OpenAI-compatible DEVICE route after an exact-model preflight.",
     )
     parser.add_argument("--core-port", type=_validate_port, default=8000)
     parser.add_argument("--web-port", type=_validate_port, default=8787)

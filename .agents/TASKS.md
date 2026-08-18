@@ -28,8 +28,8 @@ Primary owner journey:
 
 - **Outcome:** concrete P0/P1 gaps and observable criteria from a newcomer traversal, followed by an explicit verdict on each frozen slice.
 - **Owner/claim:** Lens — read-only across product files.
-- **Integration:** D-001 and F-004 are accepted; D-001's bounded release follow-ups are complete. The full product remains no-ship on durable recovery, real Melli value, and release identity.
-- **Next:** independently review D-002 after its owner recovery journey is observable.
+- **Integration:** D-001, F-004, and D-002 are accepted; D-001's bounded release follow-ups are complete. The full product remains no-ship on real Melli value and release identity.
+- **Next:** independently review D-003 after its real local-model owner journey is frozen and observable.
 
 ### D-002 — Durable owner-state recovery
 
@@ -37,13 +37,21 @@ Primary owner journey:
 - **Acceptance:** every migration is present; a canonical conversation, fixture turn, explanation evidence, memory mutation evidence, owner session/audit state, and read-only authority survive a custom-format logical dump, encrypted restic integrity check, and clean restore; cleanup is verified before the receipt, which contains no credentials, private text, DSNs, or paths.
 - **Owner/claim:** Director — product decision, docs, integration, and release; Forge — recovery harness and focused tests only.
 - **Reviewer:** Lens after clean local and CI evidence.
-- **Integration:** the reviewed harness shipped in `21151f1`; its clean export passes 557 unit tests at 90.35% coverage, strict checks, 17 PostgreSQL integration tests, and the real exact-image restore, while exact-SHA CI independently passes the deterministic, PostgreSQL, and recovery gates.
-- **Next:** publish the reconciled owner contract, verify its exact SHA and Pages deployment, then request Lens acceptance.
+- **Integration:** the reviewed harness shipped in `21151f1` and the reconciled owner contract in `f9e3791`; its clean export passes 557 unit tests at 90.35% coverage, strict checks, 17 PostgreSQL integration tests, and the real exact-image restore. Exact-SHA CI run `32154464918` and Pages deployment are green, and Lens accepted the complete slice with no P0/P1 findings.
+- **Next:** complete; D-003 owns the next P1 journey gap.
+
+### D-003 — Real Melli value
+
+- **Outcome:** a newcomer can select one reviewed on-device model path from the canonical preview command, receive corrective readiness guidance, converse with an actual eligible model as Melli, and inspect the exact route/disclosure/evidence record without confusing a protocol fixture or deterministic fallback for intelligence.
+- **Acceptance:** `make preview` remains the honest no-network fixture; `make preview PREVIEW_MODEL=ollama` selects the reviewed Qwen route, requires the exact configured model from the loopback endpoint, and reports a truthful local-model contract; malformed or empty model listings are unavailable; an automated authenticated owner journey exercises the real HTTP protocol boundary and proves the Melli route, output, disclosure, tokens, evidence, and fallback distinction; focused and full checks pass.
+- **Owner/claim:** Director — product contract, authenticated journey, docs, integration, and release; Forge — launcher, route-health mechanics, and focused tests only.
+- **Reviewer:** Lens after implementation and clean evidence.
+- **Integration:** implementation frozen. A verified official Ollama `0.32.14` run showed that the moving `qwen3:4b` alias had become a thinking-only model that exhausted the 60-second route deadline, so the product now pins the purpose-matched `qwen3:4b-instruct-2507-q4_K_M` tag and rejects the alias as a model-ID mismatch. The canonical browser-origin journey then completed one successful device attempt in about 24 seconds with 140 input tokens, 55 output tokens, zero configured cost, no external disclosure, a matching retrieval manifest, useful non-fixture output, and supervised credential/state cleanup. The exact Ollama artifact SHA-256 was `c620917a71e146ab3a7f893084f066069c4c65d144ef8379a91c3cbe8b27de8f`; the exercised model manifest digest was `0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0`.
+- **Next:** regenerate clean evidence, publish and verify the exact SHA plus Pages, then request Lens acceptance.
 
 ## Next product blockers
 
-1. **D-003 — Real Melli value (P1):** make one eligible model route straightforward to configure and exercise it in an automated product journey without weakening disclosure or fixture honesty.
-2. **D-004 — One release identity (P1):** align package, web, health, README/Pages, tag/release, and milestone terminology; record the owner-only license decision as external until resolved.
+1. **D-004 — One release identity (P1):** align package, web, health, README/Pages, tag/release, and milestone terminology; record the owner-only license decision as external until resolved.
 
 ## Release gates
 

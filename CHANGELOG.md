@@ -2,6 +2,9 @@
 
 ## M1 implementation — in progress
 
+- Added `make preview PREVIEW_MODEL=ollama` as the reviewed on-device Melli path: it requires the exact dated `qwen3:4b-instruct-2507-q4_K_M` model before creating preview state, avoiding moving-alias drift while selecting an instruct variant suited to bounded structured conversation output; it prints corrective Ollama commands, preserves the independently signed offline Guardian boundary, and keeps deterministic fallback visibly labelled.
+- Tightened OpenAI-compatible route health so absent, empty, malformed, or non-matching model lists are unavailable instead of treating any successful `/models` response as healthy.
+- Added an authenticated owner API journey over a test-only loopback OpenAI-compatible HTTP fixture, proving real transport, route/disclosure/token/evidence inspection, and an explicit failed-route-to-synthetic-fallback transition without using fixture output as product imagery.
 - Replaced the marker-only recovery check with a complete PostgreSQL owner-state journey: all migrations, authenticated conversation and explanation evidence, memory correction/deletion, durable sessions/audit, encrypted restic backup, clean restore, post-restore owner API traversal, read-only denial, and verified ephemeral cleanup.
 - Added `make preview` as the canonical owner journey: it verifies and builds Guardian independently, creates signed offline disposable state, starts the core and production Owner Console, reports the exact safety/persistence contract and first action, and stops all children plus removes credentials/state on `Ctrl-C`; CI now exercises this same launcher.
 - Added the explicit `serve-mvp` owner-facing preview with loopback-only core/web serving, signed Guardian reads, process-local defaults, and optional restricted-role PostgreSQL restart durability.

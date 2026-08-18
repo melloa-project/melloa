@@ -3,7 +3,20 @@ UV := UV_CACHE_DIR=$(UV_CACHE_DIR) uv
 GUARDIAN_ROOT ?= ../melloa-guardian
 PREVIEW_STATE_DIR ?=
 PREVIEW_STATE_ARG := $(if $(strip $(PREVIEW_STATE_DIR)),--state-dir "$(PREVIEW_STATE_DIR)")
+PREVIEW_MODEL ?=
+PREVIEW_MODEL_ARG :=
+ifeq ($(strip $(PREVIEW_MODEL)),ollama)
+PREVIEW_MODEL_ARG := --model-route-config "$(CURDIR)/config/routes/ollama-qwen.example.json"
+endif
 SBOM_OUTPUT ?= dist/melloa-dependency-sbom.cdx.json
+
+ifneq ($(filter preview,$(MAKECMDGOALS)),)
+ifneq ($(strip $(PREVIEW_MODEL)),)
+ifneq ($(strip $(PREVIEW_MODEL)),ollama)
+$(error Unknown PREVIEW_MODEL '$(PREVIEW_MODEL)'. Supported value: ollama; leave it empty for the fixture-only preview)
+endif
+endif
+endif
 
 .PHONY: bootstrap bootstrap-docs bootstrap-python check check-generated dependency-sources docs integration lint preview recovery sbom sbom-check spec test typecheck web
 
@@ -19,7 +32,7 @@ preview:
 	$(MAKE) -C "$(GUARDIAN_ROOT)" check build
 	npm --prefix apps/web run build
 	$(UV) run --frozen --no-sync python -m melloa.apps.local_preview \
-		--guardian-root "$(GUARDIAN_ROOT)" $(PREVIEW_STATE_ARG)
+		--guardian-root "$(GUARDIAN_ROOT)" $(PREVIEW_STATE_ARG) $(PREVIEW_MODEL_ARG)
 
 bootstrap-python: dependency-sources
 	$(UV) sync --frozen --all-groups --no-install-project

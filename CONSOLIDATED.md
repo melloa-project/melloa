@@ -78,7 +78,7 @@ hide:
 
 *The current private Owner Console: canonical conversation on the left, route, disclosure, provenance, cost, and policy evidence on the right. The pictured route is the clearly labelled no-network synthetic fallback.*
 
-The fastest path is a private, no-network owner journey with explicit boundaries: signed Guardian status, process-local disposable state, and a fixed response labelled as a fixture rather than Melli. It reaches conversation, explanation, inspection, export, and clean shutdown without Docker, provider credentials, or personal data.
+The fastest path is a private, no-network owner journey with explicit boundaries: signed Guardian status, process-local disposable state, and a fixed response labelled as a fixture rather than Melli. It reaches conversation, explanation, inspection, export, and clean shutdown without Docker, provider credentials, or personal data. With Ollama and the dated `qwen3:4b-instruct-2507-q4_K_M` model installed, one explicit selector turns the same journey into a real on-device conversation with Melli.
 
 ### What you can do now
 
@@ -100,6 +100,13 @@ make preview
 ```
 
 The command prints the Owner Console URL, disposable credential, first action, runtime contract, and cleanup behavior. Follow [Start Melloa locally](getting-started.md) for the complete owner walkthrough.
+
+```bash
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+make preview PREVIEW_MODEL=ollama
+```
+
+That second path requires the exact model before startup, makes no external-provider disclosure, and keeps the labelled deterministic fallback visible. The checked-in visual references continue to show the no-network fixture; test-only protocol responses are never used as product screenshots.
 
 ### How the pieces fit together
 

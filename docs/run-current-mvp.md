@@ -143,14 +143,24 @@ The deterministic fixture remains available and visibly labelled. It proves the 
 This is the recommended route because it requires no per-token billing and makes no external disclosure. Install Ollama using its upstream instructions, then pull the model:
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
+
+The dated instruct tag avoids moving-alias drift and is suited to bounded structured conversation output.
 
 If Ollama is not already running as a service, keep it running in another terminal:
 
 ```bash
 ollama serve
 ```
+
+For the canonical Owner Console journey, return to the repository and use the reviewed selector; it performs the endpoint and exact-model preflight for you:
+
+```bash
+make preview PREVIEW_MODEL=ollama
+```
+
+The remaining commands in this section are the advanced manual equivalent.
 
 Verify its OpenAI-compatible endpoint:
 
@@ -159,7 +169,7 @@ curl -fsS http://127.0.0.1:11434/v1/models >/dev/null \
   && echo "Ollama OpenAI-compatible endpoint is ready"
 ```
 
-The reviewed example route is `config/routes/ollama-qwen.example.json`. It declares device-only processing, zero configured cost, no-training retention, bounded timeouts, and the `qwen3:4b` model. The file contains no credential. Select it for the later core command:
+The reviewed example route is `config/routes/ollama-qwen.example.json`. It declares device-only processing, zero configured cost, no-training retention, bounded timeouts, and the exact `qwen3:4b-instruct-2507-q4_K_M` model. The file contains no credential. Select it for the later core command:
 
 ```bash
 model_args=(
@@ -605,7 +615,7 @@ The export directory is still not itself encrypted, a logical SQL snapshot, blob
 
 | Condition | Reply route | What the inspector shows |
 |---|---|---|
-| Ollama and `qwen3:4b` are healthy and return the required JSON object | `model.local.ollama-qwen` | provider `provider.ollama-local`, model `qwen3:4b`, location `Device`, `Local`, no external disclosure, zero configured cost, token counts when supplied |
+| Ollama and `qwen3:4b-instruct-2507-q4_K_M` are healthy and return the required JSON object | `model.local.ollama-qwen` | provider `provider.ollama-local`, model `qwen3:4b-instruct-2507-q4_K_M`, location `Device`, `Local`, no external disclosure, zero configured cost, token counts when supplied |
 | Ollama is unavailable, Codex is configured and healthy, and Guardian is `normal` | `model.codex.subscription` | failed local attempt followed by provider `provider.openai-codex-subscription`, location `Approved provider`, recorded external disclosure, and unreported token/subscription-cost metadata |
 | Codex is configured while Guardian is `offline` or `no-actions` | next eligible device route | the approved-provider route is policy-ineligible and receives no prompt; no Codex attempt or disclosure is recorded |
 | Every configured eligible route is absent, times out, or returns invalid output | `model.fake.deterministic` | unsuccessful configured attempts followed by the deterministic device route; reply text begins **Synthetic local reply** |
@@ -696,11 +706,11 @@ ollama list
 curl -v http://127.0.0.1:11434/v1/models
 ```
 
-The configured model name must match `qwen3:4b`. **Providers** reports `Unavailable` with a redacted reason. Conversation remains usable through the visibly synthetic fallback; it never silently claims the fallback was Qwen.
+The configured model name must match `qwen3:4b-instruct-2507-q4_K_M`. **Providers** reports `Unavailable` with a redacted reason. Conversation remains usable through the visibly synthetic fallback; it never silently claims the fallback was Qwen.
 
 ### Qwen repeatedly falls back despite healthy route status
 
-Health checks only prove `/v1/models` responds. A conversation can still fail because of timeout, response size, HTTP status, or invalid strict JSON. Select the synthetic reply and inspect **Route attempts**. Melloa sends a bounded system prompt requiring exactly `{ "text": "...", "citation_ids": [] }` and rejects invented citation IDs downstream.
+Health checks prove that `/v1/models` returns a bounded OpenAI-compatible model list containing the exact configured `qwen3:4b-instruct-2507-q4_K_M` ID. A conversation can still fail because of timeout, response size, completion HTTP status, or invalid strict JSON. Select the synthetic reply and inspect **Route attempts**. Melloa sends a bounded system prompt requiring exactly `{ "text": "...", "citation_ids": [] }` and rejects invented citation IDs downstream.
 
 ### Codex CLI route is unavailable
 
