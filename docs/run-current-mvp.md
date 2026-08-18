@@ -177,7 +177,7 @@ model_args=(
 )
 ```
 
-If the configured endpoint later becomes unavailable or returns invalid structured output, routing fails visibly and falls back to the next explicitly ordered route, then to the labelled synthetic route.
+If the configured endpoint later fails, times out, exceeds the response-size limit, or returns a completion that cannot decode to the required JSON object, routing fails visibly and continues to the next explicitly ordered route, then to the labelled synthetic route. A decoded object that violates citation or evidence rules can instead be retried or leave an inspectably dead reply.
 
 ### Optional: experimental subscription-backed Codex CLI
 
@@ -618,8 +618,10 @@ The export directory is still not itself encrypted, a logical SQL snapshot, blob
 | Ollama and `qwen3:4b-instruct-2507-q4_K_M` are healthy and return the required JSON object | `model.local.ollama-qwen` | provider `provider.ollama-local`, model `qwen3:4b-instruct-2507-q4_K_M`, location `Device`, `Local`, no external disclosure, zero configured cost, token counts when supplied |
 | Ollama is unavailable, Codex is configured and healthy, and Guardian is `normal` | `model.codex.subscription` | failed local attempt followed by provider `provider.openai-codex-subscription`, location `Approved provider`, recorded external disclosure, and unreported token/subscription-cost metadata |
 | Codex is configured while Guardian is `offline` or `no-actions` | next eligible device route | the approved-provider route is policy-ineligible and receives no prompt; no Codex attempt or disclosure is recorded |
-| Every configured eligible route is absent, times out, or returns invalid output | `model.fake.deterministic` | unsuccessful configured attempts followed by the deterministic device route; reply text begins **Synthetic local reply** |
+| Every configured eligible route is absent, fails, times out, exceeds the response-size limit, or returns a completion that cannot decode to the required JSON object | `model.fake.deterministic` | unsuccessful configured attempts followed by the deterministic device route; reply text begins **Synthetic local reply** |
 | Both route-config arrays are empty | `model.fake.deterministic` | only the clearly labelled synthetic fixture is available |
+
+A completion that decodes to an object but violates citation or evidence rules may be retried or become an inspectably dead reply instead of falling through to another route.
 
 ## 9. Pair and use Telegram
 

@@ -28,8 +28,8 @@ Primary owner journey:
 
 - **Outcome:** concrete P0/P1 gaps and observable criteria from a newcomer traversal, followed by an explicit verdict on each frozen slice.
 - **Owner/claim:** Lens — read-only across product files.
-- **Integration:** D-001, F-004, and D-002 are accepted; D-001's bounded release follow-ups are complete. The full product remains no-ship on real Melli value and release identity.
-- **Next:** independently review D-003 after its real local-model owner journey is frozen and observable.
+- **Integration:** D-001, F-004, D-002, and D-003 are accepted with no P0/P1 findings; D-003's bounded P2 documentation-precision follow-up is complete. The full product remains no-ship on release identity.
+- **Next:** independently review D-004 after its release identity and clean evidence are frozen.
 
 ### D-002 — Durable owner-state recovery
 
@@ -46,12 +46,21 @@ Primary owner journey:
 - **Acceptance:** `make preview` remains the honest no-network fixture; `make preview PREVIEW_MODEL=ollama` selects the reviewed Qwen route, requires the exact configured model from the loopback endpoint, and reports a truthful local-model contract; malformed or empty model listings are unavailable; an automated authenticated owner journey exercises the real HTTP protocol boundary and proves the Melli route, output, disclosure, tokens, evidence, and fallback distinction; focused and full checks pass.
 - **Owner/claim:** Director — product contract, authenticated journey, docs, integration, and release; Forge — launcher, route-health mechanics, and focused tests only.
 - **Reviewer:** Lens after implementation and clean evidence.
-- **Integration:** implementation frozen. A verified official Ollama `0.32.14` run showed that the moving `qwen3:4b` alias had become a thinking-only model that exhausted the 60-second route deadline, so the product now pins the purpose-matched `qwen3:4b-instruct-2507-q4_K_M` tag and rejects the alias as a model-ID mismatch. The canonical browser-origin journey then completed one successful device attempt in about 24 seconds with 140 input tokens, 55 output tokens, zero configured cost, no external disclosure, a matching retrieval manifest, useful non-fixture output, and supervised credential/state cleanup. The exact Ollama artifact SHA-256 was `c620917a71e146ab3a7f893084f066069c4c65d144ef8379a91c3cbe8b27de8f`; the exercised model manifest digest was `0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0`.
-- **Next:** regenerate clean evidence, publish and verify the exact SHA plus Pages, then request Lens acceptance.
+- **Integration:** accepted. A verified official Ollama `0.32.14` run showed that the moving `qwen3:4b` alias had become a thinking-only model that exhausted the 60-second route deadline, so the product now pins the purpose-matched `qwen3:4b-instruct-2507-q4_K_M` tag and rejects the alias as a model-ID mismatch. The canonical browser-origin journey completed one successful device attempt in about 24 seconds with 140 input tokens, 55 output tokens, zero configured cost, no external disclosure, a matching retrieval manifest, useful non-fixture output, and supervised credential/state cleanup. The exact Ollama artifact SHA-256 was `c620917a71e146ab3a7f893084f066069c4c65d144ef8379a91c3cbe8b27de8f`; the exercised model manifest digest was `0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0`. Its clean export passes 572 unit tests at 90.37% coverage, 158 web tests, strict checks, 17 PostgreSQL integration tests, and encrypted clean recovery. Exact-SHA CI run `32160031858` and Pages deployment `5966965243` are green, and Lens accepted the slice with no P0/P1 findings.
+- **Next:** complete; D-004 owns the remaining P1 release gap.
 
-## Next product blockers
+### D-004 — One release identity
 
-1. **D-004 — One release identity (P1):** align package, web, health, README/Pages, tag/release, and milestone terminology; record the owner-only license decision as external until resolved.
+- **Outcome:** every owner-visible and machine-readable surface identifies one `v0.2.0` preview release at milestone `M1`, built on architecture baseline `v0.2`, while preserving `M0` only as historical evidence.
+- **Acceptance:** one typed release identity drives runtime and event producers; Python and web metadata resolve to `0.2.0`; system status and the Owner Console expose version `0.2.0`, stage `preview`, and milestone `M1`; consistency tests reject drift; README, Pages, changelog, generated evidence, tag, and GitHub prerelease agree; the unresolved public-license choice remains explicitly owner-only and external.
+- **Owner/claim:** Director — product contract, ledger, docs, generated evidence, integration, and release; Forge — runtime, web, package metadata, and focused consistency tests.
+- **Reviewer:** Lens after implementation and clean evidence.
+- **Integration:** active. The starting tree mixes Python `0.0.1`, web/API/event `0.1.0`, runtime `0.2.0-mvp-preview`, and milestone `M0`, with no tag or GitHub release.
+- **Next:** establish the central identity, replace every active drift point, and prove agreement before release acceptance.
+
+## Owner-only external blocker
+
+- No public license has been chosen. Readable source does not authorize reuse, redistribution, or outside contributions; only the repository owner can choose license terms.
 
 ## Release gates
 

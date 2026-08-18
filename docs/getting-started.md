@@ -76,7 +76,7 @@ The launcher queries Ollama's loopback OpenAI-compatible `/v1/models` endpoint a
 
 When startup succeeds, the terminal contract says that owner text and selected memory evidence are sent to the named model on this device, that no external-provider disclosure occurs, and that Melloa remains process-local and disposable. In the console, choose one of the **Eligible model required** starters, edit it, and send it. A successful reply is labelled **Melli**; **Why this response?** must show route `model.local.ollama-qwen`, provider `provider.ollama-local`, model `qwen3:4b-instruct-2507-q4_K_M`, location **Device**, and no external disclosure.
 
-The deterministic route remains available only as a visibly labelled fallback. If Qwen fails during generation or returns invalid structured output, the reply says **Guided tour fixture** rather than silently presenting fixture text as Melli. Inspect **Route attempts** for the redacted failure and fallback order.
+The deterministic route remains available only as a visibly labelled fallback. If Qwen's endpoint fails, times out, exceeds the response-size limit, or returns a completion that cannot decode to the required JSON object, the reply says **Guided tour fixture** rather than silently presenting fixture text as Melli. A decoded object that violates citation or evidence rules can instead be retried or leave an inspectably dead reply. Inspect **Route attempts** and the reply state for the redacted outcome.
 
 ## Understand why it happened
 
