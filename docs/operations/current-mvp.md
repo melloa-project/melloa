@@ -2,14 +2,15 @@
 
 ## Purpose
 
-Operate and validate the current owner-facing MVP preview without turning it into an implied production deployment. This runbook covers the reviewed loopback process-local path, the optional partial PostgreSQL restart-durability path, current export validation, visual smoke evidence, and incident response for the preview.
+Operate and validate the current owner-facing MVP preview without turning it into an implied production deployment. This runbook covers the reviewed loopback process-local path, optional PostgreSQL owner-state durability, encrypted clean-restore evidence, current export validation, visual smoke evidence, and incident response for the preview.
 
 Use [Start Melloa locally](../getting-started.md) for the canonical launch and owner journey. Use [Configure advanced local routes and durable state](../run-current-mvp.md) for individual process commands. This page is the operator checklist for deciding whether a run is healthy enough to demonstrate, inspect, or continue developing.
 
 ## Boundaries
 
 - The default runtime is process-local and disposable.
-- Optional PostgreSQL mode is restart durability for the reviewed MVP stores, not backup.
+- Optional PostgreSQL mode is the canonical durable owner-state store; an installation is not backed up until its own encrypted schedule and destinations are configured and tested.
+- `make recovery` proves the full logical-backup mechanism against synthetic owner state; it does not report the age or existence of an installation backup.
 - Guardian remains independently controlled; do not edit signed Guardian status JSON by hand.
 - The Owner Console and core bind loopback only in this preview.
 - No personal, sensitive, production, or long-lived owner data belongs in the preview.
@@ -56,6 +57,16 @@ Then verify these owner-visible states:
 - **Settings -> Telegram** says **Synthetic fixture** unless the real Bot API path was explicitly configured.
 
 In PostgreSQL mode, stop and restart only the core, then verify the same unexpired session remains read-capable, the owner can unlock mutations again, and canonical conversations, memory correction/deletion evidence, delivery work, Telegram pairing/intake state, and audit append records survive the restart as documented.
+
+## Durable Recovery Validation
+
+Run the clean-database recovery traversal before treating PostgreSQL state as recoverable:
+
+```bash
+make recovery
+```
+
+The drill applies every migration, creates a synthetic owner conversation and evidence through the authenticated owner API, encrypts a logical dump with restic, restores it into a fresh database, and traverses the same conversation, explanation, memory, session/audit, and read-only boundaries after restore. It is deliberately separate from the Owner Console ZIP, which remains a portability package without import authority. See [Durable owner-state recovery](m0-recovery.md).
 
 ## Export Validation
 

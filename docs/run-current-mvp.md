@@ -1,6 +1,6 @@
 # Configure advanced local routes and durable state
 
-This is the advanced operator path after the canonical [`make preview`](getting-started.md) journey works. It exposes the individual Guardian, core, console, model, database, and channel controls needed to add a real local Qwen route through Ollama, optional PostgreSQL restart durability, an isolated subscription-backed Codex CLI route, or the optional Telegram Bot API adapter.
+This is the advanced operator path after the canonical [`make preview`](getting-started.md) journey works. It exposes the individual Guardian, core, console, model, database, and channel controls needed to add a real local Qwen route through Ollama, optional PostgreSQL owner-state durability, an isolated subscription-backed Codex CLI route, or the optional Telegram Bot API adapter.
 
 Use one optional boundary at a time and repeat the conversation, explanation, inspection, export, and recovery checks before combining them. Use [the local operations runbook](operations/current-mvp.md) for health validation, incident response, release evidence, and cleanup.
 
@@ -32,10 +32,10 @@ Use [Start Melloa locally](getting-started.md) for the product path. The table b
 | 8. Export | Download and validate the owner export while the process-local core is still running |
 | Stop and clean up | Stop both processes and remove the disposable state directory |
 
-After that loop works, add **one optional boundary at a time**—local Ollama, PostgreSQL restart durability, isolated Codex CLI, or Telegram—and verify the corresponding disclosure and health state before combining them. The remainder of this page provides the exact commands, expected evidence, limitations, and troubleshooting for every path.
+After that loop works, add **one optional boundary at a time**—local Ollama, PostgreSQL owner-state durability, isolated Codex CLI, or Telegram—and verify the corresponding disclosure and health state before combining them. The remainder of this page provides the exact commands, expected evidence, limitations, and troubleshooting for every path.
 
 !!! warning "Local preview, not a personal-data deployment"
-    The default path loses its state when the core stops. PostgreSQL adds only the explicitly reported restart-durability boundaries; it is not a backup, production deployment, or complete audit system. Use disposable data, keep every server on loopback, and read [Current limitations](#current-limitations) before enabling an optional integration.
+    The default path loses its state when the core stops. PostgreSQL adds the explicitly reported durable owner-state boundaries, but this disposable setup has no scheduled/offsite backup, owner-held recovery key, or production deployment controls. Use disposable data, keep every server on loopback, run `make recovery` to prove the clean-restore mechanism, and read [Current limitations](#current-limitations) before enabling an optional integration.
 
 ## Prerequisites
 
@@ -46,7 +46,7 @@ After that loop works, add **one optional boundary at a time**—local Ollama, P
 - Go 1.24 or newer for the separate Guardian fixture;
 - optionally [Ollama](https://ollama.com/) for the recommended real local-model path;
 - optionally the [OpenAI Codex CLI](https://developers.openai.com/codex/cli/) and an eligible subscription for the experimental external route;
-- optionally Docker and the repository's digest-pinned PostgreSQL 18 plus pgvector image for the restart-durability path.
+- optionally Docker and the repository's digest-pinned PostgreSQL 18 plus pgvector image for the durable-state path.
 
 The commands assume the main and Guardian repositories are siblings:
 
@@ -328,7 +328,7 @@ Keep the zero-database default unless you are explicitly testing restart durabil
 database_args=()
 ```
 
-### Optional: enable PostgreSQL restart durability
+### Optional: enable PostgreSQL owner-state durability
 
 This disposable local path gives the running core only the committed `melloa_core` privileges. The one-time migration connection remains separate. PostgreSQL binds a random loopback port; the core rejects public IPs, hostnames, service indirection, symlink DSN paths, and DSN files accessible by group or others.
 
@@ -401,7 +401,7 @@ uv run melloa migrate check \
 database_args=(--database-dsn-file "$MELLOA_MVP_STATE/postgres-core-dsn")
 ```
 
-Both migration commands must report every committed version under `applied` and an empty `pending` list. Never pass either DSN as a command argument, reuse the migration DSN for the core, expose the container publicly, or treat PostgreSQL persistence as a backup. The core opens separate serialized connections for conversation, memory, delivery, Telegram, and audit/authentication stores and redacts connection failures.
+Both migration commands must report every committed version under `applied` and an empty `pending` list. Never pass either DSN as a command argument, reuse the migration DSN for the core, or expose the container publicly. Persistence alone does not mean this disposable instance has a configured backup; `make recovery` separately proves the repository's encrypted logical-backup and clean-restore mechanism. The core opens separate serialized connections for conversation, memory, delivery, Telegram, and audit/authentication stores and redacts connection failures.
 
 In the terminal where `MELLOA_MVP_STATE` is set, run:
 
@@ -532,7 +532,7 @@ This check applies only when `database_args` contains `--database-dsn-file`:
 6. If Telegram was paired, open **Settings → Telegram** and verify the same masked pairing remains active, **Channel state** says **PostgreSQL restart-safe**, and the poll revision did not regress. Send the next disposable text without another `/start`; its reply must use the same pairing.
 7. Open **Operations** and verify `Database Postgresql Mvp`, `Queue Postgresql Durable`, and `Storage Postgresql Canonical` are healthy; `Storage Process Local Control State` remains degraded only for the explicitly reported session/provider/challenge/attachment boundaries, and `Backup Not Configured` remains disabled.
 
-If canonical records disappear, stop using the preview and check that the restart command still contains the same core DSN file. PostgreSQL durability without a tested backup does not satisfy recovery.
+If canonical records disappear, stop using the preview and check that the restart command still contains the same core DSN file. Run `make recovery` before relying on the mechanism, and do not treat a real installation as protected until its own destinations, schedule, key custody, and clean-host restore cadence are configured.
 
 ## 8. Export and validate owner data
 
@@ -599,7 +599,7 @@ inspection/retention.jsonl
 assertions/inspections.jsonl
 ```
 
-The export directory is still not itself encrypted, a logical SQL snapshot, blob export, signed archive, restore executor, or production backup. `manifest.json` states `encrypted: false`, `includes_sql_snapshot: false`, and `includes_blobs: false`; those limitations are deliberate until the full backup/export milestone lands. The `.melloaenc` wrapper protects the validated bundle while it is moved or stored, but it does not add missing SQL/blob content or prove clean restore. Do not place personal data in the plaintext preview export directory unless the target directory is protected by the owner.
+The export directory is still not itself encrypted, a logical SQL snapshot, blob export, signed archive, restore executor, or production backup. `manifest.json` states `encrypted: false`, `includes_sql_snapshot: false`, and `includes_blobs: false`; those limitations are deliberate because portability and database recovery are separate contracts. The `.melloaenc` wrapper protects the validated bundle while it is moved or stored, but it does not add missing SQL/blob content or prove clean restore. Use `make recovery` for the PostgreSQL recovery proof, and do not place personal data in the plaintext preview export directory unless the target directory is protected by the owner.
 
 ### Expected route outcomes
 

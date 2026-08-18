@@ -3,8 +3,10 @@
 ## Status
 
 This is an acceptance design for the current M1 preview as of 2026-08-18. It is
-not a runtime implementation, not a production observability signoff, and not a
-claim that backup, recovery, or complete audit coverage is finished.
+not a production observability signoff and does not claim that an installation
+has configured backups or complete audit coverage. The repository does provide
+a synthetic representative-owner-state encrypted clean-restore gate across all
+committed migrations.
 
 The design is grounded in the implemented owner health, timeline, model
 activity, provider route, queue status, retention, export-readiness,
@@ -36,7 +38,7 @@ reasoning or third-party telemetry:
 | --- | --- | --- | --- |
 | Liveness and readiness | `/health/live`, `/health/ready`, and Guardian-mode readiness handling in `apps/core.py` | Fast operator signal for process health and fail-closed Guardian states | Readiness is not a deep production dependency probe |
 | Owner health report | `OwnerHealthReport`, `ComponentHealth`, and `aggregate_health_state` in `domain/operations.py`; assembled by `OwnerOperationsService.health` | Deterministic owner-visible component state by category and component ID | Current synthetic and PostgreSQL health is snapshot-based, not trend telemetry |
-| Persistence mode | `RuntimePersistenceStatus` and synthetic/PostgreSQL component summaries in `apps/synthetic.py` and `apps/postgres_mvp.py` | States which data survives restart and which state remains process-local | Does not prove backup, PITR, or restore readiness |
+| Persistence mode | `RuntimePersistenceStatus` and synthetic/PostgreSQL component summaries in `apps/synthetic.py` and `apps/postgres_mvp.py` | States which data survives restart and which state remains process-local | Does not prove an installation's backup age, offsite copy, key custody, or PITR readiness |
 | Provider routes | `OwnerModelRouteReport`, `ModelRouteStatus`, and `ModelGatewayHealth` | Shows route identity, kind, processing location, retention policy, health, timeout, cost ceiling, and disclosure boundary | Health is route supplied and may be unknown; it is not provider billing reconciliation |
 | Model activity | `OwnerModelActivityReport` and `ModelActivityEntry` | Redacted completed-run view with route, provider, model, tokens, cost, timing, and disclosure details | Counts completed turns; no separate operational latency histogram or billing proof |
 | Timeline | `OwnerTimelineReport` | Owner-visible chronological projection over canonical conversation, model activity, reply work, delivery work, and selected audit events | Current coverage is explicitly partial and excludes auth/security audit events |
@@ -47,7 +49,7 @@ reasoning or third-party telemetry:
 | Event/audit ledger | `EventAuditStore`, `AuditContent`, PostgreSQL audit append, and recent Forge audit slices | Durable content-free evidence for implemented actions and denials | Coverage and source-plus-audit atomicity remain incomplete outside coupled paths |
 | PostgreSQL health | `database_health_reader` over the MVP PostgreSQL connections | Redacted database availability and server-version evidence | Does not report table bloat, lock waits, replication, backups, or restore age |
 | Guardian status | Signed Guardian status consumed through `GuardianStatusReader` | Independent owner-controlled mode evidence; Melloa has no Guardian mutation authority | Production value depends on deployment keeping Guardian keys and controls outside Melloa |
-| Recovery evidence | `make recovery`, the M0 recovery runbook, and current-MVP operations commands | Synthetic encrypted restore proof and release-gate commands | M0 synthetic recovery is not production backup and does not restore full M1 state |
+| Recovery evidence | `make recovery`, the durable recovery runbook, and current-MVP operations commands | Applies every migration, encrypts a PostgreSQL logical dump, restores cleanly, and re-traverses conversation, explanation, memory, session/audit, and read-only owner boundaries | Synthetic repository proof is not evidence that an installation has a recent scheduled/offsite backup or recoverable external blobs |
 | Browser evidence | production Owner Console smoke and screenshot workflow in CI/docs | Confirms authenticated browser workflows render and operate | Screenshot success is not semantic health or production monitoring |
 
 ## Audit Truth Versus Telemetry
@@ -147,13 +149,13 @@ These are preview acceptance targets, not public service promises:
 
 | Priority | Work item | Scope | Acceptance evidence |
 | --- | --- | --- | --- |
-| P0 | Audit/telemetry contract | Define the source-of-truth rule, per-mutation audit failure semantics, and telemetry non-blocking behavior in code/docs before new mutation categories are added | Tests or review matrix showing each owner mutation's source/audit ordering and retry behavior |
+| Complete | Audit/telemetry contract | Source/audit ordering, durability/failure semantics, and bounded non-authoritative telemetry are executable contracts; runtime wiring remains separate | `domain/observability.py`, `application/telemetry.py`, and the exhaustive `test_observability.py` matrix |
 | P0 | Low-cardinality health and queue gauges | Add local metrics for health state, queue ready/running/dead counts, oldest due age, retry count, and lease-expiry count for conversation, delivery, Telegram, and quarantine | No-network tests prove metrics contain no IDs/content and match owner status views |
 | P0 | Operational evidence receipt | Produce a redacted JSON receipt for release runs that records revision, commands, pass/fail/skipped/environment-blocked state, health snapshot, export validation status, Guardian mode, and PostgreSQL/recovery proof links | `make check` or a separate evidence command can generate and validate the receipt without external network |
 | P1 | Disabled-by-default telemetry adapter | Add a local OpenTelemetry-compatible adapter behind explicit configuration. Default remains off; external endpoints require private/loopback target validation and owner opt-in | Tests prove default emits nothing externally; configured local collector receives only allowed attributes |
 | P1 | Provider/billing reconciliation | Add a route/provider usage report that compares recorded model activity to configured provider billing/export evidence when available | Owner-visible report marks unknown/unreported cost distinctly, especially for subscription CLI routes |
 | P1 | PostgreSQL operational views | Add read-only views or queries for audit append continuity, table migration version, queue backlog, stale leases, and backup/export readiness without exposing row payloads | Integration tests verify readonly role can inspect views but cannot mutate protected state |
-| P1 | Recovery drill receipt | Extend recovery evidence to produce machine-readable RPO/RTO, dump/checksum/restic check results, restore identity, read-only denial, and unsupported M1 coverage | Recovery command emits a receipt and docs state it remains synthetic until production data scope exists |
+| P1 | Installation recovery receipt | Extend the repository's bounded recovery receipt with deployment-owned backup age, RPO/RTO, destination/copy health, pruning horizon, key-custody test, and external-blob scope | A private deployment receipt distinguishes tested repository mechanics from the freshness and coverage of real owner backups |
 | P1 | Owner Console evidence dashboard | Show health, queue states, route health, export limitations, recovery/evidence status, and recent dead work in one operational page | Browser smoke proves labels remain redacted and disabled/incomplete states are explicit |
 | P2 | Structured local logs | Normalize bounded reason-code logs for lifecycle, worker cycle, route health, export, and recovery events | Unit tests or snapshot checks reject raw message text, prompts, token paths, and DSNs |
 | P2 | Alert thresholds | Add owner-configurable local alerts for dead work, stale queues, export validation failure, backup age, provider outage, Guardian stopped/no-actions, and disk pressure | Synthetic tests prove alerts are owner-visible and do not send external notifications by default |

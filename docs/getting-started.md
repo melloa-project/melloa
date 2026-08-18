@@ -108,12 +108,22 @@ Common recovery paths:
 | Guardian status is rejected | Stop. Rebuild the sibling Guardian checkout and start a fresh preview; never edit signed JSON. |
 | Browser mutation controls are locked | Re-enter the owner credential through **Unlock changes**; the CSRF proof exists only in page memory. |
 
+### Prove durable recovery before keeping owner state
+
+The first-run preview is intentionally disposable. PostgreSQL is the one canonical durable store when you move beyond the tour. Before keeping long-lived owner state, run the synthetic clean-restore proof:
+
+```bash
+make recovery
+```
+
+This Docker-backed gate creates a complete PostgreSQL owner journey, encrypts a logical snapshot with restic, restores it into a clean database, and verifies the restored conversation, explanation evidence, memory state, session/audit state, and read-only boundary through the authenticated owner API. It uses no personal data and does not turn the downloaded owner ZIP into a backup. Follow [Durable owner-state recovery](operations/m0-recovery.md) for the exact contract and the additional scheduling/key-custody work required by a real installation.
+
 ## Add real capability one boundary at a time
 
 Once this path is familiar, use [Configure advanced local routes and durable state](run-current-mvp.md) to add one reviewed boundary at a time:
 
 1. a local Ollama/Qwen model route;
-2. PostgreSQL restart durability;
+2. PostgreSQL owner-state durability and the clean-restore proof;
 3. an isolated, explicitly disclosed Codex CLI route;
 4. the optional Telegram adapter.
 

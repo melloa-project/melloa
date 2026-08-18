@@ -74,7 +74,7 @@ make integration
 make recovery
 ```
 
-The last two commands require Docker and use synthetic data. CI runs the same required gates, exercises the authenticated production Owner Console journey, and deploys the validated documentation from `main`.
+The last two commands require Docker and use synthetic data. `make recovery` applies every migration, encrypts a PostgreSQL logical snapshot with restic, restores it into a clean database, and proves the recovered conversation, explanation, memory, session/audit, and read-only boundaries through the authenticated owner API. CI runs the same required gates, exercises the authenticated production Owner Console journey, and deploys the validated documentation from `main`.
 
 ## Source status
 

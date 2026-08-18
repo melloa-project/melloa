@@ -12,9 +12,9 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 - Files inspected: **352**
 - Canonical Markdown files: **62**
-- Canonical Markdown word count: **68,945**
+- Canonical Markdown word count: **69,574**
 - Mermaid blocks: **32**
-- Local Markdown links checked: **246**
+- Local Markdown links checked: **248**
 - MkDocs navigation targets checked: **54**
 - Primary-source anchors available: **67**
 - Source references found: **92**

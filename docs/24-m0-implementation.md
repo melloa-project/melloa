@@ -21,7 +21,7 @@ M0 establishes the truth, authority, inspection, and recovery spine without real
 | Append-oriented audit | `src/melloa/domain/audit.py`, DB append-only and predecessor triggers | atomic event/audit, duplicate, conflict, and mutation tests |
 | Guardian protocol and modes | `schemas/guardian/`, verified read-only adapter, separate `melloa-guardian` signer/CLI | signature, tamper, sequence, state-machine, file, and journal-chain tests |
 | CI | digest/commit-pinned workflow under `.github/workflows/ci.yml` | deterministic, integration, docs, and recovery jobs |
-| Encrypted backup/restore | `tools/m0_restore_drill.sh` with digest-pinned PostgreSQL and restic images | encrypted repository scan, `restic check`, clean restore, read-only mutation denial |
+| Encrypted backup/restore | `tools/m0_restore_drill.sh` with digest-pinned PostgreSQL and restic images | the current gate supersets M0: all migrations, encrypted repository scan, `restic check`, clean restore, authenticated owner-state traversal, and read-only mutation denial |
 | Canonical conversation contracts | `src/melloa/domain/conversation.py`, `schemas/conversation/`, relational tables | schema generation and contract tests |
 | Private Owner Console shell | `apps/web/` | TypeScript check, Node tests, static build; server binds loopback only |
 | Synthetic adapters | `src/melloa/adapters/fakes/` | zero-cost/device-local model, authorized-only client, read-only Guardian tests |
@@ -115,7 +115,7 @@ The shell is not yet a usable conversation client and must not be exposed as tho
 
 M0 stores only synthetic validation records. The schema nevertheless includes sensitivity, trust, retention policy, cost, external disclosure, evidence, correction, action, and audit fields so later milestones cannot bypass them. Raw camera media, embeddings, provider prompts, and personal content are absent.
 
-The restore drill destroys its temporary containers, volumes, database dump, repository, and generated password. It emits only a non-sensitive pass/fail receipt. Canonical export and retention workers remain later implementation within the V1 boundary; M0 does not claim they exist.
+The original M0 restore marker has been replaced by a stronger gate that applies every current migration and creates and re-traverses synthetic conversation, explanation, memory, session, and audit state through the authenticated owner API. The drill still destroys its temporary containers, logical dump, repository, generated password, and bounded expectations, and emits only a non-sensitive receipt. This evolution does not rewrite M0's historical scope or claim that an owner installation has configured backup destinations and key custody.
 
 ## Reproduction
 

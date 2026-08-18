@@ -69,7 +69,7 @@ The harness starts a digest-pinned PostgreSQL 18 plus pgvector container on a ra
 make recovery
 ```
 
-The recovery harness is intentionally separate because a green unit suite is not evidence that a backup restores. See [the recovery runbook](operations/m0-recovery.md).
+The recovery harness is intentionally separate because a green unit suite—or a successful backup command—is not evidence that owner state restores. It applies all migrations, exercises the PostgreSQL-backed authenticated owner API, encrypts a logical dump with restic, restores into a clean database, and re-traverses conversation, explanation, memory, session/audit, and read-only boundaries. See [the recovery runbook](operations/m0-recovery.md).
 
 ## Generated contracts
 
@@ -85,7 +85,7 @@ Run generation only when intentionally changing a model or adding a migration. C
 
 Use [Start Melloa locally](getting-started.md) as the canonical setup and smoke guide. Use [Configure advanced local routes and durable state](run-current-mvp.md) only when you need the individual Guardian/core/console commands, optional Ollama/Qwen, PostgreSQL, isolated Codex CLI, or Telegram configuration.
 
-The ordinary `melloa serve` command remains the fail-closed M0 status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional partial PostgreSQL restart durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
+The ordinary `melloa serve` command remains the fail-closed M0 status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional PostgreSQL owner-state durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
 
 ## Validate an owner export
 

@@ -52,7 +52,7 @@ nav:
       - Privacy, retention, export, cost: 16-privacy-retention-export-cost.md
       - Testing and simulation: 17-testing-evaluation-simulation.md
       - Guardian protocol: contracts/guardian-protocol.md
-      - M0 recovery drill: operations/m0-recovery.md
+      - Durable recovery: operations/m0-recovery.md
   - Build and roadmap:
       - Repository, languages, docs, DX: 18-repository-languages-docs-dx.md
       - Onboarding, runbooks, roadmap: 19-onboarding-runbooks-roadmap.md

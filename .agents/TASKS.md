@@ -37,8 +37,8 @@ Primary owner journey:
 - **Acceptance:** every migration is present; a canonical conversation, fixture turn, explanation evidence, memory mutation evidence, owner session/audit state, and read-only authority survive a custom-format logical dump, encrypted restic integrity check, and clean restore; cleanup is verified before the receipt, which contains no credentials, private text, DSNs, or paths.
 - **Owner/claim:** Director — product decision, docs, integration, and release; Forge — recovery harness and focused tests only.
 - **Reviewer:** Lens after clean local and CI evidence.
-- **Integration:** Forge's bounded three-file handoff is integrated and Director-reviewed; focused tests/lint/syntax checks and the real exact-image Docker traversal pass with a path-free receipt and verified cleanup.
-- **Next:** commit and push the harness, prove its exact SHA in CI, publish the reconciled owner contract, then request Lens acceptance.
+- **Integration:** the reviewed harness shipped in `21151f1`; its clean export passes 557 unit tests at 90.35% coverage, strict checks, 17 PostgreSQL integration tests, and the real exact-image restore, while exact-SHA CI independently passes the deterministic, PostgreSQL, and recovery gates.
+- **Next:** publish the reconciled owner contract, verify its exact SHA and Pages deployment, then request Lens acceptance.
 
 ## Next product blockers
 

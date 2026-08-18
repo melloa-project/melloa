@@ -25,6 +25,7 @@ The fastest path is a private, no-network owner journey with explicit boundaries
 - Review, correct, dispute, retract, or content-delete memory while preserving provenance and deletion evidence.
 - Inspect provider health, delivery attempts, retention coverage, operational status, and a content-free owner timeline.
 - Download and validate a canonical owner-data export, with an optional encrypted package wrapper.
+- Prove complete PostgreSQL owner-state recovery through an encrypted restic snapshot, clean database restore, and authenticated post-restore traversal.
 - Keep the independent Guardian in signed `offline`, `read-only`, `no-actions`, `normal`, `stopped`, or `recovery` modes without giving Melloa its signing key or transition authority.
 
 The local run needs the two public sibling repositories, Python, uv, Node.js, and Go. It needs no Docker daemon, model key, Telegram account, camera, or private deployment repository.
@@ -68,7 +69,7 @@ Memory is owner-scoped and provenance-rich. The preview exposes values, sources,
 
 [![The Owner Console operations view showing export readiness, validation, encryption commands, and explicit limitations](assets/current-mvp/operations-export-desktop.png)](assets/current-mvp/operations-export-desktop.png)
 
-Operational views show what is healthy, durable, exportable, encrypted, or still missing. Current export is a validated portability preview—not a claim of SQL/blob backup or production recovery.
+Operational views show what is healthy, durable, exportable, encrypted, or still missing. Current export is a validated portability preview, while `make recovery` separately proves the complete PostgreSQL logical-backup and clean-restore mechanism. Neither claims that a particular installation has a recent offsite backup.
 
 ### Follow a content-free evidence timeline
 
