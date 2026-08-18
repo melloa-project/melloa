@@ -50,7 +50,7 @@ curl -fsS http://127.0.0.1:8000/health/ready
 
 Then verify these owner-visible states:
 
-- The login screen, signed-in shell, `/health/ready`, and authenticated system status agree on version `0.2.0`, stage `preview`, milestone `M1`, and architecture baseline `v0.2`.
+- The login screen and signed-in shell visibly agree on `v0.2.0 preview`; `/health/ready` and authenticated system status additionally agree on version `0.2.0`, stage `preview`, milestone `M1`, and architecture baseline `v0.2`.
 - **Conversation** accepts a disposable message and the turn inspector shows route attempts, disclosure, evidence, policy decision, latency, and available usage data.
 - **Providers** labels synthetic fallback clearly and reports any Ollama or Codex route without exposing credentials or private paths.
 - An enabled Ollama route is healthy only when `/v1/models` contains its exact configured model ID; an empty or malformed list is unavailable.

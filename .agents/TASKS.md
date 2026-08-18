@@ -28,8 +28,8 @@ Primary owner journey:
 
 - **Outcome:** concrete P0/P1 gaps and observable criteria from a newcomer traversal, followed by an explicit verdict on each frozen slice.
 - **Owner/claim:** Lens — read-only across product files.
-- **Integration:** D-001, F-004, D-002, and D-003 are accepted with no P0/P1 findings; D-003's bounded P2 documentation-precision follow-up is complete. The full product remains no-ship on release identity.
-- **Next:** independently review D-004 after its release identity and clean evidence are frozen.
+- **Integration:** D-001, F-004, D-002, D-003, and D-004 are accepted with no P0/P1 findings. Lens issued **SHIP** for frozen candidate `70c1d65` after exact-SHA CI run `32162919653` and Pages deployment `5967809968` succeeded; its single bounded P2 runbook-precision finding is resolved in the acceptance-only documentation update.
+- **Next:** complete; no unresolved P0/P1 product or release blocker remains.
 
 ### D-002 — Durable owner-state recovery
 
@@ -52,11 +52,11 @@ Primary owner journey:
 ### D-004 — One release identity
 
 - **Outcome:** every owner-visible and machine-readable surface identifies one `v0.2.0` preview release at milestone `M1`, built on architecture baseline `v0.2`, while preserving `M0` only as historical evidence.
-- **Acceptance:** one typed release identity drives runtime and event producers; Python and web metadata resolve to `0.2.0`; system status and the Owner Console expose version `0.2.0`, stage `preview`, and milestone `M1`; consistency tests reject drift; README, Pages, changelog, generated evidence, tag, and GitHub prerelease agree; the unresolved public-license choice remains explicitly owner-only and external.
+- **Acceptance:** one typed release identity drives runtime and event producers; Python and web metadata resolve to `0.2.0`; system status exposes version `0.2.0`, stage `preview`, and milestone `M1`, while the Owner Console visibly exposes `v0.2.0 preview`; consistency tests reject drift; README, Pages, changelog, generated evidence, tag, and GitHub prerelease agree; the unresolved public-license choice remains explicitly owner-only and external.
 - **Owner/claim:** Director — product contract, ledger, docs, generated evidence, integration, and release; Forge — runtime, web, package metadata, and focused consistency tests.
 - **Reviewer:** Lens after implementation and clean evidence.
-- **Integration:** implementation frozen. One typed identity now drives Python/web metadata, FastAPI, runtime and export provenance, event producers, startup/readiness/status output, the launcher, and release-labelled login/signed-in console: package `0.2.0`, display `v0.2.0 preview`, stage `preview`, milestone `M1`, architecture baseline `v0.2`, runtime `melloa-core/0.2.0-preview`. Its clean export passes repository consistency, 575 Python tests at 90.43% coverage, 159 web tests, strict typing/lint/build/docs checks, 17 PostgreSQL integration tests, encrypted clean recovery, and the regenerated authenticated desktop/mobile journey with supervised credential/state cleanup.
-- **Next:** commit and publish the frozen candidate, verify exact-SHA CI plus Pages, then request Lens acceptance before tagging.
+- **Integration:** accepted. One typed identity now drives Python/web metadata, FastAPI, runtime and export provenance, event producers, startup/readiness/status output, the launcher, and release-labelled login/signed-in console: package `0.2.0`, display `v0.2.0 preview`, stage `preview`, milestone `M1`, architecture baseline `v0.2`, runtime `melloa-core/0.2.0-preview`. Its clean export passes repository consistency, 575 Python tests at 90.43% coverage, 159 web tests, strict typing/lint/build/docs checks, 17 PostgreSQL integration tests, encrypted clean recovery, and the regenerated authenticated desktop/mobile journey with supervised credential/state cleanup. Exact-SHA CI run `32162919653` (successful attempt 2 after an external Ubuntu mirror timeout) and Pages deployment `5967809968` are green; live Pages exposes `v0.2.0 preview`, `M1`, and `v0.2`; Lens issued **SHIP** with no P0/P1 findings.
+- **Next:** complete; release publication is the remaining terminal goal action, not another product slice. The acceptance-ledger SHA is the exact tag and prerelease target after its own CI and Pages proof.
 
 ## Owner-only external blocker
 

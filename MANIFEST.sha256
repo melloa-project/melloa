@@ -1,5 +1,5 @@
 106546f89493516a280c75bd6cf0361a15740a5bfea352a1f3b1bc92b53576c8  ./.agents/DECISIONS.md
-cc9755a76379939c8182b9816dee3b76591d3f5944d02d01be62c24267f20df1  ./.agents/TASKS.md
+d68d5f211abcc133680849a1b19fabb3e9408e5a1203f08798583d470e282d9f  ./.agents/TASKS.md
 a2e88b55fef4ff9a86bc4671425dadcdbbb0d50f0f2e3212d05936c7c4232038  ./.env.example
 4b4c4dc2ecf6ce2dd16d1293c55582e0fae0071420dbe717b76dd19b54cb6b0b  ./.github/CODEOWNERS
 cd41c0b7c7e0fab419ef8a3129d0f96c15de7a0dfcb89fd8636589a5dfe85e94  ./.github/workflows/ci.yml
@@ -14,7 +14,7 @@ dad31822f08fa134f602faea18c1cfff01254768770c0bdc04df67759094d11c  ./IMPLEMENTATI
 06dc86b43aeed2e0eea3d1a926ed983b523304d75021331217a06e2d1f048e24  ./Makefile
 eabd9be826d3ce6b8d2ec81254e8d9f6cc1ac72d32d7ebe3abc0df60b29418f4  ./README.md
 20fc0e2d85e4d96302e10fb51ef7f254b735aadb3372fc56a2817a42265cf589  ./SECURITY.md
-ce0181c5655b2c557a06ce2126915af23061598e01db33db055fa78db1c59654  ./VALIDATION.md
+bebe911e2e6407cca4345c492e6d20e6979c94742467a0e80794ab83fae54172  ./VALIDATION.md
 3a951f66e7e0f3e2dd1832473a871357c4a507b51100636b73bcf6ff0dd78b6c  ./apps/web/.npmrc
 88c5a2bdbbfd7827c10510eaa0e94d70d9eff8581ec19ba75218509eb38f6122  ./apps/web/index.html
 31152a4fb577091b7d3d57b79871d7fb8e630385f44cb10d27f184a97a816616  ./apps/web/package-lock.json
@@ -127,7 +127,7 @@ c0cc787da80a228faa891c9c2eb2c007d0825849d555023c95ffaedb84443e9d  ./docs/develop
 5cdbe61a0ff1816b998f09b44f8e25ca27bd81fc7afee25a8e1eea38971c9efb  ./docs/diagrams.md
 155f598dcbc5f5d3bdcc05f418eb8fdbc5bd28cc7f3db5a83a1b8be89176e1e2  ./docs/getting-started.md
 3d6eadd27d63b05fb0fefda66cdb02bfd5fc7e9950a5f7068fe728dc010a0438  ./docs/index.md
-30bb94dab3f7f1978bab849b9cb018e8ad14803621248cca4597b6caa855f930  ./docs/operations/current-mvp.md
+5401fe8ed7a80cc5a72a62519427355deb9cfae44d1de3960333043eb3f4559c  ./docs/operations/current-mvp.md
 45129176f4af2c8929eac711e93856203e62d8ba06315327cef0bd043878e45e  ./docs/operations/m0-recovery.md
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
 2d1ef864609cb2fc96bf33e5aefe8cfebd25f2a8ccb2cc051331530f93a34d9f  ./docs/research/method-and-limitations.md
@@ -353,4 +353,4 @@ f630e95ae22db486a771bdd181416f20ed4982da7a5d82c22113a760c055b77b  ./tools/update
 b4c17d24bcf22a1da83fbca02ab02bc4065d18f74379acf88cbb03130ddb24e1  ./tools/update_migration_manifest.py
 a02fdd2eb6147d02a1365b267cc55a11c14f1900816555443b281061563153e0  ./tools/validate_spec.py
 ab8a4c89fcf1bc44b360ef67b40f83b83209081d7abbee1aebb500f95066afa4  ./uv.lock
-3c5d634702b979ecbcfea825fbfd0850f0024f4ce5e6273880cc4ef6504a8bc3  ./validation.json
+cbf71aa784e07b3a4c3dd43d0b1877acebd4e0c934a9b9081a358d56b108be25  ./validation.json
