@@ -30,6 +30,7 @@ export function LoginPage({
   const [submitting, setSubmitting] = useState(false);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const releaseLabel = status?.release_display ?? "Release unverified";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,7 +87,15 @@ export function LoginPage({
       <section className="login-form-column">
         <Card className="login-card">
           <div className="login-card-heading">
-            <p className="eyebrow">Private owner access</p>
+            <div className="login-card-kicker">
+              <p className="eyebrow">Private owner access</p>
+              <span
+                aria-label={`Runtime release: ${releaseLabel}`}
+                className={`release-identity ${status === null ? "release-identity-unverified" : ""}`}
+              >
+                {releaseLabel}
+              </span>
+            </div>
             <h2>Welcome back</h2>
             <p>Use the credential generated for this local runtime.</p>
           </div>

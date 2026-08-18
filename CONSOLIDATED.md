@@ -71,6 +71,8 @@ hide:
 
 **Melloa** is the system. **Melli** is the persistent personal intelligence that lives through it. A model call is temporary; the owner's relationship, canonical conversation, memory, provenance, policies, and corrections are not.
 
+**Current release:** `v0.2.0 preview` · milestone `M1` · architecture baseline `v0.2`
+
 [Start Melloa locally](getting-started.md){ .md-button .md-button--primary }
 [See what works today](25-m1-implementation.md){ .md-button }
 

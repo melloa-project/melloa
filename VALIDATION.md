@@ -1,4 +1,4 @@
-# Validation report — Melloa v0.2 current implementation
+# Validation report — Melloa v0.2.0 preview
 
 **Generated:** 2026-08-18
 
@@ -6,15 +6,15 @@
 
 ## Result
 
-All current automated architecture checks, deterministic core and web gates, PostgreSQL integration tests, Guardian checks, authenticated browser smoke, reviewed on-device Ollama route, owner-export validation, and encrypted clean-restore acceptance gates passed. This is implementation evidence for the local preview, not a production-readiness or personal-data deployment claim.
+All current automated architecture checks, deterministic core and web gates, PostgreSQL integration tests, Guardian checks, authenticated browser smoke, reviewed on-device Ollama route, owner-export validation, and encrypted clean-restore acceptance gates passed. Package, runtime, health, console, documentation, and release evidence identify one `v0.2.0 preview` / `M1` snapshot on architecture baseline `v0.2`. This is implementation evidence for the local preview, not a production-readiness or personal-data deployment claim.
 
 ## Package statistics
 
-- Files inspected: **353**
+- Files inspected: **357**
 - Canonical Markdown files: **62**
-- Canonical Markdown word count: **70,715**
+- Canonical Markdown word count: **71,494**
 - Mermaid blocks: **32**
-- Local Markdown links checked: **248**
+- Local Markdown links checked: **251**
 - MkDocs navigation targets checked: **54**
 - Primary-source anchors available: **67**
 - Source references found: **92**
@@ -34,10 +34,11 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 | Gate | Result |
 |---|---|
-| Python quality | PASS — Ruff, strict mypy across 83 source files, and 572 unit tests with 90.37% branch-aware coverage |
+| Release identity | PASS — one typed identity supplies package version `0.2.0`, display `v0.2.0 preview`, stage `preview`, milestone `M1`, architecture baseline `v0.2`, and runtime provenance `melloa-core/0.2.0-preview`; repository consistency, readiness/status, startup, export, and console tests reject drift |
+| Python quality | PASS — Ruff, strict mypy across 84 source files, and 575 unit tests with 90.43% branch-aware coverage |
 | Generated contracts | PASS — JSON Schemas and the ten-version migration digest manifest match their sources; release manifest matches a clean Git export |
-| Owner Console | PASS — TypeScript check, 158 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
-| Owner journey | PASS — the canonical launcher creates signed offline Guardian state, starts the private core and production console, reports its contract and next action, then covers login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, responsive navigation, and verified cleanup |
+| Owner Console | PASS — TypeScript check, 159 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
+| Owner journey | PASS — the canonical launcher reports the release identity, creates signed offline Guardian state, starts the private core and production console, then covers release-labelled login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, responsive navigation, and verified cleanup |
 | On-device Melli | PASS — the SHA-256-verified official Ollama `0.32.14` artifact advertised the exact dated `qwen3:4b-instruct-2507-q4_K_M` model; the authenticated browser-origin starter journey completed one device attempt with 140 input tokens, 55 output tokens, zero configured cost, no external disclosure, matching retrieval evidence, non-fixture output, and verified credential/state cleanup |
 | PostgreSQL | PASS — all ten migrations applied with none pending; 17 restart, role, idempotency, conversation, memory, delivery, Telegram-state, audit, and session integration tests passed |
 | Owner export | PASS — canonical export and dry-run import validation; AES-256-GCM/Scrypt package encryption and decrypt-validate round trip |

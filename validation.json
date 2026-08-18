@@ -1,9 +1,9 @@
 {
   "generated_on": "2026-08-18",
   "root": ".",
-  "file_count": 353,
+  "file_count": 357,
   "markdown_file_count": 62,
-  "markdown_word_count": 70715,
+  "markdown_word_count": 71494,
   "mermaid_block_count": 32,
   "source_reference_count": 92,
   "source_anchor_count": 67,
@@ -140,7 +140,7 @@
     "S67"
   ],
   "nav_target_count": 54,
-  "local_link_count": 248,
+  "local_link_count": 251,
   "master_brief_sha256": "a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9",
   "expected_master_brief_sha256": "a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9",
   "checks": {

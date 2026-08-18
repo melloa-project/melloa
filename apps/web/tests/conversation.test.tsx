@@ -70,8 +70,13 @@ const thread: ConversationThread = {
 };
 
 const systemStatus: SystemStatus = {
+  contract_version: "1.0.0",
   service: "melloa-core",
-  milestone: "M1-preview",
+  version: "0.2.0",
+  release_display: "v0.2.0 preview",
+  stage: "preview",
+  milestone: "M1",
+  architecture_baseline: "v0.2",
   generated_at: "2026-08-16T12:00:00Z",
   public_ingress: false,
   external_actions_enabled: false,

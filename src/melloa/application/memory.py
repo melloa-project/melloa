@@ -44,6 +44,7 @@ from melloa.ports.memory import (
     MemoryStore,
 )
 from melloa.ports.store import EventAuditStore
+from melloa.release import CURRENT_RELEASE
 
 _UNKNOWN_BACKUP_EXPIRY = BackupExpiryDisclosure(
     state=BackupExpiryState.UNKNOWN,
@@ -382,7 +383,7 @@ class MemoryService:
             ),
             producer=EventProducer(
                 component="memory.service",
-                version="0.1.0",
+                version=CURRENT_RELEASE.package_version,
             ),
             epistemic_status=EpistemicStatus.OBSERVATION,
             sensitivity=metadata.sensitivity,
@@ -467,7 +468,7 @@ class MemoryService:
             ),
             producer=EventProducer(
                 component="memory.service",
-                version="0.1.0",
+                version=CURRENT_RELEASE.package_version,
             ),
             epistemic_status=EpistemicStatus.OBSERVATION,
             sensitivity=correction.sensitivity,
@@ -544,7 +545,7 @@ class MemoryService:
             ),
             producer=EventProducer(
                 component="memory.service",
-                version="0.1.0",
+                version=CURRENT_RELEASE.package_version,
             ),
             epistemic_status=EpistemicStatus.OBSERVATION,
             sensitivity=assertion.sensitivity,

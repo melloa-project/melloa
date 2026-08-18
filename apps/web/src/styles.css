@@ -628,6 +628,24 @@ pre {
   gap: 15px;
 }
 
+.release-identity {
+  background: var(--accent-soft);
+  border: 1px solid #cfe5da;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.release-identity-unverified {
+  background: var(--warning-soft);
+  border-color: #eed9b9;
+  color: var(--warning);
+}
+
 .status-item {
   align-items: center;
   color: var(--ink-soft);
@@ -4226,6 +4244,12 @@ pre {
   width: 100%;
 }
 
+.login-card-kicker {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
 .login-card-heading h2 {
   font-size: 1.4rem;
   letter-spacing: -0.035em;
@@ -4485,7 +4509,7 @@ pre {
     padding-right: 10px;
   }
 
-  .authority-status .status-item:nth-child(2) {
+  .authority-status .status-link {
     display: none;
   }
 

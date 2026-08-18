@@ -1,6 +1,6 @@
-# Pre-release Compatibility and Release Process
+# Preview compatibility and release process
 
-Melloa is in an owner-facing preview before a first stable implementation release. Only the current `main` revision is evaluated, and no public source license has been selected. The project does not yet offer a stable public API, plugin SDK, database migration, export/import, deployment, or backward-compatibility guarantee.
+Melloa `v0.2.0` is an owner-facing preview before a first stable implementation release. The exact prerelease tag and the latest green `main` revision are evaluated evidence snapshots, and no public source license has been selected. The project does not offer a stable public API, plugin SDK, database migration, export/import, deployment, or backward-compatibility guarantee.
 
 ## Current compatibility posture
 
@@ -13,7 +13,7 @@ Melloa is in an owner-facing preview before a first stable implementation releas
 
 ## Versioning and supported revisions
 
-Before 1.0, package versions, document versions, and any tags identify evidence snapshots; they do not promise semantic-versioning compatibility or a maintenance window. Only the current `main` revision is evaluated. Earlier commits and any pre-release tags have no backport, security-update, or operational-support guarantee.
+Before 1.0, package versions, document versions, and tags identify evidence snapshots; they do not promise semantic-versioning compatibility or a maintenance window. The `v0.2.0` tag identifies the reviewed M1 preview snapshot on architecture baseline `v0.2`. Earlier commits and prerelease tags have no backport, security-update, or operational-support guarantee.
 
 Do not silently change the meaning of an existing machine-readable contract, schema, export format, or migration. Give an incompatible shape a new version, preserve published SQL migrations unchanged, and provide migration or reset guidance. A tag does not create a support promise unless the owner publishes an explicit supported-version table and end date. Security reports for the evaluated revision follow the repository-root `SECURITY.md` policy.
 

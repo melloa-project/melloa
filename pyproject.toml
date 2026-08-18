@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "melloa"
-version = "0.0.1"
-description = "Owner-controlled runtime contracts and M0 foundation for Melloa"
+version = "0.2.0"
+description = "Owner-controlled private intelligence runtime for the M1 preview"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

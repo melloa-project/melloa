@@ -97,6 +97,7 @@ from melloa.ports.telegram import (
     TelegramPollStateStore,
     TelegramUpdateSource,
 )
+from melloa.release import CURRENT_RELEASE
 
 SYNTHETIC_OWNER_ID: RecordId = "owner_00000000000000000000000000000001"
 SYNTHETIC_INTELLIGENCE_ID: RecordId = "intelligence_00000000000000000000000000000001"
@@ -184,7 +185,7 @@ def build_synthetic_runtime(
     telegram_retention_worker_interval: float = 60.0,
     configured_model_bindings: tuple[ModelRouteBinding, ...] = (),
     conversation_route_policy: ConversationRoutePolicy | None = None,
-    runtime_version: str = "melloa-core/0.1.0-synthetic",
+    runtime_version: str = CURRENT_RELEASE.runtime_identifier,
     telegram_adapter_id: QualifiedName = SYNTHETIC_TELEGRAM_ADAPTER_ID,
     telegram_source: TelegramUpdateSource | None = None,
     telegram_challenge_publisher: TelegramPairingChallengePublisher | None = None,
@@ -482,7 +483,7 @@ def build_synthetic_runtime(
                     required=True,
                     observed_at=seeded_at,
                     summary="Private Melloa core is serving authenticated owner requests.",
-                    version=runtime_version,
+                    version=CURRENT_RELEASE.package_version,
                 ),
                 ComponentHealth(
                     component_id="worker.synthetic-reply",
@@ -528,7 +529,7 @@ def build_synthetic_runtime(
                     required=False,
                     observed_at=seeded_at,
                     summary="Explicit synthetic acceptance mode is active.",
-                    version=runtime_version,
+                    version=CURRENT_RELEASE.package_version,
                 ),
             ),
             component_readers=(
@@ -570,7 +571,7 @@ def build_synthetic_runtime(
         retention=retention,
         clock=clock,
         id_factory=id_factory,
-        source_runtime=f"melloa-mvp/{persistence.mode}",
+        source_runtime=runtime_version,
     )
     return SyntheticRuntime(
         app=create_app(

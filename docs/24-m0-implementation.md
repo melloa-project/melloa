@@ -155,4 +155,4 @@ Both Melloa reads must verify successfully; the second payload reports sequence 
 
 ## Remaining owner decisions
 
-Before accepting external code contributions or making a public implementation release, the owner must select and record an OSI-approved source license. Before real host installation, the owner must also approve the concrete authentication/recovery design and bounded Guardian deployment plan for that host. Neither decision is guessed in M0.
+M0 recorded an OSI-approved source license as an owner-only gate before an open-source implementation release. That choice remains unresolved. The `v0.2.0` preview tag is instead a reviewed evidence snapshot under the [preview compatibility policy](compatibility.md), grants no license or contribution right, and does not satisfy the stable-release gate. Before real host installation, the owner must also approve the concrete authentication/recovery design and bounded Guardian deployment plan for that host. Neither decision is guessed here.

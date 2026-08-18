@@ -4,6 +4,8 @@
 
 Melloa keeps conversation, memory, evidence, policy, corrections, and owner control independent from any one model, provider, process, or chat interface. **Melloa** is the system; **Melli** is the personal intelligence whose continuity the system protects.
 
+**Current release:** `v0.2.0 preview` · milestone `M1` · architecture baseline `v0.2`
+
 ## Start locally
 
 The default local path is a complete, disposable tour of the Owner Console. It uses a separately built, signed Guardian in offline mode, makes no external model call, and labels its fixed guided output honestly.

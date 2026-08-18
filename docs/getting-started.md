@@ -4,6 +4,8 @@ This is the shortest complete Melloa owner journey: start a private console, hav
 
 The default local run is deliberately safe and truthful. It binds only to loopback, uses disposable process-local state, keeps Guardian separately signed in `offline` mode, makes no external model call, and labels the guided response as a fixed fixture rather than Melli. An explicit selector adds one reviewed on-device model without changing those authority or persistence boundaries.
 
+The login screen and signed-in console identify this snapshot as **v0.2.0 preview**. The same system-status response reports milestone **M1** and architecture baseline **v0.2**. If those surfaces disagree, stop and update a clean checkout rather than trusting mixed release evidence.
+
 ## What you need
 
 - Linux or macOS with Bash;

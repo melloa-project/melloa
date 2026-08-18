@@ -32,6 +32,7 @@ from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
 from melloa.domain.models import ProcessingLocation, RegisteredModelRoute
 from melloa.ports.conversation import ConversationConflictError
+from melloa.release import CURRENT_RELEASE
 from tests.conftest import record_id
 
 
@@ -134,6 +135,9 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert manifest.citations == ()
     assert manifest.external_disclosure is False
     assert reply.turn.decision_record["external_disclosure"] is False
+    assert reply.turn.decision_record["runtime_version"] == (
+        CURRENT_RELEASE.runtime_identifier
+    )
     assert len(model.requests) == 1
     assert model.requests[0].input["text"] == "What should I review?"
     assert model.requests[0].allowed_processing_locations == frozenset(

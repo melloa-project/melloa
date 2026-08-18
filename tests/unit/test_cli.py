@@ -11,6 +11,7 @@ from melloa.adapters.postgres.migrations import MigrationStatus
 from melloa.apps import cli
 from melloa.apps.synthetic import RuntimePersistenceStatus
 from melloa.domain.models import ProcessingLocation
+from melloa.release import CURRENT_RELEASE
 
 
 @pytest.mark.parametrize(
@@ -370,7 +371,9 @@ def test_serve_mvp_loads_repeatable_routes_without_printing_credentials(
     assert captured["telegram_config"] is None
     assert captured["app"] is application
     output = capsys.readouterr().out
-    assert "owner-console-mvp-preview" in output
+    startup = json.loads(output)
+    assert startup["runtime"] == CURRENT_RELEASE.runtime_identifier
+    assert startup["release"] == CURRENT_RELEASE.public_metadata()
     assert "model.local.test" in output
     assert "model.codex.test" in output
     assert '"external_disclosure": true' in output

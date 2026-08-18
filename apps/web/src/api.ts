@@ -382,8 +382,13 @@ export type OwnerModelRouteReport = {
 };
 
 export type SystemStatus = {
-  readonly service: string;
+  readonly contract_version: "1.0.0";
+  readonly service: "melloa-core";
+  readonly version: string;
+  readonly release_display: string;
+  readonly stage: string;
   readonly milestone: string;
+  readonly architecture_baseline: string;
   readonly generated_at: string;
   readonly public_ingress: false;
   readonly external_actions_enabled: boolean;

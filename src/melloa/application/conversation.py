@@ -59,6 +59,7 @@ from melloa.ports.conversation import (
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import MemoryRetriever
 from melloa.ports.model import ModelGateway
+from melloa.release import CURRENT_RELEASE
 
 
 class ConversationUnavailableError(RuntimeError):
@@ -119,7 +120,7 @@ class ConversationService:
         guardian_reader: GuardianStatusReader,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
-        runtime_version: str = "melloa-core/0.1.0",
+        runtime_version: str = CURRENT_RELEASE.runtime_identifier,
         route_policy: ConversationRoutePolicy | None = None,
         max_processing_attempts: int = 3,
         processing_lease: timedelta = timedelta(seconds=45),

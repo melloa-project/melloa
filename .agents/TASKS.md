@@ -55,8 +55,8 @@ Primary owner journey:
 - **Acceptance:** one typed release identity drives runtime and event producers; Python and web metadata resolve to `0.2.0`; system status and the Owner Console expose version `0.2.0`, stage `preview`, and milestone `M1`; consistency tests reject drift; README, Pages, changelog, generated evidence, tag, and GitHub prerelease agree; the unresolved public-license choice remains explicitly owner-only and external.
 - **Owner/claim:** Director — product contract, ledger, docs, generated evidence, integration, and release; Forge — runtime, web, package metadata, and focused consistency tests.
 - **Reviewer:** Lens after implementation and clean evidence.
-- **Integration:** active. The starting tree mixes Python `0.0.1`, web/API/event `0.1.0`, runtime `0.2.0-mvp-preview`, and milestone `M0`, with no tag or GitHub release.
-- **Next:** establish the central identity, replace every active drift point, and prove agreement before release acceptance.
+- **Integration:** implementation frozen. One typed identity now drives Python/web metadata, FastAPI, runtime and export provenance, event producers, startup/readiness/status output, the launcher, and release-labelled login/signed-in console: package `0.2.0`, display `v0.2.0 preview`, stage `preview`, milestone `M1`, architecture baseline `v0.2`, runtime `melloa-core/0.2.0-preview`. Its clean export passes repository consistency, 575 Python tests at 90.43% coverage, 159 web tests, strict typing/lint/build/docs checks, 17 PostgreSQL integration tests, encrypted clean recovery, and the regenerated authenticated desktop/mobile journey with supervised credential/state cleanup.
+- **Next:** commit and publish the frozen candidate, verify exact-SHA CI plus Pages, then request Lens acceptance before tagging.
 
 ## Owner-only external blocker
 

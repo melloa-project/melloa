@@ -463,12 +463,19 @@ Before serving, the core prints a non-secret startup record. Expected fields inc
     ],
     "mode": "process-only-preview"
   },
+  "release": {
+    "architecture_baseline": "v0.2",
+    "display": "v0.2.0 preview",
+    "milestone": "M1",
+    "stage": "preview",
+    "version": "0.2.0"
+  },
   "route_ids": [
     "model.local.ollama-qwen",
     "model.codex.subscription",
     "model.fake.deterministic"
   ],
-  "runtime": "owner-console-mvp-preview",
+  "runtime": "melloa-core/0.2.0-preview",
   "seed_assertion_id": "assertion_00000000000000000000000000000001",
   "synthetic_fallback": true,
   "telegram": {
@@ -485,7 +492,7 @@ Before serving, the core prints a non-secret startup record. Expected fields inc
 }
 ```
 
-This sample shows Ollama, Codex, and Telegram enabled while `database_args=()`. With `codex_args=()`, `external_disclosure_routes` and the CLI-agent `route_ids` are empty, `experimental_cli_agent.configured` is `false`, and the Codex route is absent from both route-order arrays. With `telegram_args=()`, `telegram.configured` is `false` and `telegram.adapter_id` is `null`. With PostgreSQL enabled, `persistence.mode` becomes `postgresql-partial-preview`, `durable_state` adds hashed owner sessions and append-only revocations, canonical conversation/model provenance, memory correction history, reply/delivery work, and Telegram pairing/intake/offset/dispatch state. `ephemeral_state` still lists challenge-send observation, attachment quarantine bytes, and provider health. Telegram `delivery_records` and `pairing_offsets_ingestion` become `postgresql`; challenge-send observation remains process-only and attachment bytes remain unstored. The deterministic model fallback remains enabled in every case. The startup record contains route IDs and fixed boundaries, never DSNs, database errors, Codex executable/home paths, subscription authentication, owner credential, Telegram token, or message content.
+This sample shows Ollama, Codex, and Telegram enabled while `database_args=()`. The `release` object and runtime identifier derive from the same typed identity used by package metadata, health, event producers, and the Owner Console. With `codex_args=()`, `external_disclosure_routes` and the CLI-agent `route_ids` are empty, `experimental_cli_agent.configured` is `false`, and the Codex route is absent from both route-order arrays. With `telegram_args=()`, `telegram.configured` is `false` and `telegram.adapter_id` is `null`. With PostgreSQL enabled, `persistence.mode` becomes `postgresql-partial-preview`, `durable_state` adds hashed owner sessions and append-only revocations, canonical conversation/model provenance, memory correction history, reply/delivery work, and Telegram pairing/intake/offset/dispatch state. `ephemeral_state` still lists challenge-send observation, attachment quarantine bytes, and provider health. Telegram `delivery_records` and `pairing_offsets_ingestion` become `postgresql`; challenge-send observation remains process-only and attachment bytes remain unstored. The deterministic model fallback remains enabled in every case. The startup record contains route IDs and fixed boundaries, never DSNs, database errors, Codex executable/home paths, subscription authentication, owner credential, Telegram token, or message content.
 
 In PostgreSQL mode, an unexpired secure owner-session cookie remains valid through an ordinary core restart. The database stores only fixed-length SHA-256 digests for the owner credential, session token, and CSRF proof plus the non-secret principal contract; it never stores their plaintext values. Changing the configured owner credential makes earlier sessions fail closed, and signing out appends a revocation that remains effective after restart. **Settings → Owner session** lists every active session bound to the current credential, labels this browser, offers a recent-authenticated, CSRF-protected **Sign out other sessions** control, and triggers bounded cleanup for expired session rows and their revocations. Issuance and each ordinary or bulk revocation append deterministic content-free event/audit evidence; PostgreSQL does this in the same transaction as session state, and process-only auth appends through the configured audit store before changing the in-memory session map. Failed logins, missing/expired session denials outside routine session-status probing, and CSRF/recent-auth mutation denials append content-free security events through the configured audit store. The evidence contains only internal IDs, authentication method or denial boundary, lifecycle/denial state, reason code, event ID, and result. The browser still holds the CSRF proof only in page memory: reloading a restored read-capable session requires selecting **Unlock changes** and entering the owner credential before mutations.
 
@@ -642,10 +649,12 @@ These checked-in references are generated from the same loopback MVP and contain
 
 | State | Reference | Verify |
 |---|---|---|
-| Desktop login | [login desktop](assets/current-mvp/login-desktop.png) | calm private-access screen, application-authentication copy, independent Guardian boundary |
+| Desktop login | [login desktop](assets/current-mvp/login-desktop.png) | calm private-access screen, canonical `v0.2.0 preview` identity, application-authentication copy, independent Guardian boundary |
 | Desktop conversation starters | [conversation starters desktop](assets/current-mvp/conversation-starters-desktop.png) | empty private thread separates the no-network guided tour from real-job starters that require an eligible model; every action only fills the composer |
 | Mobile conversation starters | [conversation starters mobile](assets/current-mvp/conversation-starters-mobile.png) | the no-network tour action is visible above the fixed composer, while model-required starters remain reachable without horizontal overflow or bottom-navigation overlap |
 | Desktop conversation | [conversation desktop](assets/current-mvp/conversation-desktop.png) | fixed output is attributed to the guided-tour fixture rather than Melli, with a separate **Why this response?** action for route, disclosure, evidence, policy, cost, and durable IDs |
+| Desktop missing-turn recovery | [missing turn desktop](assets/current-mvp/conversation-missing-turn-desktop.png) | a stale or mistyped deep link stays inside the canonical conversation and offers one explicit action to clear the missing turn |
+| Mobile missing-turn recovery | [missing turn mobile](assets/current-mvp/conversation-missing-turn-mobile.png) | the same bounded recovery remains readable above mobile navigation without fabricating turn evidence |
 | Desktop activity | [activity desktop](assets/current-mvp/activity-desktop.png) | owner-readable model ledger with run totals, local/external filters, no-disclosure local route state, and route/turn actions |
 | Mobile activity | [activity mobile](assets/current-mvp/activity-mobile.png) | readable model-run ledger, disclosure filter state, run identifiers, and footer boundary without bottom-navigation overlap |
 | Desktop timeline | [timeline desktop](assets/current-mvp/timeline-desktop.png) | chronological content-free conversation, processing, delivery, model, and owner-export audit records with filter and aggregate-count disclosure |

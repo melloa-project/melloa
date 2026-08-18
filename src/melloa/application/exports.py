@@ -58,6 +58,7 @@ from melloa.domain.inspection import (
 from melloa.domain.memory import MemoryInspection
 from melloa.domain.retention import OwnerRetentionReport
 from melloa.ports.memory import MemoryRepository
+from melloa.release import CURRENT_RELEASE
 
 DATA_SCHEMAS: dict[str, tuple[str, type[BaseModel], str]] = {
     "conversations/threads.jsonl": (
@@ -146,7 +147,7 @@ class OwnerExportService:
         retention: OwnerRetentionService | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
-        source_runtime: str = "melloa-core/0.1.0-export-preview",
+        source_runtime: str = CURRENT_RELEASE.runtime_identifier,
     ) -> None:
         self._owner_id = owner_id
         self._intelligence_id = intelligence_id

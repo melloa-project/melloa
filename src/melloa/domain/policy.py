@@ -135,7 +135,7 @@ class PolicyContext(ContractModel):
 
 
 class DeterministicPolicyEvaluator:
-    """Small M0 evaluator whose absence or ambiguity always reduces authority."""
+    """Small deny-first evaluator whose absence or ambiguity reduces authority."""
 
     _PROHIBITED_EFFECTS = frozenset(
         {

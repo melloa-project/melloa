@@ -36,6 +36,7 @@ from melloa.ports.auth import (
     RecentAuthenticationRequired,
 )
 from melloa.ports.store import EventAuditStore
+from melloa.release import CURRENT_RELEASE
 
 _MAXIMUM_SECRET_LENGTH = 4096
 _MAXIMUM_CLEANUP_LIMIT = 10_000
@@ -354,7 +355,7 @@ class PostgresOwnerSessionManager:
             ),
             producer=EventProducer(
                 component="auth.owner-session-manager",
-                version="0.1.0",
+                version=CURRENT_RELEASE.package_version,
             ),
             epistemic_status=EpistemicStatus.OBSERVATION,
             sensitivity=Sensitivity.PERSONAL,

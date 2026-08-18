@@ -10,7 +10,7 @@ Never include real owner messages, camera media, API keys, Guardian material, de
 
 ## Supported versions
 
-Until the first tagged implementation release, only the current `main` revision is evaluated. The architecture documents are not a claim that unfinished runtime components are production-ready.
+`v0.2.0` is the evaluated owner-facing preview snapshot. The latest green `main` revision is also evaluated during ongoing development; neither surface carries a maintenance window or production-support promise. Architecture documents are not a claim that unimplemented or deployment-owned components are production-ready.
 
 ## Security boundaries
 
@@ -18,4 +18,4 @@ Until the first tagged implementation release, only the current `main` revision 
 - Deterministic policy authorizes exact actions.
 - The main runtime has no Guardian mutation or signing authority.
 - Public application ingress is unsupported in V1.
-- Generated code, real credentials, and personal data are absent from M0 development fixtures.
+- Generated code, real credentials, and personal data are absent from synthetic development fixtures.

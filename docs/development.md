@@ -85,7 +85,7 @@ Run generation only when intentionally changing a model or adding a migration. C
 
 Use [Start Melloa locally](getting-started.md) as the canonical setup and smoke guide. Use [Configure advanced local routes and durable state](run-current-mvp.md) only when you need the individual Guardian/core/console commands, optional Ollama/Qwen, PostgreSQL, isolated Codex CLI, or Telegram configuration.
 
-The ordinary `melloa serve` command remains the fail-closed M0 status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional PostgreSQL owner-state durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
+The ordinary `melloa serve` command remains the fail-closed contract/status surface, while `serve-synthetic` remains the no-network test runtime. `serve-mvp` is the explicit owner-facing preview with process-local stores by default and optional PostgreSQL owner-state durability through a private core-role DSN file. Do not bind any surface publicly. For a private-network deployment, terminate HTTPS on the same origin so the `__Host-` secure session cookie remains mandatory; never weaken cookie security or enable CORS to simplify a demo.
 
 ## Validate an owner export
 

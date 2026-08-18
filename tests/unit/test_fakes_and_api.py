@@ -26,7 +26,16 @@ from melloa.domain.exports import (
 )
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.models import ModelRouteRequest, ProcessingLocation
+from melloa.release import CURRENT_RELEASE
 from tests.conftest import record_id
+
+_RELEASE_STATUS_FIELDS = {
+    "version": CURRENT_RELEASE.package_version,
+    "release_display": CURRENT_RELEASE.release_display,
+    "stage": CURRENT_RELEASE.stage,
+    "milestone": CURRENT_RELEASE.milestone,
+    "architecture_baseline": CURRENT_RELEASE.architecture_baseline,
+}
 
 
 def guardian_reader(fixed_time, mode=GuardianMode.NO_ACTIONS):
@@ -82,14 +91,28 @@ def test_fake_model_is_zero_cost_and_device_local(fixed_time) -> None:
 
 
 def test_private_api_exposes_verified_status_and_security_headers(fixed_time) -> None:
-    client = TestClient(create_app(guardian_reader(fixed_time)))
+    app = create_app(guardian_reader(fixed_time))
+    client = TestClient(app)
     response = client.get("/api/v1/system/status")
     assert response.status_code == 200
+    assert app.version == CURRENT_RELEASE.package_version
+    assert {
+        field: response.json()[field] for field in _RELEASE_STATUS_FIELDS
+    } == _RELEASE_STATUS_FIELDS
     assert response.json()["guardian"]["mode"] == "no-actions"
     assert response.json()["external_actions_enabled"] is False
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-frame-options"] == "DENY"
     assert client.get("/openapi.json").status_code == 404
+
+
+def test_readiness_exposes_canonical_release_identity(fixed_time) -> None:
+    response = TestClient(create_app(guardian_reader(fixed_time))).get("/health/ready")
+
+    assert response.status_code == 200
+    assert {
+        field: response.json()[field] for field in _RELEASE_STATUS_FIELDS
+    } == _RELEASE_STATUS_FIELDS
 
 
 def test_private_api_rejects_invalid_background_worker_configuration(fixed_time) -> None:
@@ -443,7 +466,7 @@ def test_owner_export_preview_appends_content_free_generation_audit(fixed_time) 
                 owner_id=record_id("owner", 1),
                 intelligence_id=record_id("intelligence", 1),
                 created_at=fixed_time,
-                source_runtime="melloa-core/0.1.0-export-preview",
+                source_runtime="fixture-runtime/9.9.9",
                 encrypted=False,
                 includes_sql_snapshot=False,
                 includes_blobs=False,

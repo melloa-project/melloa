@@ -28,6 +28,7 @@ from melloa.apps.synthetic import (
 from melloa.domain.base import new_record_id, utc_now
 from melloa.domain.models import ModelRouteKind, ProcessingLocation
 from melloa.ports.guardian import GuardianStatusReader
+from melloa.release import CURRENT_RELEASE
 
 
 def build_mvp_runtime(
@@ -140,7 +141,7 @@ def build_mvp_runtime(
         id_factory=id_factory,
         configured_model_bindings=bindings,
         conversation_route_policy=route_policy,
-        runtime_version="melloa-core/0.2.0-mvp-preview",
+        runtime_version=CURRENT_RELEASE.runtime_identifier,
         telegram_worker_interval=telegram_worker_interval,
         telegram_adapter_id=(
             "client.telegram.synthetic"

@@ -123,6 +123,7 @@ from melloa.ports.telegram import (
     TelegramPairingNotFoundError,
     TelegramPollingError,
 )
+from melloa.release import CURRENT_RELEASE
 
 _SESSION_COOKIE = "__Host-melloa_session"
 _CSRF_HEADER = "X-Melloa-CSRF"
@@ -507,7 +508,7 @@ def _append_auth_security_audit(
         ),
         producer=EventProducer(
             component="auth.private-core",
-            version="0.1.0",
+            version=CURRENT_RELEASE.package_version,
         ),
         epistemic_status=EpistemicStatus.OBSERVATION,
         sensitivity=Sensitivity.INTERNAL,
@@ -578,7 +579,7 @@ def _append_owner_export_preview_audit(
         ),
         producer=EventProducer(
             component="export.private-core",
-            version="0.1.0",
+            version=CURRENT_RELEASE.package_version,
         ),
         epistemic_status=EpistemicStatus.OBSERVATION,
         sensitivity=Sensitivity.INTERNAL,
@@ -679,7 +680,7 @@ def _append_owner_delivery_audit(
         ),
         producer=EventProducer(
             component="delivery.private-core",
-            version="0.1.0",
+            version=CURRENT_RELEASE.package_version,
         ),
         epistemic_status=EpistemicStatus.OBSERVATION,
         sensitivity=Sensitivity.INTERNAL,
@@ -776,7 +777,7 @@ def _append_owner_conversation_audit(
         ),
         producer=EventProducer(
             component="conversation.private-core",
-            version="0.1.0",
+            version=CURRENT_RELEASE.package_version,
         ),
         epistemic_status=EpistemicStatus.OBSERVATION,
         sensitivity=Sensitivity.INTERNAL,
@@ -1092,7 +1093,7 @@ def create_app(
 
     app = FastAPI(
         title="Melloa private core",
-        version="0.1.0",
+        version=CURRENT_RELEASE.package_version,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,

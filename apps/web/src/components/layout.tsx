@@ -55,6 +55,7 @@ export function AppLayout() {
   const sessionExpiryRelative = formatRelative(principal.expires_at);
   const mutationState = canMutate ? "changes unlocked" : "read only";
   const statusVerified = status !== null;
+  const releaseLabel = status?.release_display ?? "Release unverified";
   const ingressVerifiedPrivate = status?.public_ingress === false;
   const ingressLabel = ingressVerifiedPrivate ? "Private only" : "Ingress unverified";
   const guardianLabel = statusVerified ? `Guardian ${titleCase(status.guardian.mode)}` : "Guardian unverified";
@@ -150,6 +151,12 @@ export function AppLayout() {
             <small>Private first-party surface</small>
           </div>
           <div className="authority-status">
+            <span
+              aria-label={`Runtime release: ${releaseLabel}`}
+              className={`release-identity ${statusVerified ? "" : "release-identity-unverified"}`}
+            >
+              {releaseLabel}
+            </span>
             <span
               aria-label={ingressVerifiedPrivate ? "Public ingress disabled by signed status" : "Public ingress is not verified"}
               className={`status-item ${statusVerified ? "" : "status-item-warning"}`}

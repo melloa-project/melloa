@@ -40,6 +40,7 @@ from melloa.apps.postgres_mvp import (
     validate_private_database_dsn,
 )
 from melloa.apps.synthetic import SYNTHETIC_TELEGRAM_ADAPTER_ID, build_synthetic_runtime
+from melloa.release import CURRENT_RELEASE
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -304,8 +305,9 @@ def serve_mvp(args: argparse.Namespace) -> int:
                         "usage_metadata": "unreported",
                     },
                     "persistence": asdict(runtime.persistence),
+                    "release": CURRENT_RELEASE.public_metadata(),
                     "route_ids": runtime.model_route_ids,
-                    "runtime": "owner-console-mvp-preview",
+                    "runtime": CURRENT_RELEASE.runtime_identifier,
                     "seed_assertion_id": runtime.seed_assertion_id,
                     "synthetic_fallback": True,
                     "audit": {
@@ -413,7 +415,7 @@ def export_mvp(args: argparse.Namespace) -> int:
                 memory_repository=runtime.memory_store,
                 delivery=runtime.delivery_service,
                 retention=runtime.retention_service,
-                source_runtime=f"melloa-mvp/{runtime.persistence.mode}",
+                source_runtime=CURRENT_RELEASE.runtime_identifier,
             ).write_bundle(args.output_dir, schema_root=ROOT / "schemas")
             validation = validate_bundle(args.output_dir)
         except PostgresMvpBootstrapError:

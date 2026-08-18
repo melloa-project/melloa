@@ -1,3 +1,5 @@
-"""Melloa's framework-neutral M0 contracts and application boundaries."""
+"""Melloa's owner-controlled runtime contracts and application boundaries."""
 
-__version__ = "0.0.1"
+from melloa.release import CURRENT_RELEASE
+
+__version__ = CURRENT_RELEASE.package_version

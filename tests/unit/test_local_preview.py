@@ -15,6 +15,7 @@ import pytest
 
 from melloa.apps import local_preview
 from melloa.domain.models import ModelRouteHealthState
+from melloa.release import CURRENT_RELEASE
 
 
 def test_preview_state_is_private_and_removed_only_with_marker(tmp_path: Path) -> None:
@@ -591,6 +592,10 @@ def test_run_preview_reports_ready_contract_and_cleans_state(
     output = capsys.readouterr().out
     assert result == 0
     assert "Melloa is ready" in output
+    assert (
+        f"Release:           {CURRENT_RELEASE.release_display} · "
+        f"{CURRENT_RELEASE.milestone} · {CURRENT_RELEASE.architecture_baseline}"
+    ) in output
     assert "guided output is not Melli" in output
     assert "Disposable preview state removed" in output
     assert not state.exists()

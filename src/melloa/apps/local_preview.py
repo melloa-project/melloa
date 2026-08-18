@@ -31,6 +31,7 @@ from melloa.adapters.models.openai_compatible import (
     load_openai_compatible_route_config,
 )
 from melloa.domain.models import ModelRouteHealthState, ProcessingLocation
+from melloa.release import CURRENT_RELEASE
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_GUARDIAN_ROOT = ROOT.parent / "melloa-guardian"
@@ -458,8 +459,10 @@ def run_preview(args: argparse.Namespace) -> int:
 
         print(
             "\nMelloa is ready.\n"
-            f"\n  Owner Console:  {console_url}"
-            f"\n  Owner credential: {credential}"
+            f"\n  Release:           {CURRENT_RELEASE.release_display}"
+            f" · {CURRENT_RELEASE.milestone} · {CURRENT_RELEASE.architecture_baseline}"
+            f"\n  Owner Console:     {console_url}"
+            f"\n  Owner credential:  {credential}"
             f"\n\n{preview_next_action(model_route_config)}"
             f"\n\n{preview_contract(model_route_config)}"
             "\nPress Ctrl-C to stop both services and delete the credential and preview state.\n",

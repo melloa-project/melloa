@@ -1,7 +1,8 @@
 # Changelog
 
-## M1 implementation — in progress
+## v0.2.0 preview — 18 August 2026
 
+- Unified Python and web package metadata, FastAPI, runtime/event producers, health/status responses, the Owner Console, README, Pages, validation, and release evidence behind one typed `v0.2.0 preview` / `M1` identity on the `v0.2` architecture baseline, with drift rejected by automated checks.
 - Added `make preview PREVIEW_MODEL=ollama` as the reviewed on-device Melli path: it requires the exact dated `qwen3:4b-instruct-2507-q4_K_M` model before creating preview state, avoiding moving-alias drift while selecting an instruct variant suited to bounded structured conversation output; it prints corrective Ollama commands, preserves the independently signed offline Guardian boundary, and keeps deterministic fallback visibly labelled.
 - Tightened OpenAI-compatible route health so absent, empty, malformed, or non-matching model lists are unavailable instead of treating any successful `/models` response as healthy.
 - Added an authenticated owner API journey over a test-only loopback OpenAI-compatible HTTP fixture, proving real transport, route/disclosure/token/evidence inspection, and an explicit failed-route-to-synthetic-fallback transition without using fixture output as product imagery.
@@ -53,7 +54,7 @@
 - Added an authenticated owner retention report with strict policy bounds, deletion-scope availability, tombstone/rebuild obligations, external-copy status, aggregate inventory coverage, and honest backup-expiry disclosure; unavailable deletion and inventory paths remain explicit.
 - Added a typed same-origin Owner Console retention view that renders policy, aggregate coverage, external-copy limits, and backup expiry through safe text nodes while withholding deletion controls until a real recent-authenticated mutation boundary exists.
 
-## M0 implementation — 16 August 2026
+## M0 implementation milestone — 16 August 2026
 
 - Added strict event, identity, assertion/provenance, policy, audit, model, conversation, and Guardian contracts with generated JSON Schemas.
 - Added PostgreSQL 18 plus pgvector migration, narrow role groups, durable jobs/outbox, append-only records, and audit predecessor enforcement.
@@ -64,7 +65,7 @@
 - Added digest/commit-pinned CI, locked Python/Node toolchains, PostgreSQL integration tests, and encrypted restic clean-restore drill.
 - Added M0 threat review, development guide, Guardian protocol reference, security policy, contribution guide, and recovery runbook.
 
-## v0.2 — 16 August 2026
+## v0.2 architecture baseline — 16 August 2026
 
 - Adopted **Meliorism** as the guiding philosophy, **Melloa** as the system/project, and **Melli** as the primary persistent intelligence.
 - Reserved **Otto** as an optional philosophical reference; it is not a mandatory V1 component or agent.
@@ -75,6 +76,6 @@
 - Recorded repository roles for `melloa`, `melloa-guardian`, and the private `melloa-deployment` repository.
 - Added ADR-013 and ADR-014 and updated diagrams, milestones, onboarding, and traceability.
 
-## v0.1 — 15 August 2026
+## v0.1 architecture baseline — 15 August 2026
 
 - Initial research-backed architecture baseline.

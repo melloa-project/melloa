@@ -96,6 +96,7 @@ async function assertInitialTourActionVisible() {
 try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /Your conversation with Melli/ }).waitFor();
+  await page.getByText("v0.2.0 preview", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Retry signed status check" }).waitFor();
   await page.screenshot({
     path: `${outputDirectory}/login-desktop.png`,
@@ -105,6 +106,7 @@ try {
   await page.getByLabel("Owner credential").fill(credential);
   await page.getByRole("button", { name: /Open Owner Console/ }).click();
   await page.getByText("Conversations", { exact: true }).waitFor();
+  await page.getByText("v0.2.0 preview", { exact: true }).waitFor();
 
   await page.getByRole("button", { name: "New conversation" }).click();
   await page.getByLabel("Title").fill(conversationTitle);

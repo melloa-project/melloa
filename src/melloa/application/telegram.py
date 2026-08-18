@@ -87,6 +87,7 @@ from melloa.ports.telegram import (
     TelegramPollStateStore,
     TelegramUpdateSource,
 )
+from melloa.release import CURRENT_RELEASE
 
 
 class TelegramIngestionUnavailableError(RuntimeError):
@@ -399,7 +400,7 @@ class TelegramPairingService:
             ),
             producer=EventProducer(
                 component="telegram.pairing-service",
-                version="0.1.0",
+                version=CURRENT_RELEASE.package_version,
             ),
             epistemic_status=EpistemicStatus.OBSERVATION,
             sensitivity=Sensitivity.PERSONAL,

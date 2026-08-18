@@ -29,6 +29,7 @@ from melloa.domain.exports import (
     ExportFileKind,
 )
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
+from melloa.release import CURRENT_RELEASE
 
 _BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
 
@@ -72,6 +73,7 @@ def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) 
     assert manifest.encrypted is False
     assert manifest.includes_sql_snapshot is False
     assert manifest.includes_blobs is False
+    assert manifest.source_runtime == CURRENT_RELEASE.runtime_identifier
     activity_records = [
         json.loads(line)
         for line in (bundle_dir / "inspection/model-activity.jsonl")

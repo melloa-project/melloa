@@ -16,8 +16,13 @@ const mocks = vi.hoisted(() => ({
       expires_at: "2026-08-16T12:30:00Z",
     },
     status: {
+      contract_version: "1.0.0",
       service: "melloa-core",
-      milestone: "m1",
+      version: "0.2.0",
+      release_display: "v0.2.0 preview",
+      stage: "preview",
+      milestone: "M1",
+      architecture_baseline: "v0.2",
       generated_at: "2026-08-16T12:00:00Z",
       public_ingress: false,
       guardian: {
@@ -50,8 +55,13 @@ describe("AppLayout", () => {
     vi.setSystemTime(new Date("2026-08-16T12:00:00Z"));
     mocks.context.canMutate = true;
     mocks.context.status = {
+      contract_version: "1.0.0",
       service: "melloa-core",
-      milestone: "m1",
+      version: "0.2.0",
+      release_display: "v0.2.0 preview",
+      stage: "preview",
+      milestone: "M1",
+      architecture_baseline: "v0.2",
       generated_at: "2026-08-16T12:00:00Z",
       public_ingress: false,
       guardian: {
@@ -89,6 +99,9 @@ describe("AppLayout", () => {
     expect(screen.getByText("Recent authentication in 5 minutes. Session expires in 30 minutes.")).toBeInTheDocument();
     expect(screen.getByText("Private only")).toBeInTheDocument();
     expect(screen.getByText("Actions bounded")).toBeInTheDocument();
+    expect(screen.getByText("v0.2.0 preview")).toHaveAccessibleName(
+      "Runtime release: v0.2.0 preview",
+    );
     const guardianStatusLink = screen.getByRole("link", {
       name: "Open Guardian boundary settings: Guardian Normal; Signed sequence 3",
     });
@@ -135,6 +148,9 @@ describe("AppLayout", () => {
 
     expect(screen.getByText("Ingress unverified")).toBeInTheDocument();
     expect(screen.getByText("Authority unverified")).toBeInTheDocument();
+    expect(screen.getByText("Release unverified")).toHaveAccessibleName(
+      "Runtime release: Release unverified",
+    );
     const guardianStatusLink = screen.getByRole("link", {
       name: "Open Guardian boundary settings: Guardian unverified; Signed status unavailable",
     });
