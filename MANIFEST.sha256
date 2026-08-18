@@ -17,7 +17,7 @@ dad31822f08fa134f602faea18c1cfff01254768770c0bdc04df67759094d11c  ./IMPLEMENTATI
 88c5a2bdbbfd7827c10510eaa0e94d70d9eff8581ec19ba75218509eb38f6122  ./apps/web/index.html
 a6d6c1d19d09c0ae8f496e56d6343445aacd16177893758cb22f1c2fd177ce63  ./apps/web/package-lock.json
 b404942936d99385aee2695832a86aaed8bc6bca105499272478c06ab5418047  ./apps/web/package.json
-c8ae44954597e340ff02427e86334671b559b160c6ab715ba72f84c04078a49c  ./apps/web/server.mjs
+610fa086243d3d3862bad70296e198aabbf4ffabde8edef85bdb1b6461c9705a  ./apps/web/server.mjs
 449dde05cc23c25373ca84911d27b9dbbabdf0af5b14600f3b801cb6190178c8  ./apps/web/src/api.ts
 7c56ba3bc2b078a5cf7ad2d9b5ee3cf776e7789e56e36bc97be2c73504584b76  ./apps/web/src/app.tsx
 73d73f08f72c56ee4f868059a53acef58d8acd0797d230a7fa14b4cc3fb3af74  ./apps/web/src/components/layout.tsx
@@ -43,6 +43,7 @@ ecee005a60f28b9492232521d8a49b879a9aebc9a1bd5c06145534b464d09413  ./apps/web/tes
 222792b35189844f78306196707d191542c9052aa0b5897d0b00c870f4cc5eb2  ./apps/web/tests/memory.test.tsx
 6ab7bebe9906cc3cf20f4a801eb125ab8120118fbfa901c17d6afca80506e102  ./apps/web/tests/operations.test.tsx
 594c46dc012fde834e486dc9e54a1e9d7bac3ebfaf6a7dc3f21ace9dab82e175  ./apps/web/tests/providers.test.tsx
+dccf7269a572f8a51e73d8b277bf7d862fe799a2618e13b4e275f1a52a2ab652  ./apps/web/tests/server.test.mjs
 8f25155496d5c58fab9a8acf8250eefcfaeaa2a1b4a5cf024936c2bb3fbe32c6  ./apps/web/tests/settings.test.tsx
 498762a2cbbb28d2009c3d0ee3c0ce9cacfbc6ec3e1d80572d80ee5107111685  ./apps/web/tests/setup.ts
 8c75edbfe3dc78582dd052f88515db25ea7ea7c394fb90a7ee629e14c144f1be  ./apps/web/tests/timeline.test.tsx
