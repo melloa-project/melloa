@@ -54,6 +54,7 @@ lint:
 		tools/dependency_source_policy.py \
 		tools/generate_dependency_sbom.py \
 		tools/generate_schemas.py \
+		tools/recovery_owner_journey.py \
 		tools/update_manifest.py \
 		tools/update_migration_manifest.py \
 		tools/validate_spec.py

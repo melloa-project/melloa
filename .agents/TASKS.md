@@ -22,7 +22,7 @@ Primary owner journey:
 - **Owner/claim:** Forge — `src/melloa/{application/telemetry.py,domain/observability.py,ports/telemetry.py}` and `tests/unit/test_observability.py` only.
 - **Reviewer:** Lens after frozen handoff.
 - **Integration:** Forge handoff and Lens acceptance are complete; the clean combined tree passes 554 unit tests at 90.35% coverage, strict typing/lint, web checks, generated evidence, and strict docs.
-- **Next:** commit and push separately, then verify its exact SHA.
+- **Next:** complete; shipped in `f0ac5de` with exact-SHA CI and Pages deployment green.
 
 ### L-001 — Independent product/release acceptance
 
@@ -31,11 +31,19 @@ Primary owner journey:
 - **Integration:** D-001 and F-004 are accepted; D-001's bounded release follow-ups are complete. The full product remains no-ship on durable recovery, real Melli value, and release identity.
 - **Next:** independently review D-002 after its owner recovery journey is observable.
 
+### D-002 — Durable owner-state recovery
+
+- **Outcome:** one command proves that Melloa's complete PostgreSQL owner state can be encrypted, restored into a clean database, and used again through the authenticated owner API without treating export as backup.
+- **Acceptance:** every migration is present; a canonical conversation, fixture turn, explanation evidence, memory mutation evidence, owner session/audit state, and read-only authority survive a custom-format logical dump, encrypted restic integrity check, and clean restore; cleanup is verified before the receipt, which contains no credentials, private text, DSNs, or paths.
+- **Owner/claim:** Director — product decision, docs, integration, and release; Forge — recovery harness and focused tests only.
+- **Reviewer:** Lens after clean local and CI evidence.
+- **Integration:** Forge's bounded three-file handoff is integrated and Director-reviewed; focused tests/lint/syntax checks and the real exact-image Docker traversal pass with a path-free receipt and verified cleanup.
+- **Next:** commit and push the harness, prove its exact SHA in CI, publish the reconciled owner contract, then request Lens acceptance.
+
 ## Next product blockers
 
-1. **D-002 — Durable recovery loop (P0):** choose one canonical durable owner state, back it up, restore it into a clean runtime, and prove conversation/memory/evidence remain usable through the Owner Console.
-2. **D-003 — Real Melli value (P1):** make one eligible model route straightforward to configure and exercise it in an automated product journey without weakening disclosure or fixture honesty.
-3. **D-004 — One release identity (P1):** align package, web, health, README/Pages, tag/release, and milestone terminology; record the owner-only license decision as external until resolved.
+1. **D-003 — Real Melli value (P1):** make one eligible model route straightforward to configure and exercise it in an automated product journey without weakening disclosure or fixture honesty.
+2. **D-004 — One release identity (P1):** align package, web, health, README/Pages, tag/release, and milestone terminology; record the owner-only license decision as external until resolved.
 
 ## Release gates
 

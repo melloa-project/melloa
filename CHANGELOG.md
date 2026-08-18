@@ -2,6 +2,7 @@
 
 ## M1 implementation — in progress
 
+- Replaced the marker-only recovery check with a complete PostgreSQL owner-state journey: all migrations, authenticated conversation and explanation evidence, memory correction/deletion, durable sessions/audit, encrypted restic backup, clean restore, post-restore owner API traversal, read-only denial, and verified ephemeral cleanup.
 - Added `make preview` as the canonical owner journey: it verifies and builds Guardian independently, creates signed offline disposable state, starts the core and production Owner Console, reports the exact safety/persistence contract and first action, and stops all children plus removes credentials/state on `Ctrl-C`; CI now exercises this same launcher.
 - Added the explicit `serve-mvp` owner-facing preview with loopback-only core/web serving, signed Guardian reads, process-local defaults, and optional restricted-role PostgreSQL restart durability.
 - Added provider-neutral local OpenAI-compatible routing, a bounded experimental Codex CLI adapter with isolated configuration and no Melloa authority, and visibly labelled deterministic fallback.

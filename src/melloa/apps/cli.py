@@ -562,7 +562,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None if database_dsn_path is None else Path(database_dsn_path),
         help=(
-            "Optional mode-0600 core-role DSN file for partial PostgreSQL restart "
+            "Optional mode-0600 core-role DSN file for PostgreSQL owner-state "
             "durability; migrations must already be applied."
         ),
     )

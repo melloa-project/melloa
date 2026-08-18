@@ -10,9 +10,9 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 ## Package statistics
 
-- Files inspected: **350**
+- Files inspected: **352**
 - Canonical Markdown files: **62**
-- Canonical Markdown word count: **68,731**
+- Canonical Markdown word count: **68,945**
 - Mermaid blocks: **32**
 - Local Markdown links checked: **246**
 - MkDocs navigation targets checked: **54**
@@ -34,13 +34,13 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 | Gate | Result |
 |---|---|
-| Python quality | PASS — Ruff, strict mypy across 83 source files, and 554 unit tests with 90.35% branch-aware coverage |
+| Python quality | PASS — Ruff, strict mypy across 83 source files, and 557 unit tests with 90.35% branch-aware coverage |
 | Generated contracts | PASS — JSON Schemas and the ten-version migration digest manifest match their sources; release manifest matches a clean Git export |
 | Owner Console | PASS — TypeScript check, 158 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
 | Owner journey | PASS — the canonical launcher creates signed offline Guardian state, starts the private core and production console, reports its contract and next action, then covers login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, responsive navigation, and verified cleanup |
 | PostgreSQL | PASS — all ten migrations applied with none pending; 17 restart, role, idempotency, conversation, memory, delivery, Telegram-state, audit, and session integration tests passed |
 | Owner export | PASS — canonical export and dry-run import validation; AES-256-GCM/Scrypt package encryption and decrypt-validate round trip |
-| Recovery | PASS — encrypted restic repository plaintext scan, integrity check, clean PostgreSQL restore, and denied read-only mutation |
+| Recovery | PASS — all ten migrations, authenticated conversation/explanation/model evidence, memory correction/deletion, durable sessions/audit, encrypted restic integrity, clean PostgreSQL restore, post-restore owner API traversal, denied read-only mutation, and verified cleanup with a bounded receipt |
 | Guardian | PASS — Go formatting, vet, tests, reproducible-path build, deterministic transition journal, and signed `stopped` → `offline` projection consumed read-only by Melloa |
 | Documentation | PASS — strict MkDocs build and architecture validator |
 
