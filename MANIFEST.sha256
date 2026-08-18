@@ -1,5 +1,5 @@
 a09951e6104248438b4bf570163dfd26efb6c6176d34e306a1f8fb15e678c7b1  ./.agents/DECISIONS.md
-3079e1013f6d2aa4fe0417cdd7438ae10d648540cf534b042f3936839d203b86  ./.agents/TASKS.md
+9bd3f1b6d4a1716bba6507c059f5f2561d15bab221d1b57e46334ae894bb3ed5  ./.agents/TASKS.md
 a2e88b55fef4ff9a86bc4671425dadcdbbb0d50f0f2e3212d05936c7c4232038  ./.env.example
 4b4c4dc2ecf6ce2dd16d1293c55582e0fae0071420dbe717b76dd19b54cb6b0b  ./.github/CODEOWNERS
 cd41c0b7c7e0fab419ef8a3129d0f96c15de7a0dfcb89fd8636589a5dfe85e94  ./.github/workflows/ci.yml
@@ -123,14 +123,14 @@ f83170e66410db8f5aee02ba5c23392d1bd27cc31232994b1b8318ec30c98b52  ./docs/assets/
 719d7783764df03d3177b0476cf8ca004347313aeb4f5270eb77c7cab20fe88e  ./docs/contracts/guardian-protocol.md
 1e09e13c5e110ae66c7c740f484b32632d7adac2d959f792883cb96870339740  ./docs/development.md
 5cdbe61a0ff1816b998f09b44f8e25ca27bd81fc7afee25a8e1eea38971c9efb  ./docs/diagrams.md
-787c2407ec3adddeb2e8c4a0a17bc42fc94402e267b0067289920170a4df0488  ./docs/getting-started.md
+b934ce0d25cfead5a453992492a49b49189fbf24ad38381a8339226e36886503  ./docs/getting-started.md
 be10d4423acbbd4fa8fada68fc09351b37b50f0baebca3f14f4ef288b166e535  ./docs/index.md
 9abba3342518b714319d86200c9627da318f76e518cdb54d78fe8658a3693c6b  ./docs/operations/current-mvp.md
 45129176f4af2c8929eac711e93856203e62d8ba06315327cef0bd043878e45e  ./docs/operations/m0-recovery.md
 a59d29c06c884f86064e5223e92f3b996771ca1d34bc5fc7baaea18e0c3abcd9  ./docs/research/master-research-brief.txt
 2d1ef864609cb2fc96bf33e5aefe8cfebd25f2a8ccb2cc051331530f93a34d9f  ./docs/research/method-and-limitations.md
 fd9dd415102bb9d3335e0e2c430a1d1a24dd6bed0bc61fac591676296f5ee942  ./docs/research/primary-sources.md
-6c13467eba1f0a4e5bea0a1f29e881d463d508946e0d049fa66515fc57477690  ./docs/run-current-mvp.md
+e7651fe9b0c09aa2084fd38d9165d8bb1c0f826891b8d8ec6e92f51e577235c4  ./docs/run-current-mvp.md
 16abfa728e0566f3e89793756a6ae71cd8fc9ffc6d888e2c1ac5902cfe59d64d  ./infra/postgres/init/001_roles.sql
 b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f  ./migrations/0001_m0_foundation.sql
 90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2  ./migrations/0002_m1_conversation_retrieval.sql
