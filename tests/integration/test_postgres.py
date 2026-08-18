@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from contextlib import ExitStack
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -13,6 +14,8 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg.types.json import Jsonb
 
+from melloa.adapters.fakes.auth import InMemoryOwnerSessionManager
+from melloa.adapters.fakes.client import FakeClientAdapter
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.postgres.conversation import PostgresConversationStore
@@ -21,9 +24,11 @@ from melloa.adapters.postgres.memory import PostgresMemoryRepository
 from melloa.adapters.postgres.migrations import apply_migrations, discover_migrations
 from melloa.adapters.postgres.store import EventConflictError, PostgresEventAuditStore
 from melloa.application.conversation import ConversationService
+from melloa.application.delivery import ClientDeliveryRoute, DeliveryService
 from melloa.application.inspection import OwnerInspectionService
 from melloa.application.memory import MemoryService
 from melloa.application.retrieval import PolicyConstrainedRetriever
+from melloa.apps.core import create_app
 from melloa.apps.mvp import build_mvp_runtime
 from melloa.apps.postgres_mvp import build_postgres_mvp_stores
 from melloa.apps.synthetic import (
@@ -31,8 +36,9 @@ from melloa.apps.synthetic import (
     SYNTHETIC_OWNER_ID,
     SYNTHETIC_TELEGRAM_ADAPTER_ID,
 )
+from melloa.domain.audit import AuditRecord
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import canonical_json_bytes, sha256_digest
+from melloa.domain.base import JsonObject, canonical_json_bytes, sha256_digest
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import (
     ConversationMessage,
@@ -145,6 +151,59 @@ def _insert_assertion(connection, assertion: Assertion) -> None:
             "retained_at": assertion.observed_at,
         },
     )
+
+
+def _insert_owner_intelligence_fixture(
+    connection,
+    fixed_time: datetime,
+) -> tuple[str, str]:
+    owner_id = record_id("owner", 1)
+    intelligence_id = record_id("intelligence", 1)
+    connection.execute(
+        """
+        INSERT INTO melloa.owners (
+            owner_id, contract_version, status, created_at, document
+        ) VALUES (%s, '1.0.0', 'active', %s, %s)
+        """,
+        (
+            owner_id,
+            fixed_time,
+            Jsonb(
+                {
+                    "contract_version": "1.0.0",
+                    "owner_id": owner_id,
+                    "created_at": fixed_time.isoformat().replace("+00:00", "Z"),
+                    "status": "active",
+                }
+            ),
+        ),
+    )
+    connection.execute(
+        """
+        INSERT INTO melloa.persistent_intelligences (
+            intelligence_id, owner_id, contract_version, role_description,
+            status, created_at, document
+        ) VALUES (%s, %s, '1.0.0', %s, 'active', %s, %s)
+        """,
+        (
+            intelligence_id,
+            owner_id,
+            "Synthetic persistent intelligence",
+            fixed_time,
+            Jsonb(
+                {
+                    "contract_version": "1.0.0",
+                    "intelligence_id": intelligence_id,
+                    "owner_id": owner_id,
+                    "created_at": fixed_time.isoformat().replace("+00:00", "Z"),
+                    "role": "Synthetic persistent intelligence",
+                    "status": "active",
+                    "naming_history": [],
+                }
+            ),
+        ),
+    )
+    return owner_id, intelligence_id
 
 
 def _delivery_authorization(
@@ -376,6 +435,16 @@ def _delivery_resumption(
         authorization_request=request,
         policy_decision=decision,
     )
+
+
+def _sequential_record_id_factory() -> Callable[[str], str]:
+    counts: dict[str, int] = {}
+
+    def create(prefix: str) -> str:
+        counts[prefix] = counts.get(prefix, 0) + 1
+        return record_id(prefix, counts[prefix])
+
+    return create
 
 
 def test_atomic_event_audit_append_is_idempotent(connection, event, audit_content) -> None:
@@ -1521,6 +1590,230 @@ def test_postgres_conversation_completion_is_atomic_cited_and_idempotent(
     assert after_correction.excluded_assertion_ids == (memory.assertion_id,)
 
 
+def test_postgres_conversation_api_persists_content_free_owner_message_audit(
+    connection,
+    fixed_time,
+) -> None:
+    owner_id, intelligence_id = _insert_owner_intelligence_fixture(connection, fixed_time)
+    id_factory = _sequential_record_id_factory()
+    bootstrap_token = "postgres-conversation-audit-bootstrap-token-0001"
+    token_values = iter(("session-one", "csrf-one"))
+    invocations = 0
+
+    def clock() -> datetime:
+        return fixed_time
+
+    def recovering_response(_request: object) -> JsonObject:
+        nonlocal invocations
+        invocations += 1
+        return {"unexpected": True} if invocations == 1 else {"text": "Recovered reply."}
+
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="synthetic-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.postgres-conversation-audit",
+        ),
+        receipt_hash="sha256:" + "6" * 64,
+    )
+    conversation_service = ConversationService(
+        owner_id=owner_id,
+        intelligence_id=intelligence_id,
+        store=PostgresConversationStore(connection, id_factory=id_factory),
+        model_gateway=FakeModelGateway(
+            recovering_response,
+            clock=clock,
+            id_factory=id_factory,
+        ),
+        retriever=PolicyConstrainedRetriever(
+            PostgresMemoryRepository(connection),
+            clock=clock,
+            id_factory=id_factory,
+        ),
+        guardian_reader=guardian,
+        clock=clock,
+        id_factory=id_factory,
+        max_processing_attempts=1,
+        processing_lease=timedelta(seconds=1),
+        retry_base=timedelta(seconds=1),
+        retry_ceiling=timedelta(seconds=4),
+    )
+    sessions = InMemoryOwnerSessionManager(
+        owner_id,
+        bootstrap_token,
+        clock=clock,
+        token_factory=lambda: next(token_values),
+    )
+    app = create_app(
+        guardian,
+        sessions,
+        conversation_service,
+        owner_id=owner_id,
+        event_audit_store=PostgresEventAuditStore(connection),
+        security_event_clock=clock,
+        security_event_id_factory=id_factory,
+    )
+
+    connection.execute("SET ROLE melloa_core")
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            login = client.post(
+                "/api/v1/auth/session",
+                json={"credential": bootstrap_token},
+            )
+            assert login.status_code == 200
+            headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+            created = client.post(
+                "/api/v1/conversations",
+                headers=headers,
+                json={
+                    "title": "Durable conversation audit",
+                    "sensitivity": "personal",
+                    "retention_policy": "retention.owner-conversation",
+                },
+            )
+            assert created.status_code == 201
+            thread_id = created.json()["thread_id"]
+            accept_denied = client.post(
+                f"/api/v1/conversations/{record_id('thread', 99)}/messages",
+                headers=headers,
+                json={
+                    "text": "Missing durable thread request.",
+                    "idempotency_key": "postgres:conversation-audit:missing",
+                },
+            )
+            accept_accepted = client.post(
+                f"/api/v1/conversations/{thread_id}/messages",
+                headers=headers,
+                json={
+                    "text": "Recover this durable request.",
+                    "idempotency_key": "postgres:conversation-audit:accepted",
+                },
+            )
+            message_id = accept_accepted.json()["inbound_message"]["message_id"]
+            resume_accepted = client.post(
+                f"/api/v1/conversations/{thread_id}/messages/{message_id}/resume",
+                headers=headers,
+            )
+            resume_denied = client.post(
+                f"/api/v1/conversations/{thread_id}/messages/"
+                f"{record_id('message', 99)}/resume",
+                headers=headers,
+            )
+    finally:
+        connection.execute("RESET ROLE")
+
+    assert accept_denied.status_code == 404
+    assert accept_accepted.status_code == 202
+    assert accept_accepted.json()["processing"]["state"] == "dead"
+    assert resume_accepted.status_code == 200
+    assert resume_accepted.json()["processing"]["state"] == "completed"
+    assert resume_denied.status_code == 404
+
+    rows = connection.execute(
+        """
+        SELECT event_type, document
+          FROM melloa.canonical_events
+         WHERE event_type LIKE 'conversation.owner-message-%'
+         ORDER BY event_id
+        """
+    ).fetchall()
+    events = tuple(
+        (str(row[0]), EventEnvelope.model_validate_json(canonical_json_bytes(row[1])))
+        for row in rows
+    )
+    assert tuple(event_type for event_type, _event in events) == (
+        "conversation.owner-message-accept-denied.v1",
+        "conversation.owner-message-accept-accepted.v1",
+        "conversation.owner-message-resume-accepted.v1",
+        "conversation.owner-message-resume-denied.v1",
+    )
+    assert events[0][1].payload == {
+        "operation": "accept",
+        "reason_code": "conversation.not_found",
+        "result": "denied",
+        "thread_id": record_id("thread", 99),
+    }
+    assert events[1][1].payload == {
+        "attempt_count": 1,
+        "duplicate": False,
+        "max_attempts": 1,
+        "message_id": message_id,
+        "operation": "accept",
+        "processing_state": "dead",
+        "reason_code": "conversation.owner_message_accept.accepted",
+        "result": "accepted",
+        "resumption_count": 0,
+        "thread_id": thread_id,
+        "work_id": accept_accepted.json()["processing"]["work_id"],
+    }
+    assert events[2][1].payload == {
+        "attempt_count": 2,
+        "duplicate": True,
+        "max_attempts": 2,
+        "message_id": message_id,
+        "operation": "resume",
+        "output_message_id": resume_accepted.json()["output_message"]["message_id"],
+        "processing_state": "completed",
+        "reason_code": "conversation.owner_message_resume.accepted",
+        "result": "accepted",
+        "resumption_count": 1,
+        "thread_id": thread_id,
+        "turn_id": resume_accepted.json()["turn"]["turn_id"],
+        "work_id": resume_accepted.json()["processing"]["work_id"],
+    }
+    assert events[3][1].payload == {
+        "message_id": record_id("message", 99),
+        "operation": "resume",
+        "reason_code": "conversation.not_found",
+        "result": "denied",
+        "thread_id": thread_id,
+    }
+    assert all(event.sensitivity is Sensitivity.INTERNAL for _type, event in events)
+    assert all(
+        event.source.capability_id == "conversation.owner-canonical"
+        for _type, event in events
+    )
+    assert connection.execute(
+        """
+        SELECT array_agg(action_name ORDER BY audit_id)
+          FROM melloa.audit_events
+         WHERE action_name LIKE 'conversation.owner-message-%'
+        """
+    ).fetchone() == (
+        [
+            "conversation.owner-message-accept.denied",
+            "conversation.owner-message-accept.accepted",
+            "conversation.owner-message-resume.accepted",
+            "conversation.owner-message-resume.denied",
+        ],
+    )
+    audit_documents = "\n".join(
+        str(row[0])
+        for row in connection.execute(
+            """
+            SELECT document::text
+              FROM melloa.canonical_events
+             WHERE event_type LIKE 'conversation.owner-message-%'
+            UNION ALL
+            SELECT document::text
+              FROM melloa.audit_events
+             WHERE action_name LIKE 'conversation.owner-message-%'
+            """
+        ).fetchall()
+    )
+    assert "Missing durable thread request." not in audit_documents
+    assert "Recover this durable request." not in audit_documents
+    assert "Recovered reply." not in audit_documents
+    assert "postgres:conversation-audit" not in audit_documents
+    assert "mvp-conversation-v1" not in audit_documents
+    assert "citation" not in audit_documents
+    assert "external_disclosure" not in audit_documents
+    assert "action_hash" not in audit_documents
+
+
 def test_postgres_outbound_completion_is_atomic_idempotent_and_role_scoped(
     connection,
     fixed_time,
@@ -1786,6 +2079,257 @@ def test_postgres_outbound_lease_expiry_requires_core_reauthorization(
     assert counts == (2, 1, 2)
 
 
+def test_postgres_delivery_api_persists_content_free_owner_delivery_audit(
+    connection,
+    database_dsn,
+    fixed_time,
+) -> None:
+    thread, message, _work = _insert_delivery_fixture(connection, fixed_time)
+    id_factory = _sequential_record_id_factory()
+    bootstrap_token = "postgres-delivery-audit-bootstrap-token-0001"
+    token_values = iter(("session-one", "csrf-one"))
+
+    def clock() -> datetime:
+        return fixed_time
+
+    guardian = FakeGuardianStatusReader.from_payload(
+        GuardianStatusPayload(
+            instance_id="synthetic-guardian",
+            mode=GuardianMode.NORMAL,
+            sequence=1,
+            changed_at=fixed_time,
+            reason_code="guardian.postgres-delivery-audit",
+        ),
+        receipt_hash="sha256:" + "7" * 64,
+    )
+    delivery_service = DeliveryService(
+        owner_id=thread.owner_id,
+        intelligence_id=thread.intelligence_id,
+        conversation_store=PostgresConversationStore(connection, id_factory=id_factory),
+        delivery_store=PostgresDeliveryStore(connection, id_factory=id_factory),
+        routes=(
+            ClientDeliveryRoute(
+                adapter_id="client.fake",
+                destination_ref="synthetic:owner",
+                external_destination="synthetic:owner",
+                purpose="conversation.owner_delivery",
+                adapter=FakeClientAdapter(
+                    failure_codes=("channel.synthetic_unavailable",),
+                    clock=clock,
+                    id_factory=id_factory,
+                ),
+                allowed_sensitivities=frozenset(Sensitivity),
+            ),
+        ),
+        guardian_reader=guardian,
+        clock=clock,
+        id_factory=id_factory,
+        max_attempts=1,
+        lease_duration=timedelta(seconds=1),
+        retry_base=timedelta(seconds=1),
+        retry_ceiling=timedelta(seconds=4),
+    )
+    sessions = InMemoryOwnerSessionManager(
+        thread.owner_id,
+        bootstrap_token,
+        clock=clock,
+        token_factory=lambda: next(token_values),
+    )
+    app = create_app(
+        guardian,
+        sessions,
+        delivery_service=delivery_service,
+        owner_id=thread.owner_id,
+        event_audit_store=PostgresEventAuditStore(connection),
+        security_event_clock=clock,
+        security_event_id_factory=id_factory,
+    )
+
+    connection.execute("SET ROLE melloa_core")
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            login = client.post(
+                "/api/v1/auth/session",
+                json={"credential": bootstrap_token},
+            )
+            assert login.status_code == 200
+            headers = {"X-Melloa-CSRF": login.json()["csrf_token"]}
+            path = f"/api/v1/conversations/{thread.thread_id}/deliveries"
+            payload = {
+                "message_id": message.message_id,
+                "client_adapter": "client.fake",
+                "destination_ref": "synthetic:owner",
+                "idempotency_key": "postgres:delivery-audit:accepted",
+            }
+
+            enqueue_denied = client.post(
+                path,
+                headers=headers,
+                json={
+                    **payload,
+                    "destination_ref": "synthetic:missing",
+                    "idempotency_key": "postgres:delivery-audit:denied",
+                },
+            )
+            enqueue_accepted = client.post(path, headers=headers, json=payload)
+            work_id = enqueue_accepted.json()["delivery"]["work_id"]
+            resume_accepted = client.post(
+                f"{path}/{work_id}/resume",
+                headers=headers,
+            )
+            resume_denied = client.post(
+                f"{path}/{record_id('deliverywork', 99)}/resume",
+                headers=headers,
+            )
+    finally:
+        connection.execute("RESET ROLE")
+
+    assert enqueue_denied.status_code == 503
+    assert enqueue_accepted.status_code == 202
+    assert enqueue_accepted.json()["delivery"]["state"] == "dead"
+    assert resume_accepted.status_code == 200
+    assert resume_accepted.json()["state"] == "completed"
+    assert resume_denied.status_code == 404
+
+    with psycopg.connect(database_dsn, autocommit=True) as reloaded_connection:
+        reloaded_connection.execute("SET ROLE melloa_core")
+        persisted_work = PostgresDeliveryStore(reloaded_connection).get_work(work_id)
+        rows = reloaded_connection.execute(
+            """
+            SELECT event_type, document
+              FROM melloa.canonical_events
+             WHERE event_type LIKE 'delivery.owner-%'
+             ORDER BY event_id
+            """
+        ).fetchall()
+        audit_rows = reloaded_connection.execute(
+            """
+            SELECT document
+              FROM melloa.audit_events
+             WHERE action_name LIKE 'delivery.owner-%'
+             ORDER BY audit_id
+            """
+        ).fetchall()
+        audit_actions = reloaded_connection.execute(
+            """
+            SELECT array_agg(action_name ORDER BY audit_id)
+              FROM melloa.audit_events
+             WHERE action_name LIKE 'delivery.owner-%'
+            """
+        ).fetchone()
+        audit_documents = "\n".join(
+            str(row[0])
+            for row in reloaded_connection.execute(
+                """
+                SELECT document::text
+                  FROM melloa.canonical_events
+                 WHERE event_type LIKE 'delivery.owner-%'
+                UNION ALL
+                SELECT document::text
+                  FROM melloa.audit_events
+                 WHERE action_name LIKE 'delivery.owner-%'
+                """
+            ).fetchall()
+        )
+    events = tuple(
+        (str(row[0]), EventEnvelope.model_validate_json(canonical_json_bytes(row[1])))
+        for row in rows
+    )
+    audit_records = tuple(
+        AuditRecord.model_validate_json(canonical_json_bytes(row[0]))
+        for row in audit_rows
+    )
+    assert tuple(event_type for event_type, _event in events) == (
+        "delivery.owner-enqueue-denied.v1",
+        "delivery.owner-enqueue-accepted.v1",
+        "delivery.owner-resume-accepted.v1",
+        "delivery.owner-resume-denied.v1",
+    )
+    assert events[0][1].payload == {
+        "client_adapter": "client.fake",
+        "message_id": message.message_id,
+        "operation": "enqueue",
+        "reason_code": "delivery.route_not_configured",
+        "result": "denied",
+        "thread_id": thread.thread_id,
+    }
+    assert events[1][1].payload == {
+        "attempt_count": 1,
+        "client_adapter": "client.fake",
+        "created": True,
+        "delivery_state": "dead",
+        "max_attempts": 1,
+        "message_id": message.message_id,
+        "operation": "enqueue",
+        "policy_decision_id": enqueue_accepted.json()["delivery"][
+            "current_policy_decision_id"
+        ],
+        "reason_code": "delivery.owner_enqueue.accepted",
+        "result": "accepted",
+        "resumption_count": 0,
+        "thread_id": thread.thread_id,
+        "work_id": work_id,
+    }
+    assert events[2][1].payload == {
+        "attempt_count": 2,
+        "client_adapter": "client.fake",
+        "delivery_state": "completed",
+        "max_attempts": 2,
+        "message_id": message.message_id,
+        "operation": "resume",
+        "policy_decision_id": resume_accepted.json()["current_policy_decision_id"],
+        "reason_code": "delivery.owner_resume.accepted",
+        "result": "accepted",
+        "resumption_count": 1,
+        "thread_id": thread.thread_id,
+        "work_id": work_id,
+    }
+    assert events[3][1].payload == {
+        "operation": "resume",
+        "reason_code": "delivery.not_found",
+        "result": "denied",
+        "thread_id": thread.thread_id,
+        "work_id": record_id("deliverywork", 99),
+    }
+    assert all(event.sensitivity is Sensitivity.INTERNAL for _type, event in events)
+    assert all(
+        event.source.capability_id == "delivery.owner-outbound"
+        for _type, event in events
+    )
+    assert audit_actions == (
+        [
+            "delivery.owner-enqueue.denied",
+            "delivery.owner-enqueue.accepted",
+            "delivery.owner-resume.accepted",
+            "delivery.owner-resume.denied",
+        ],
+    )
+    enqueue_decision_id = enqueue_accepted.json()["delivery"][
+        "current_policy_decision_id"
+    ]
+    resume_decision_id = resume_accepted.json()["current_policy_decision_id"]
+    assert tuple(record.content.decision_id for record in audit_records) == (
+        None,
+        enqueue_decision_id,
+        resume_decision_id,
+        None,
+    )
+    assert persisted_work.policy_decision.decision_id == enqueue_decision_id
+    assert persisted_work.resumptions[0].policy_decision.decision_id == resume_decision_id
+    assert (
+        persisted_work.authorization_request.action_hash
+        == persisted_work.resumptions[0].authorization_request.action_hash
+    )
+    assert "Synthetic durable delivery." not in audit_documents
+    assert "synthetic:owner" not in audit_documents
+    assert "synthetic:missing" not in audit_documents
+    assert "postgres:delivery-audit" not in audit_documents
+    assert bootstrap_token not in audit_documents
+    assert "session-one" not in audit_documents
+    assert "csrf-one" not in audit_documents
+    assert "action_hash" not in audit_documents
+
+
 def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> None:
     bootstrap_token = "durable-owner-bootstrap-token-value-0001"
     guardian = FakeGuardianStatusReader.from_payload(
@@ -1966,7 +2510,7 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
         assert retention.status_code == 200
         inventory = {item["policy_id"]: item for item in retention.json()["inventory"]}
         assert inventory["retention.audit-ledger"]["coverage"] == "complete"
-        assert inventory["retention.audit-ledger"]["retained_objects"] == 3
+        assert inventory["retention.audit-ledger"]["retained_objects"] == 6
         assert inventory["retention.audit-ledger"]["retained_bytes"] > 0
         assert inventory["retention.owner-memory"]["deletion_receipts"] == 1
         health = second_client.get("/api/v1/inspection/health")
@@ -2044,7 +2588,7 @@ def test_postgres_mvp_state_survives_core_restart(database_dsn, fixed_time) -> N
                 (login.json()["principal"]["session_id"],),
             )
         audit_inventory = third_runtime.event_audit_store.audit_retention_inventory()
-        assert audit_inventory.retained_objects == 6
+        assert audit_inventory.retained_objects == 9
         auth_events = third_connections[-1].execute(
             """
             SELECT event_type, document::text

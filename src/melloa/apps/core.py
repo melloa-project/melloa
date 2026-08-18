@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal, cast
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse, JSONResponse
@@ -240,19 +240,48 @@ class _ConfirmTelegramPairingRequest(BaseModel):
     confirmation_code: SecretStr = Field(min_length=20, max_length=128)
 
 
+async def _run_periodic_worker(
+    operation: Callable[[], Awaitable[object]],
+    *,
+    interval: float,
+    failure_message: str,
+    ignored_errors: tuple[type[Exception], ...] = (),
+) -> None:
+    while True:
+        try:
+            await operation()
+        except Exception as error:
+            if not isinstance(error, ignored_errors):
+                _LOGGER.exception(failure_message)
+        await asyncio.sleep(interval)
+
+
+async def _run_periodic_sync_worker(
+    operation: Callable[[], object],
+    *,
+    interval: float,
+    failure_message: str,
+    ignored_errors: tuple[type[Exception], ...] = (),
+) -> None:
+    await _run_periodic_worker(
+        lambda: asyncio.to_thread(operation),
+        interval=interval,
+        failure_message=failure_message,
+        ignored_errors=ignored_errors,
+    )
+
+
 async def _run_conversation_worker(
     service: ConversationService,
     *,
     interval: float,
 ) -> None:
-    while True:
-        try:
-            await asyncio.to_thread(service.process_ready)
-        except ConversationUnavailableError:
-            pass
-        except Exception:
-            _LOGGER.exception("conversation reply worker cycle failed")
-        await asyncio.sleep(interval)
+    await _run_periodic_sync_worker(
+        service.process_ready,
+        interval=interval,
+        failure_message="conversation reply worker cycle failed",
+        ignored_errors=(ConversationUnavailableError,),
+    )
 
 
 async def _run_delivery_worker(
@@ -260,12 +289,32 @@ async def _run_delivery_worker(
     *,
     interval: float,
 ) -> None:
-    while True:
+    await _run_periodic_sync_worker(
+        service.process_ready,
+        interval=interval,
+        failure_message="outbound delivery worker cycle failed",
+    )
+
+
+async def _poll_and_dispatch_telegram(
+    worker: TelegramPollWorker,
+    reply_dispatcher: TelegramReplyDispatcher | None,
+) -> None:
+    try:
+        cycle = await asyncio.to_thread(worker.poll_once)
+        if reply_dispatcher is not None:
+            reply_dispatcher.observe_poll_cycle(cycle)
+    except (TelegramIngestionUnavailableError, TelegramPollingError):
+        pass
+    except Exception:
+        _LOGGER.exception("Telegram poll worker cycle failed")
+    if reply_dispatcher is not None:
         try:
-            await asyncio.to_thread(service.process_ready)
+            await asyncio.to_thread(reply_dispatcher.dispatch_ready)
+        except ConversationUnavailableError:
+            pass
         except Exception:
-            _LOGGER.exception("outbound delivery worker cycle failed")
-        await asyncio.sleep(interval)
+            _LOGGER.exception("Telegram reply dispatch cycle failed")
 
 
 async def _run_telegram_worker(
@@ -274,23 +323,11 @@ async def _run_telegram_worker(
     interval: float,
     reply_dispatcher: TelegramReplyDispatcher | None = None,
 ) -> None:
-    while True:
-        try:
-            cycle = await asyncio.to_thread(worker.poll_once)
-            if reply_dispatcher is not None:
-                reply_dispatcher.observe_poll_cycle(cycle)
-        except (TelegramIngestionUnavailableError, TelegramPollingError):
-            pass
-        except Exception:
-            _LOGGER.exception("Telegram poll worker cycle failed")
-        if reply_dispatcher is not None:
-            try:
-                await asyncio.to_thread(reply_dispatcher.dispatch_ready)
-            except ConversationUnavailableError:
-                pass
-            except Exception:
-                _LOGGER.exception("Telegram reply dispatch cycle failed")
-        await asyncio.sleep(interval)
+    await _run_periodic_worker(
+        lambda: _poll_and_dispatch_telegram(worker, reply_dispatcher),
+        interval=interval,
+        failure_message="Telegram worker cycle failed",
+    )
 
 
 async def _run_telegram_retention_worker(
@@ -298,115 +335,145 @@ async def _run_telegram_retention_worker(
     *,
     interval: float,
 ) -> None:
-    while True:
-        try:
-            await asyncio.to_thread(worker.sweep_once)
-        except TelegramRetentionUnavailableError:
-            pass
-        except Exception:
-            _LOGGER.exception("Telegram attachment retention worker cycle failed")
-        await asyncio.sleep(interval)
+    await _run_periodic_sync_worker(
+        worker.sweep_once,
+        interval=interval,
+        failure_message="Telegram attachment retention worker cycle failed",
+        ignored_errors=(TelegramRetentionUnavailableError,),
+    )
+
+
+def _required_app_state(
+    request: Request,
+    attribute: str,
+    unavailable_detail: str,
+) -> object:
+    value = cast(object | None, getattr(request.app.state, attribute, None))
+    if value is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=unavailable_detail,
+        )
+    return value
 
 
 def _configured_sessions(request: Request) -> OwnerSessionManager:
-    owner_sessions: OwnerSessionManager | None = request.app.state.owner_sessions
-    if owner_sessions is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Owner authentication is not configured.",
-        )
-    return owner_sessions
+    return cast(
+        OwnerSessionManager,
+        _required_app_state(
+            request,
+            "owner_sessions",
+            "Owner authentication is not configured.",
+        ),
+    )
 
 
 def _configured_conversation(request: Request) -> ConversationService:
-    conversation_service: ConversationService | None = request.app.state.conversation_service
-    if conversation_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Canonical conversation is not configured.",
-        )
-    return conversation_service
+    return cast(
+        ConversationService,
+        _required_app_state(
+            request,
+            "conversation_service",
+            "Canonical conversation is not configured.",
+        ),
+    )
 
 
 def _configured_memory(request: Request) -> MemoryService:
-    memory_service: MemoryService | None = request.app.state.memory_service
-    if memory_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Memory inspection and correction are not configured.",
-        )
-    return memory_service
+    return cast(
+        MemoryService,
+        _required_app_state(
+            request,
+            "memory_service",
+            "Memory inspection and correction are not configured.",
+        ),
+    )
 
 
 def _configured_delivery(request: Request) -> DeliveryService:
-    delivery_service: DeliveryService | None = request.app.state.delivery_service
-    if delivery_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Outbound delivery is not configured.",
-        )
-    return delivery_service
+    return cast(
+        DeliveryService,
+        _required_app_state(
+            request,
+            "delivery_service",
+            "Outbound delivery is not configured.",
+        ),
+    )
 
 
 def _configured_inspection(request: Request) -> OwnerInspectionService:
-    inspection_service: OwnerInspectionService | None = request.app.state.inspection_service
-    if inspection_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Owner activity inspection is not configured.",
-        )
-    return inspection_service
+    return cast(
+        OwnerInspectionService,
+        _required_app_state(
+            request,
+            "inspection_service",
+            "Owner activity inspection is not configured.",
+        ),
+    )
 
 
 def _configured_operations(request: Request) -> OwnerOperationsService:
-    operations_service: OwnerOperationsService | None = request.app.state.operations_service
-    if operations_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Owner health and media inspection are not configured.",
-        )
-    return operations_service
+    return cast(
+        OwnerOperationsService,
+        _required_app_state(
+            request,
+            "operations_service",
+            "Owner health and media inspection are not configured.",
+        ),
+    )
 
 
 def _configured_export(request: Request) -> tuple[OwnerExportService, Path]:
-    export_service: OwnerExportService | None = request.app.state.export_service
-    schema_root: Path | None = request.app.state.export_schema_root
-    if export_service is None or schema_root is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Owner export download is not configured.",
-        )
+    export_service = cast(
+        OwnerExportService,
+        _required_app_state(
+            request,
+            "export_service",
+            "Owner export download is not configured.",
+        ),
+    )
+    schema_root = cast(
+        Path,
+        _required_app_state(
+            request,
+            "export_schema_root",
+            "Owner export download is not configured.",
+        ),
+    )
     return export_service, schema_root
 
 
 def _configured_retention(request: Request) -> OwnerRetentionService:
-    retention_service: OwnerRetentionService | None = request.app.state.retention_service
-    if retention_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Owner retention inspection is not configured.",
-        )
-    return retention_service
+    return cast(
+        OwnerRetentionService,
+        _required_app_state(
+            request,
+            "retention_service",
+            "Owner retention inspection is not configured.",
+        ),
+    )
 
 
 def _configured_model_routes(request: Request) -> OwnerModelRouteService:
-    model_route_service: OwnerModelRouteService | None = request.app.state.model_route_service
-    if model_route_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model route inspection is not configured.",
-        )
-    return model_route_service
+    return cast(
+        OwnerModelRouteService,
+        _required_app_state(
+            request,
+            "model_route_service",
+            "Model route inspection is not configured.",
+        ),
+    )
 
 
 def _configured_telegram_pairing(request: Request) -> TelegramPairingService:
-    pairing_service: TelegramPairingService | None = request.app.state.telegram_pairing_service
-    if pairing_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Telegram pairing is not configured.",
-        )
-    return pairing_service
+    return cast(
+        TelegramPairingService,
+        _required_app_state(
+            request,
+            "telegram_pairing_service",
+            "Telegram pairing is not configured.",
+        ),
+    )
 
 
 def _create_export_workspace() -> Path:
@@ -540,6 +607,199 @@ def _append_owner_export_preview_audit(
             "data_file_count": data_file_count,
             "exported_record_count": exported_record_count,
             "limitation_count": payload["limitation_count"],
+        },
+    )
+    event_audit_store.append_event(event, audit)
+
+
+def _append_owner_delivery_audit(
+    request: Request,
+    *,
+    principal: AuthenticatedOwner,
+    operation: Literal["enqueue", "resume"],
+    result: Literal["accepted", "denied"],
+    reason_code: QualifiedName,
+    thread_id: RecordId,
+    message_id: RecordId | None = None,
+    work_id: RecordId | None = None,
+    client_adapter: QualifiedName | None = None,
+    delivery: DeliveryWorkStatus | None = None,
+    created: bool | None = None,
+) -> None:
+    event_audit_store: EventAuditStore | None = request.app.state.event_audit_store
+    owner_id: RecordId | None = request.app.state.owner_id
+    if event_audit_store is None or owner_id is None:
+        return
+    occurred_at = request.app.state.security_event_clock()
+    id_factory: Callable[[str], str] = request.app.state.security_event_id_factory
+    event_id = id_factory("event")
+    audit_id = id_factory("audit")
+    payload: JsonObject = {
+        "operation": operation,
+        "reason_code": reason_code,
+        "result": result,
+        "thread_id": thread_id,
+    }
+    subject_ids: list[RecordId] = [owner_id, thread_id]
+    object_ids: list[RecordId] = [event_id, thread_id]
+    if message_id is not None:
+        payload["message_id"] = message_id
+        subject_ids.append(message_id)
+        object_ids.append(message_id)
+    if work_id is not None:
+        payload["work_id"] = work_id
+        subject_ids.append(work_id)
+        object_ids.append(work_id)
+    if client_adapter is not None:
+        payload["client_adapter"] = client_adapter
+    if created is not None:
+        payload["created"] = created
+    decision_id = None
+    if delivery is not None:
+        decision_id = delivery.current_policy_decision_id
+        payload.update(
+            {
+                "attempt_count": delivery.attempt_count,
+                "delivery_state": delivery.state.value,
+                "max_attempts": delivery.max_attempts,
+                "policy_decision_id": delivery.current_policy_decision_id,
+                "resumption_count": len(delivery.resumptions),
+            }
+        )
+    event = EventEnvelope(
+        event_id=event_id,
+        event_type=f"delivery.owner-{operation}-{result}.v1",
+        schema_version="1.0.0",
+        occurred_at=occurred_at,
+        recorded_at=occurred_at,
+        subject_ids=tuple(dict.fromkeys(subject_ids)),
+        source=EventSource(
+            capability_id="delivery.owner-outbound",
+            execution_id=event_id,
+        ),
+        producer=EventProducer(
+            component="delivery.private-core",
+            version="0.1.0",
+        ),
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        sensitivity=Sensitivity.INTERNAL,
+        trust=TrustLabel.TRUSTED_SYSTEM,
+        retention_policy="retention.audit-ledger",
+        correlation_id=event_id,
+        payload=payload,
+        integrity=EventIntegrity(
+            payload_hash=sha256_digest(canonical_json_bytes(payload))
+        ),
+    )
+    audit = AuditContent(
+        audit_id=audit_id,
+        event_type="audit.event-appended.v1",
+        occurred_at=occurred_at,
+        actor_id=principal.owner_id,
+        action=f"delivery.owner-{operation}.{result}",
+        object_ids=tuple(dict.fromkeys(object_ids)),
+        decision_id=decision_id,
+        metadata={
+            "event_id": event_id,
+            "operation": operation,
+            "reason_code": reason_code,
+            "result": result,
+        },
+    )
+    event_audit_store.append_event(event, audit)
+
+
+def _append_owner_conversation_audit(
+    request: Request,
+    *,
+    principal: AuthenticatedOwner,
+    operation: Literal["accept", "resume"],
+    result: Literal["accepted", "denied"],
+    reason_code: QualifiedName,
+    thread_id: RecordId,
+    message_id: RecordId | None = None,
+    reply: ConversationReply | None = None,
+) -> None:
+    event_audit_store: EventAuditStore | None = request.app.state.event_audit_store
+    owner_id: RecordId | None = request.app.state.owner_id
+    if event_audit_store is None or owner_id is None:
+        return
+    occurred_at = request.app.state.security_event_clock()
+    id_factory: Callable[[str], str] = request.app.state.security_event_id_factory
+    event_id = id_factory("event")
+    audit_id = id_factory("audit")
+    payload: JsonObject = {
+        "operation": operation,
+        "reason_code": reason_code,
+        "result": result,
+        "thread_id": thread_id,
+    }
+    subject_ids: list[RecordId] = [owner_id, thread_id]
+    object_ids: list[RecordId] = [event_id, thread_id]
+    effective_message_id = message_id
+    if reply is not None:
+        effective_message_id = reply.inbound_message.message_id
+        payload.update(
+            {
+                "attempt_count": reply.processing.attempt_count,
+                "duplicate": reply.duplicate,
+                "max_attempts": reply.processing.max_attempts,
+                "processing_state": reply.processing.state.value,
+                "resumption_count": len(reply.processing.resumptions),
+                "work_id": reply.processing.work_id,
+            }
+        )
+        object_ids.append(reply.processing.work_id)
+        subject_ids.append(reply.processing.work_id)
+        if reply.output_message is not None:
+            payload["output_message_id"] = reply.output_message.message_id
+            object_ids.append(reply.output_message.message_id)
+            subject_ids.append(reply.output_message.message_id)
+        if reply.turn is not None:
+            payload["turn_id"] = reply.turn.turn_id
+            object_ids.append(reply.turn.turn_id)
+            subject_ids.append(reply.turn.turn_id)
+    if effective_message_id is not None:
+        payload["message_id"] = effective_message_id
+        object_ids.append(effective_message_id)
+        subject_ids.append(effective_message_id)
+    event = EventEnvelope(
+        event_id=event_id,
+        event_type=f"conversation.owner-message-{operation}-{result}.v1",
+        schema_version="1.0.0",
+        occurred_at=occurred_at,
+        recorded_at=occurred_at,
+        subject_ids=tuple(dict.fromkeys(subject_ids)),
+        source=EventSource(
+            capability_id="conversation.owner-canonical",
+            execution_id=event_id,
+        ),
+        producer=EventProducer(
+            component="conversation.private-core",
+            version="0.1.0",
+        ),
+        epistemic_status=EpistemicStatus.OBSERVATION,
+        sensitivity=Sensitivity.INTERNAL,
+        trust=TrustLabel.TRUSTED_SYSTEM,
+        retention_policy="retention.audit-ledger",
+        correlation_id=event_id,
+        payload=payload,
+        integrity=EventIntegrity(
+            payload_hash=sha256_digest(canonical_json_bytes(payload))
+        ),
+    )
+    audit = AuditContent(
+        audit_id=audit_id,
+        event_type="audit.event-appended.v1",
+        occurred_at=occurred_at,
+        actor_id=principal.owner_id,
+        action=f"conversation.owner-message-{operation}.{result}",
+        object_ids=tuple(dict.fromkeys(object_ids)),
+        metadata={
+            "event_id": event_id,
+            "operation": operation,
+            "reason_code": reason_code,
+            "result": result,
         },
     )
     event_audit_store.append_event(event, audit)
@@ -1449,11 +1709,63 @@ def create_app(
         payload: _PostOwnerMessageRequest,
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner_mutation)],
     ) -> _ConversationReplyResponse:
-        reply: ConversationReply = _configured_conversation(request).post_owner_message(
-            principal,
+        try:
+            reply: ConversationReply = _configured_conversation(
+                request
+            ).post_owner_message(
+                principal,
+                thread_id=thread_id,
+                text=payload.text,
+                idempotency_key=payload.idempotency_key,
+            )
+        except HTTPException:
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="accept",
+                result="denied",
+                reason_code="conversation.service_unconfigured",
+                thread_id=thread_id,
+            )
+            raise
+        except ConversationUnavailableError:
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="accept",
+                result="denied",
+                reason_code="conversation.write_unavailable",
+                thread_id=thread_id,
+            )
+            raise
+        except ConversationConflictError:
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="accept",
+                result="denied",
+                reason_code="conversation.conflict",
+                thread_id=thread_id,
+            )
+            raise
+        except (ConversationNotFoundError, ConversationOwnershipError):
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="accept",
+                result="denied",
+                reason_code="conversation.not_found",
+                thread_id=thread_id,
+            )
+            raise
+        _append_owner_conversation_audit(
+            request,
+            principal=principal,
+            operation="accept",
+            result="accepted",
+            reason_code="conversation.owner_message_accept.accepted",
             thread_id=thread_id,
-            text=payload.text,
-            idempotency_key=payload.idempotency_key,
+            reply=reply,
         )
         if reply.processing.state is not ConversationProcessingState.COMPLETED:
             response.status_code = status.HTTP_202_ACCEPTED
@@ -1476,10 +1788,64 @@ def create_app(
         message_id: RecordId,
         principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner_mutation)],
     ) -> _ConversationReplyResponse:
-        reply = _configured_conversation(request).resume_owner_message(
-            principal,
+        try:
+            reply = _configured_conversation(request).resume_owner_message(
+                principal,
+                thread_id=thread_id,
+                message_id=message_id,
+            )
+        except HTTPException:
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="conversation.service_unconfigured",
+                thread_id=thread_id,
+                message_id=message_id,
+            )
+            raise
+        except ConversationUnavailableError:
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="conversation.write_unavailable",
+                thread_id=thread_id,
+                message_id=message_id,
+            )
+            raise
+        except ConversationConflictError:
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="conversation.conflict",
+                thread_id=thread_id,
+                message_id=message_id,
+            )
+            raise
+        except (ConversationNotFoundError, ConversationOwnershipError):
+            _append_owner_conversation_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="conversation.not_found",
+                thread_id=thread_id,
+                message_id=message_id,
+            )
+            raise
+        _append_owner_conversation_audit(
+            request,
+            principal=principal,
+            operation="resume",
+            result="accepted",
+            reason_code="conversation.owner_message_resume.accepted",
             thread_id=thread_id,
-            message_id=message_id,
+            reply=reply,
         )
         if reply.processing.state is not ConversationProcessingState.COMPLETED:
             response.status_code = status.HTTP_202_ACCEPTED
@@ -1516,13 +1882,89 @@ def create_app(
             Depends(_authenticated_owner_sensitive_mutation),
         ],
     ) -> _DeliverySubmissionResponse:
-        submission: DeliverySubmission = _configured_delivery(request).enqueue_owner_delivery(
-            principal,
+        try:
+            submission: DeliverySubmission = _configured_delivery(
+                request
+            ).enqueue_owner_delivery(
+                principal,
+                thread_id=thread_id,
+                message_id=payload.message_id,
+                client_adapter=payload.client_adapter,
+                destination_ref=payload.destination_ref,
+                idempotency_key=payload.idempotency_key,
+            )
+        except HTTPException:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="enqueue",
+                result="denied",
+                reason_code="delivery.service_unconfigured",
+                thread_id=thread_id,
+                message_id=payload.message_id,
+                client_adapter=payload.client_adapter,
+            )
+            raise
+        except DeliveryUnavailableError as error:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="enqueue",
+                result="denied",
+                reason_code=error.reason_code,
+                thread_id=thread_id,
+                message_id=payload.message_id,
+                client_adapter=payload.client_adapter,
+            )
+            raise
+        except DeliveryConflictError:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="enqueue",
+                result="denied",
+                reason_code="delivery.conflict",
+                thread_id=thread_id,
+                message_id=payload.message_id,
+                client_adapter=payload.client_adapter,
+            )
+            raise
+        except (ConversationNotFoundError, ConversationOwnershipError):
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="enqueue",
+                result="denied",
+                reason_code="delivery.conversation_not_found",
+                thread_id=thread_id,
+                message_id=payload.message_id,
+                client_adapter=payload.client_adapter,
+            )
+            raise
+        except DeliveryOwnershipError:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="enqueue",
+                result="denied",
+                reason_code="delivery.not_found",
+                thread_id=thread_id,
+                message_id=payload.message_id,
+                client_adapter=payload.client_adapter,
+            )
+            raise
+        _append_owner_delivery_audit(
+            request,
+            principal=principal,
+            operation="enqueue",
+            result="accepted",
+            reason_code="delivery.owner_enqueue.accepted",
             thread_id=thread_id,
-            message_id=payload.message_id,
-            client_adapter=payload.client_adapter,
-            destination_ref=payload.destination_ref,
-            idempotency_key=payload.idempotency_key,
+            message_id=submission.status.message_id,
+            work_id=submission.status.work_id,
+            client_adapter=submission.status.client_adapter,
+            delivery=submission.status,
+            created=submission.created,
         )
         if submission.status.state is not DeliveryWorkState.COMPLETED:
             response.status_code = status.HTTP_202_ACCEPTED
@@ -1561,10 +2003,78 @@ def create_app(
             Depends(_authenticated_owner_sensitive_mutation),
         ],
     ) -> DeliveryWorkStatus:
-        delivery = _configured_delivery(request).resume_delivery(
-            principal,
+        try:
+            delivery = _configured_delivery(request).resume_delivery(
+                principal,
+                thread_id=thread_id,
+                work_id=work_id,
+            )
+        except HTTPException:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="delivery.service_unconfigured",
+                thread_id=thread_id,
+                work_id=work_id,
+            )
+            raise
+        except DeliveryUnavailableError as error:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code=error.reason_code,
+                thread_id=thread_id,
+                work_id=work_id,
+            )
+            raise
+        except DeliveryConflictError:
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="delivery.conflict",
+                thread_id=thread_id,
+                work_id=work_id,
+            )
+            raise
+        except (DeliveryNotFoundError, DeliveryOwnershipError):
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="delivery.not_found",
+                thread_id=thread_id,
+                work_id=work_id,
+            )
+            raise
+        except (ConversationNotFoundError, ConversationOwnershipError):
+            _append_owner_delivery_audit(
+                request,
+                principal=principal,
+                operation="resume",
+                result="denied",
+                reason_code="delivery.conversation_not_found",
+                thread_id=thread_id,
+                work_id=work_id,
+            )
+            raise
+        _append_owner_delivery_audit(
+            request,
+            principal=principal,
+            operation="resume",
+            result="accepted",
+            reason_code="delivery.owner_resume.accepted",
             thread_id=thread_id,
-            work_id=work_id,
+            message_id=delivery.message_id,
+            work_id=delivery.work_id,
+            client_adapter=delivery.client_adapter,
+            delivery=delivery,
         )
         if delivery.state is not DeliveryWorkState.COMPLETED:
             response.status_code = status.HTTP_202_ACCEPTED

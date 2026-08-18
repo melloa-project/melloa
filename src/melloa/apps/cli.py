@@ -16,7 +16,7 @@ from typing import NoReturn
 import psycopg
 import uvicorn
 
-from melloa.adapters.guardian.file import FileGuardianStatusReader
+from melloa.adapters.guardian.file import FileGuardianStatusReader, GuardianVerificationError
 from melloa.adapters.models.codex_cli import load_codex_cli_route_config
 from melloa.adapters.models.openai_compatible import load_openai_compatible_route_config
 from melloa.adapters.postgres.migrations import (
@@ -93,12 +93,20 @@ def _read_secret_file(path: Path) -> str:
 
 
 def _read_owner_credential_file(path: Path) -> str:
-    metadata = path.lstat()
+    try:
+        metadata = path.lstat()
+    except OSError:
+        _exit_error("owner credential path must be a securely readable regular file")
     if not stat.S_ISREG(metadata.st_mode):
         _exit_error("owner credential path must be a regular file")
     if metadata.st_mode & 0o077:
         _exit_error("owner credential file must not be accessible by group or others")
-    value = path.read_text(encoding="utf-8").strip()
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except UnicodeDecodeError:
+        _exit_error("owner credential file must contain UTF-8 text")
+    except OSError:
+        _exit_error("owner credential file could not be read securely")
     if not 32 <= len(value) <= 4096:
         _exit_error("owner credential file must contain between 32 and 4096 characters")
     return value
@@ -151,7 +159,10 @@ def doctor(_args: argparse.Namespace) -> int:
 
 
 def guardian_status(args: argparse.Namespace) -> int:
-    verified = _guardian_reader(args).read_status()
+    try:
+        verified = _guardian_reader(args).read_status()
+    except GuardianVerificationError as error:
+        _exit_error(f"Guardian status rejected: {error}")
     print(verified.model_dump_json(indent=2))
     return 0
 
@@ -414,6 +425,8 @@ def export_mvp(args: argparse.Namespace) -> int:
             _exit_error(
                 "MVP database unavailable or incompatible; connection details were not logged"
             )
+        except GuardianVerificationError as error:
+            _exit_error(f"Guardian status rejected: {error}")
         except (ExportBundleError, OSError, ValueError) as error:
             _exit_error(f"MVP export rejected: {error}")
     print(

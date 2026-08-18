@@ -522,7 +522,7 @@ def test_synthetic_runtime_exercises_private_m1_workflows_without_disclosure(
     }
     audit_after_deletion = inventory_after_deletion["retention.audit-ledger"]
     assert audit_after_deletion["coverage"] == "complete"
-    assert audit_after_deletion["retained_objects"] == 6
+    assert audit_after_deletion["retained_objects"] == 7
     assert audit_after_deletion["retained_bytes"] > 0
     assert audit_after_deletion["oldest_retained_at"] is not None
     memory_after_deletion = inventory_after_deletion["retention.owner-memory"]

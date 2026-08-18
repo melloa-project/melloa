@@ -141,6 +141,64 @@ def test_owner_credential_file_requires_private_permissions_and_valid_length(tmp
         cli._read_owner_credential_file(credential_file)
 
 
+def test_owner_credential_file_missing_has_bounded_first_run_error(
+    tmp_path,
+    capsys,
+) -> None:
+    with pytest.raises(SystemExit) as captured:
+        cli._read_owner_credential_file(tmp_path / "missing-owner-credential")
+
+    assert captured.value.code == 2
+    error = capsys.readouterr().err
+    assert "owner credential path must be a securely readable regular file" in error
+    assert "Traceback" not in error
+
+
+def test_serve_mvp_missing_owner_credential_has_bounded_first_run_error(
+    tmp_path,
+    capsys,
+) -> None:
+    args = argparse.Namespace(
+        guardian_status=tmp_path / "guardian-status.json",
+        guardian_public_key=tmp_path / "guardian-public.pem",
+        owner_credential_file=tmp_path / "missing-owner-credential",
+        model_route_config=[],
+        cli_agent_route_config=[],
+        database_dsn_file=None,
+        telegram_bot_token_file=None,
+        telegram_api_base_url="https://api.telegram.org",
+        host="127.0.0.1",
+        port=8000,
+    )
+
+    with pytest.raises(SystemExit) as captured:
+        cli.serve_mvp(args)
+
+    assert captured.value.code == 2
+    error = capsys.readouterr().err
+    assert "owner credential path must be a securely readable regular file" in error
+    assert "Traceback" not in error
+
+
+def test_guardian_status_missing_file_has_bounded_first_run_error(
+    tmp_path,
+    capsys,
+) -> None:
+    args = argparse.Namespace(
+        guardian_status=tmp_path / "missing-status.json",
+        guardian_public_key=tmp_path / "missing-public.pem",
+    )
+
+    with pytest.raises(SystemExit) as captured:
+        cli.guardian_status(args)
+
+    assert captured.value.code == 2
+    error = capsys.readouterr().err
+    assert "Guardian status rejected: cannot inspect Guardian file" in error
+    assert "missing-status.json" in error
+    assert "Traceback" not in error
+
+
 def test_serve_synthetic_wires_explicit_process_local_runtime(
     monkeypatch,
     tmp_path,
@@ -762,6 +820,30 @@ def test_export_mvp_writes_validated_bundle_without_printing_owner_credential(
     assert "export_00000000000000000000000000000001" in output
     assert "assertions/inspections.jsonl" in output
     assert bootstrap_token not in output
+
+
+def test_export_mvp_missing_guardian_status_has_bounded_first_run_error(
+    tmp_path,
+    capsys,
+) -> None:
+    credential_file = tmp_path / "owner-credential"
+    credential_file.write_text("synthetic-owner-bootstrap-token-value-0001", encoding="utf-8")
+    credential_file.chmod(0o600)
+    args = argparse.Namespace(
+        guardian_status=tmp_path / "missing-status.json",
+        guardian_public_key=tmp_path / "missing-public.pem",
+        owner_credential_file=credential_file,
+        database_dsn_file=None,
+        output_dir=tmp_path / "export",
+    )
+
+    with pytest.raises(SystemExit) as captured:
+        cli.export_mvp(args)
+
+    assert captured.value.code == 2
+    error = capsys.readouterr().err
+    assert "Guardian status rejected: cannot inspect Guardian file" in error
+    assert "Traceback" not in error
 
 
 def test_parser_exposes_mvp_export_and_import_validation() -> None:
