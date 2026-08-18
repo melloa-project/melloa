@@ -14,7 +14,7 @@ dad31822f08fa134f602faea18c1cfff01254768770c0bdc04df67759094d11c  ./IMPLEMENTATI
 fb0c00945d787cc43bb7862fdcb5a1528db9d4adeb680d549abe32eb2c79ac17  ./Makefile
 9dc115332c02a5385bd9a86650b58c32057f51bee24f8ab4afcf30abb8e6eb3d  ./README.md
 611eed4b37fd59aedd7698486c197fdce218aa03cde892368efc1b6a1b02ce32  ./SECURITY.md
-527b8930bc08a21660cbd6316e7665087a9fe6b97ef0fccf7aa01c4cf4481e14  ./VALIDATION.md
+1a71be776f7571a37d19f66996c5407f8c10ec30b538dffa0e6692ac3c0dcc7a  ./VALIDATION.md
 3a951f66e7e0f3e2dd1832473a871357c4a507b51100636b73bcf6ff0dd78b6c  ./apps/web/.npmrc
 88c5a2bdbbfd7827c10510eaa0e94d70d9eff8581ec19ba75218509eb38f6122  ./apps/web/index.html
 a6d6c1d19d09c0ae8f496e56d6343445aacd16177893758cb22f1c2fd177ce63  ./apps/web/package-lock.json
@@ -250,7 +250,7 @@ f6fb42e0905a5a8664e7fbb57e95307dd03b9c2042ac439e4a15c59c78608de9  ./src/melloa/a
 3542c2f8d214f641e19a0c42c02d607b9be7627200a66f451a7947f4632984f8  ./src/melloa/apps/__init__.py
 ec4963e2290f3e1df43c20b9b925d0dafc6bb77c36d30e4a8ee62649c238fa60  ./src/melloa/apps/cli.py
 2bf54c573e31b941000940c6846272f44bbeac6588fcb82d0bec3492f49e1aad  ./src/melloa/apps/core.py
-fffef0658e68f2898b3fd10a4631f9a423a9d1b776ff0c9a32855b3e37c81270  ./src/melloa/apps/local_preview.py
+04738a01ba491c9c24c5aabb0c624196a5de8393ee3b2b08a84845dcd2939f91  ./src/melloa/apps/local_preview.py
 f69f77cb917da49f776e671d1b57fd4396e07cd59b8a6e84bd6fe96fc70d70b1  ./src/melloa/apps/mvp.py
 121d872c56740fe1a113341d10fcaafd801b6a2d2b2d821da31780911526d4b1  ./src/melloa/apps/postgres_mvp.py
 42b3a044bc5982f6616ba7702b42f577004b47368fc40d98c2812217e0caadfc  ./src/melloa/apps/synthetic.py
@@ -306,7 +306,7 @@ b11316128923190e30f8852ca1f3ba7675f55fcd77dc29f6721bbde924cf540c  ./tests/unit/t
 0194e352545c14d84ae46360efa6486859403729dff94558fc6be070ae9fd842  ./tests/unit/test_generate_dependency_sbom.py
 db70da99f1576a292c6a0ee6a5e41baaa12173ccf4d2c614f7ae62e3701d3647  ./tests/unit/test_guardian_adapter.py
 7981fef5ae7971219910c0c24f7b4be655bac49d044e2e13035e7361d1112fc7  ./tests/unit/test_inspection.py
-5b79edca9c58f6b5258ff7fe8665d0736235924e3520ebac4a74f28a6e856f15  ./tests/unit/test_local_preview.py
+5e5427a0cc11e43360f2122a08707bf864160963924a28efb629d8eae406c184  ./tests/unit/test_local_preview.py
 d5355204c7c50cbf350ad115db4cdfe9236b8a364a4cf0da27b9ce0ff3a039c9  ./tests/unit/test_memory.py
 e573996d9011a88a4ad86735df16677f9c7941cdd11883a8cbd3441c18e8c725  ./tests/unit/test_memory_api.py
 de02d65c601cd52a9ed0c0e991f9f26eaaa3b4b54d92276a8a718924e8618078  ./tests/unit/test_migrations.py

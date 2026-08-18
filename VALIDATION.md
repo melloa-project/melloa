@@ -34,7 +34,7 @@ All current automated architecture checks, deterministic core and web gates, Pos
 
 | Gate | Result |
 |---|---|
-| Python quality | PASS — Ruff, strict mypy across 80 source files, and 518 unit tests with 90.26% branch-aware coverage |
+| Python quality | PASS — Ruff, strict mypy across 80 source files, and 519 unit tests with 90.27% branch-aware coverage |
 | Generated contracts | PASS — JSON Schemas and the ten-version migration digest manifest match their sources; release manifest matches a clean Git export |
 | Owner Console | PASS — TypeScript check, 158 Vitest tests across 13 files, production build, and authenticated Playwright desktop/mobile journey |
 | Owner journey | PASS — the canonical launcher creates signed offline Guardian state, starts the private core and production console, reports its contract and next action, then covers login, canonical conversation, synthetic route/provenance inspection, activity, memory inspection, owner ZIP export, audit timeline, retention/provider/settings views, responsive navigation, and verified cleanup |

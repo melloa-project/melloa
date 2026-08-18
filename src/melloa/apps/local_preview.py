@@ -425,7 +425,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _signal_as_interrupt(_signum: int, _frame: FrameType | None) -> None:
+def _signal_as_interrupt(signum: int, _frame: FrameType | None) -> None:
+    # Process supervisors can deliver SIGTERM directly and then forward it to
+    # the child. Treat shutdown as a one-shot request so a duplicate cannot
+    # interrupt child termination or disposable-state removal.
+    signal.signal(signum, signal.SIG_IGN)
     raise KeyboardInterrupt
 
 

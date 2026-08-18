@@ -503,3 +503,19 @@ def test_required_file_and_port_errors_are_bounded(tmp_path: Path) -> None:
 def test_parser_rejects_invalid_ports() -> None:
     with pytest.raises(SystemExit):
         local_preview.build_parser().parse_args(["--web-port", "0"])
+
+
+def test_sigterm_shutdown_request_ignores_duplicate_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    installed: list[tuple[int, object]] = []
+    monkeypatch.setattr(
+        local_preview.signal,
+        "signal",
+        lambda signum, handler: installed.append((signum, handler)),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        local_preview._signal_as_interrupt(signal.SIGTERM, None)
+
+    assert installed == [(signal.SIGTERM, signal.SIG_IGN)]
