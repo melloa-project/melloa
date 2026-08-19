@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { MelloaApi, type AuthenticatedOwner } from "../src/api";
 
@@ -85,11 +85,15 @@ describe("MelloaApi", () => {
         : jsonResponse({ code: "csrf_validation_failed", message: "Invalid browser proof." }, 403);
     });
 
+    const proofChanged = vi.fn();
+    const unsubscribe = api.subscribeMutationProof(proofChanged);
     await api.login("owner-credential");
     await expect(api.postMessage("thread_1", "hello", "browser:1")).rejects.toMatchObject({
       code: "csrf_validation_failed",
     });
     expect(api.hasMutationProof).toBe(false);
+    expect(proofChanged).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 
   it("uses the small owner-facing route set", async () => {

@@ -6,7 +6,7 @@
   text-rendering: optimizeLegibility;
   --ink: #202722;
   --muted: #68726b;
-  --faint: #89918b;
+  --faint: #68726b;
   --line: #dfe4de;
   --line-strong: #cdd5ce;
   --canvas: #f6f7f3;
@@ -62,7 +62,7 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 3px solid rgb(49 95 147 / 24%);
+  outline: 3px solid #315f93;
   outline-offset: 2px;
 }
 
@@ -360,6 +360,30 @@ dd {
   font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.02em;
+}
+
+.thread-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thread-panel-close {
+  display: none;
+}
+
+.thread-error {
+  display: flex;
+  margin: 0 2px 6px;
+  padding: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1.45;
+  background: var(--red-soft);
+  border-radius: 10px;
 }
 
 .thread-list {
@@ -712,8 +736,8 @@ dd {
 }
 
 .composer:focus-within {
-  border-color: #8bb6a5;
-  box-shadow: 0 0 0 3px rgb(23 107 84 / 8%), 0 10px 32px rgb(24 46 35 / 9%);
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green), 0 10px 32px rgb(24 46 35 / 9%);
 }
 
 .composer textarea {
@@ -732,7 +756,7 @@ dd {
 }
 
 .composer textarea::placeholder {
-  color: #929a94;
+  color: var(--muted);
 }
 
 .composer-hint {
@@ -1516,6 +1540,10 @@ dd {
   }
 
   .thread-panel-toggle {
+    display: inline-flex;
+  }
+
+  .thread-panel-close {
     display: inline-flex;
   }
 

@@ -59,6 +59,7 @@ export function App() {
   const [booting, setBooting] = useState(true);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [mutationProofVersion, setMutationProofVersion] = useState(0);
   const statusRefreshRequestRef = useRef(0);
 
   const notify = useCallback((message: string, tone: Notice["tone"] = "info") => {
@@ -92,6 +93,12 @@ export function App() {
       }
     }
   }, [notify]);
+
+  useEffect(() => {
+    return api.subscribeMutationProof(() => {
+      setMutationProofVersion((current) => current + 1);
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -162,7 +169,18 @@ export function App() {
       notify,
       dismissNotice,
     };
-  }, [dismissNotice, login, logout, notices, notify, nowMs, principal, refreshStatus, status]);
+  }, [
+    dismissNotice,
+    login,
+    logout,
+    mutationProofVersion,
+    notices,
+    notify,
+    nowMs,
+    principal,
+    refreshStatus,
+    status,
+  ]);
 
   if (booting) {
     return <div className="boot-screen"><LoadingState label="Opening the private console" /></div>;

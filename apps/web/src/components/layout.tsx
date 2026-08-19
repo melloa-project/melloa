@@ -3,6 +3,7 @@ import {
   type FormEvent,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -42,11 +43,15 @@ export function AppLayout() {
   } = useMelloa();
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthenticating, setReauthenticating] = useState(false);
+  const reauthTriggerRef = useRef<HTMLElement | null>(null);
   const [reauthReason, setReauthReason] = useState(
     "Re-enter your local owner credential to continue.",
   );
 
   const openUnlock = useMemo<UnlockOwner>(() => (reason) => {
+    reauthTriggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setReauthReason(reason ?? "Re-enter your local owner credential to continue.");
     setReauthOpen(true);
   }, []);
@@ -134,6 +139,7 @@ export function AppLayout() {
           description={reauthReason}
           onClose={() => setReauthOpen(false)}
           open={reauthOpen}
+          returnFocusRef={reauthTriggerRef}
           title="Confirm it’s you"
         >
           <form className="stack-form" onSubmit={(event) => void reauthenticate(event)}>

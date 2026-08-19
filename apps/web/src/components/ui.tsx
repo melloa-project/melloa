@@ -1,7 +1,9 @@
 import {
   type ButtonHTMLAttributes,
   type HTMLAttributes,
+  type RefObject,
   type ReactNode,
+  forwardRef,
   useEffect,
   useId,
   useRef,
@@ -14,7 +16,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   readonly loading?: boolean;
 };
 
-export function Button({
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
   tone = "secondary",
   size = "md",
   loading = false,
@@ -22,18 +24,19 @@ export function Button({
   disabled,
   children,
   ...props
-}: ButtonProps) {
+}, ref) {
   return (
     <button
       className={`button button-${tone} button-${size} ${className}`}
       disabled={disabled === true || loading}
+      ref={ref}
       {...props}
     >
       {loading ? <LoaderCircle aria-hidden="true" className="spin" size={16} /> : null}
       {children}
     </button>
   );
-}
+});
 
 export function IconButton({
   label,
@@ -155,12 +158,14 @@ export function Modal({
   title,
   description,
   onClose,
+  returnFocusRef,
   children,
 }: {
   readonly open: boolean;
   readonly title: string;
   readonly description?: string;
   readonly onClose: () => void;
+  readonly returnFocusRef?: RefObject<HTMLElement | null>;
   readonly children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -174,9 +179,8 @@ export function Modal({
       return;
     }
     const dialog = dialogRef.current;
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
+    const previouslyFocused = returnFocusRef?.current
+      ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     if (dialog === null) {
       return;
     }
@@ -221,7 +225,7 @@ export function Modal({
         previouslyFocused.focus();
       }
     };
-  }, [open]);
+  }, [open, returnFocusRef]);
 
   if (!open) {
     return null;

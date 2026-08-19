@@ -168,6 +168,7 @@ type RequestOptions = {
 export class MelloaApi {
   readonly #fetch: FetchLike;
   #csrfToken: string | null = null;
+  readonly #mutationProofListeners = new Set<() => void>();
 
   constructor(fetcher: FetchLike = (input, init) => fetch(input, init)) {
     this.#fetch = fetcher;
@@ -175,6 +176,11 @@ export class MelloaApi {
 
   get hasMutationProof(): boolean {
     return this.#csrfToken !== null;
+  }
+
+  subscribeMutationProof(listener: () => void): () => void {
+    this.#mutationProofListeners.add(listener);
+    return () => this.#mutationProofListeners.delete(listener);
   }
 
   async login(credential: string): Promise<AuthenticatedOwner> {
@@ -185,7 +191,7 @@ export class MelloaApi {
       method: "POST",
       body: { credential },
     });
-    this.#csrfToken = issued.csrf_token;
+    this.#setCsrfToken(issued.csrf_token);
     return issued.principal;
   }
 
@@ -208,7 +214,7 @@ export class MelloaApi {
     try {
       await this.#request<void>("/api/v1/auth/session", { method: "DELETE", csrf: true });
     } finally {
-      this.#csrfToken = null;
+      this.#setCsrfToken(null);
     }
   }
 
@@ -319,13 +325,23 @@ export class MelloaApi {
       const error = isObject(payload) ? payload : {};
       const code = typeof error.code === "string" ? error.code : `http_${response.status}`;
       if (response.status === 401 || code === "csrf_validation_failed") {
-        this.#csrfToken = null;
+        this.#setCsrfToken(null);
       }
       const detail = typeof error.detail === "string" ? error.detail : undefined;
       const message = typeof error.message === "string" ? error.message : detail;
       throw new ApiError(response.status, code, message ?? "Melloa API request failed.");
     }
     return response;
+  }
+
+  #setCsrfToken(value: string | null): void {
+    if (this.#csrfToken === value) {
+      return;
+    }
+    this.#csrfToken = value;
+    for (const listener of this.#mutationProofListeners) {
+      listener();
+    }
   }
 }
 

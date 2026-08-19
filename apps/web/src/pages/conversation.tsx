@@ -27,7 +27,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import type {
   ConversationMessage,
   ConversationProcessingStatus,
+  ConversationReply,
   ConversationThread,
+  ConversationTranscript,
   ConversationTurn,
   ConversationTurnInspection,
 } from "../api";
@@ -35,7 +37,6 @@ import { errorMessage, useMelloa } from "../app";
 import { useOwnerUnlock } from "../components/layout";
 import { Badge, Button, ErrorState, LoadingState, Modal } from "../components/ui";
 import {
-  asObjectArray,
   formatDurationMs,
   formatInstant,
   messageBody,
@@ -54,6 +55,25 @@ const starterPrompts = [
 
 type ModelAvailability = "checking" | "ready" | "unavailable";
 
+type ConversationView = ConversationTranscript & {
+  readonly initialized: boolean;
+  readonly loading: boolean;
+  readonly error: string | null;
+};
+
+type FailedSend = {
+  readonly text: string;
+  readonly idempotencyKey: string;
+  readonly message: string;
+};
+
+type OptimisticSend = {
+  readonly message: ConversationMessage;
+  readonly knownMessageIds: readonly string[];
+};
+
+const newConversationKey = "new-conversation";
+
 export function ConversationPage() {
   const { api, principal, canWrite, notify } = useMelloa();
   const openUnlock = useOwnerUnlock();
@@ -62,37 +82,48 @@ export function ConversationPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
+  const threadPanelRef = useRef<HTMLElement | null>(null);
+  const threadPanelToggleRef = useRef<HTMLButtonElement | null>(null);
   const shouldFollowConversationRef = useRef(true);
-  const conversationRequestRef = useRef(0);
+  const currentThreadIdRef = useRef<string | undefined>(threadId);
+  const threadRequestRef = useRef(0);
+  const conversationRequestRefs = useRef(new Map<string, number>());
+  const conversationInFlightRefs = useRef(new Map<string, number>());
+  const createRequestRef = useRef(0);
+  const inspectionRequestRef = useRef(0);
   const [threads, setThreads] = useState<readonly ConversationThread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
-  const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
-  const [turns, setTurns] = useState<readonly ConversationTurn[]>([]);
-  const [processing, setProcessing] = useState<readonly ConversationProcessingStatus[]>([]);
-  const [transcriptThreadId, setTranscriptThreadId] = useState<string | null>(null);
-  const [optimisticMessage, setOptimisticMessage] = useState<ConversationMessage | null>(null);
-  const [conversationLoading, setConversationLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [sendFailure, setSendFailure] = useState<string | null>(null);
-  const [retrySend, setRetrySend] = useState<{
-    readonly text: string;
-    readonly idempotencyKey: string;
-  } | null>(null);
-  const [sending, setSending] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [conversationViews, setConversationViews] = useState<Readonly<Record<string, ConversationView>>>({});
+  const [optimisticSends, setOptimisticSends] = useState<Readonly<Record<string, OptimisticSend>>>({});
+  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+  const [sendFailures, setSendFailures] = useState<Readonly<Record<string, FailedSend>>>({});
+  const [sendingThreadIds, setSendingThreadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [resumingMessageIds, setResumingMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   const [creating, setCreating] = useState(false);
   const [modelAvailability, setModelAvailability] = useState<ModelAvailability>("checking");
   const [threadPanelOpen, setThreadPanelOpen] = useState(false);
   const [inspection, setInspection] = useState<ConversationTurnInspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
 
+  currentThreadIdRef.current = threadId;
+  const viewKey = threadId ?? newConversationKey;
   const selectedThread = threads.find((thread) => thread.thread_id === threadId) ?? null;
-  const transcriptIsCurrent = transcriptThreadId === (threadId ?? null);
-  const visibleMessages = transcriptIsCurrent ? messages : [];
-  const visibleTurns = transcriptIsCurrent ? turns : [];
-  const visibleProcessing = transcriptIsCurrent ? processing : [];
-  const displayedMessages = optimisticMessage !== null && optimisticMessage.thread_id === threadId
-    ? [...visibleMessages, optimisticMessage]
+  const conversationView = threadId === undefined ? undefined : conversationViews[threadId];
+  const transcriptIsCurrent = threadId === undefined || conversationView?.initialized === true;
+  const visibleMessages = conversationView?.messages ?? [];
+  const visibleTurns = conversationView?.turns ?? [];
+  const visibleProcessing = conversationView?.processing ?? [];
+  const optimisticSend = threadId === undefined ? undefined : optimisticSends[threadId];
+  const optimisticRecorded = optimisticSend === undefined
+    ? false
+    : visibleMessages.some((message) => (
+      !optimisticSend.knownMessageIds.includes(message.message_id)
+      && message.author_principal_id === principal.owner_id
+      && messageBody(message) === messageBody(optimisticSend.message)
+    ));
+  const displayedMessages = optimisticSend !== undefined && !optimisticRecorded
+    ? [...visibleMessages, optimisticSend.message]
     : visibleMessages;
   const turnByOutputMessage = useMemo(
     () => new Map(visibleTurns.flatMap((turn) => turn.output_message_ids.map((id) => [id, turn] as const))),
@@ -103,18 +134,54 @@ export function ConversationPage() {
     [visibleProcessing],
   );
   const hasPendingWork = visibleProcessing.some((status) => !terminalProcessingStates.has(status.state));
+  const conversationLoading = threadId !== undefined && (conversationView?.loading ?? true);
+  const conversationError = conversationView?.error ?? null;
+  const draft = drafts[viewKey] ?? "";
+  const sendFailure = sendFailures[viewKey];
+  const sending = threadId !== undefined && sendingThreadIds.has(threadId);
+
+  const updateConversation = useCallback((
+    selectedId: string,
+    update: (current: ConversationView) => ConversationView,
+  ) => {
+    setConversationViews((current) => ({
+      ...current,
+      [selectedId]: update(current[selectedId] ?? emptyConversationView()),
+    }));
+  }, []);
+
+  const setDraft = useCallback((key: string, value: string) => {
+    setDrafts((current) => ({ ...current, [key]: value }));
+  }, []);
+
+  const invalidateConversationRequest = useCallback((selectedId: string) => {
+    conversationRequestRefs.current.set(
+      selectedId,
+      (conversationRequestRefs.current.get(selectedId) ?? 0) + 1,
+    );
+    conversationInFlightRefs.current.delete(selectedId);
+  }, []);
 
   const loadThreads = useCallback(async () => {
+    const requestId = threadRequestRef.current + 1;
+    threadRequestRef.current = requestId;
     try {
       const next = await api.listThreads();
+      if (requestId !== threadRequestRef.current) {
+        return next;
+      }
       setThreads(next);
-      setError(null);
+      setThreadError(null);
       return next;
     } catch (caught) {
-      setError(errorMessage(caught));
+      if (requestId === threadRequestRef.current) {
+        setThreadError(errorMessage(caught));
+      }
       return [] as const;
     } finally {
-      setThreadsLoading(false);
+      if (requestId === threadRequestRef.current) {
+        setThreadsLoading(false);
+      }
     }
   }, [api]);
 
@@ -132,44 +199,53 @@ export function ConversationPage() {
     }
   }, [api]);
 
-  const loadConversation = useCallback(async (selectedId: string, quiet = false) => {
-    const requestId = conversationRequestRef.current + 1;
-    conversationRequestRef.current = requestId;
+  const loadConversation = useCallback(async (
+    selectedId: string,
+    quiet = false,
+  ): Promise<ConversationTranscript | null> => {
+    if (quiet && conversationInFlightRefs.current.has(selectedId)) {
+      return null;
+    }
+    const requestId = (conversationRequestRefs.current.get(selectedId) ?? 0) + 1;
+    conversationRequestRefs.current.set(selectedId, requestId);
+    conversationInFlightRefs.current.set(selectedId, requestId);
     if (!quiet) {
-      setConversationLoading(true);
-      setMessages([]);
-      setTurns([]);
-      setProcessing([]);
-      setTranscriptThreadId(null);
+      updateConversation(selectedId, (current) => ({
+        ...current,
+        loading: true,
+        error: null,
+      }));
       shouldFollowConversationRef.current = true;
     }
     try {
       const transcript = await api.transcript(selectedId);
-      if (requestId !== conversationRequestRef.current) {
-        return;
+      if (requestId !== conversationRequestRefs.current.get(selectedId)) {
+        return null;
       }
-      setMessages(transcript.messages);
-      setTurns(transcript.turns);
-      setProcessing(transcript.processing);
-      setTranscriptThreadId(selectedId);
-      setError(null);
+      updateConversation(selectedId, () => ({
+        ...transcript,
+        initialized: true,
+        loading: false,
+        error: null,
+      }));
+      return transcript;
     } catch (caught) {
-      if (requestId !== conversationRequestRef.current) {
-        return;
+      if (requestId !== conversationRequestRefs.current.get(selectedId)) {
+        return null;
       }
-      if (!quiet) {
-        setMessages([]);
-        setTurns([]);
-        setProcessing([]);
-        setTranscriptThreadId(selectedId);
-        setError(errorMessage(caught));
-      }
+      updateConversation(selectedId, (current) => ({
+        ...current,
+        initialized: true,
+        loading: false,
+        error: errorMessage(caught),
+      }));
+      return null;
     } finally {
-      if (requestId === conversationRequestRef.current) {
-        setConversationLoading(false);
+      if (requestId === conversationInFlightRefs.current.get(selectedId)) {
+        conversationInFlightRefs.current.delete(selectedId);
       }
     }
-  }, [api]);
+  }, [api, updateConversation]);
 
   useEffect(() => {
     void Promise.all([loadThreads(), checkModel()]);
@@ -184,11 +260,6 @@ export function ConversationPage() {
 
   useEffect(() => {
     if (threadId === undefined) {
-      conversationRequestRef.current += 1;
-      setMessages([]);
-      setTurns([]);
-      setProcessing([]);
-      setTranscriptThreadId(null);
       return;
     }
     void loadConversation(threadId);
@@ -198,8 +269,17 @@ export function ConversationPage() {
     if (threadId === undefined || !hasPendingWork) {
       return;
     }
-    const timer = window.setInterval(() => void loadConversation(threadId, true), 1_500);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer = window.setTimeout(async function poll() {
+      await loadConversation(threadId, true);
+      if (!cancelled) {
+        timer = window.setTimeout(poll, 1_500);
+      }
+    }, 1_500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [hasPendingWork, loadConversation, threadId]);
 
   useLayoutEffect(() => {
@@ -225,20 +305,62 @@ export function ConversationPage() {
     if (!threadPanelOpen) {
       return;
     }
-    const closeOnEscape = (event: KeyboardEvent) => {
+    const panel = threadPanelRef.current;
+    const toggle = threadPanelToggleRef.current;
+    const mobile = typeof window.matchMedia !== "function"
+      || window.matchMedia("(max-width: 860px)").matches;
+    if (panel === null || !mobile) {
+      return;
+    }
+    const focusable = () => [...panel.querySelectorAll<HTMLElement>(
+      "a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    )].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    (focusable()[0] ?? panel).focus();
+    const manageDrawerFocus = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setThreadPanelOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const controls = focusable();
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (first === undefined || last === undefined) {
+        event.preventDefault();
+        panel.focus();
+      } else if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", manageDrawerFocus);
+    return () => {
+      document.removeEventListener("keydown", manageDrawerFocus);
+      if (toggle?.isConnected === true) {
+        toggle.focus();
+      }
+    };
   }, [threadPanelOpen]);
 
-  async function createConversation(title = "New conversation") {
+  useEffect(() => {
+    inspectionRequestRef.current += 1;
+    setInspection(null);
+    setInspectionLoading(false);
+  }, [threadId]);
+
+  async function createConversation(title = "New conversation", originKey = viewKey) {
     if (!canWrite) {
       openUnlock("Confirm owner access once to start writing. Ordinary conversation will stay unlocked for this browser session.");
       return null;
     }
+    const requestId = createRequestRef.current + 1;
+    createRequestRef.current = requestId;
     setCreating(true);
     try {
       const created = await api.createThread({
@@ -247,22 +369,30 @@ export function ConversationPage() {
         retention_policy: "retention.owner-conversation",
       });
       await loadThreads();
-      navigate(`/conversation/${created.thread_id}`);
-      setThreadPanelOpen(false);
-      window.setTimeout(() => composerRef.current?.focus(), 0);
+      if (
+        requestId === createRequestRef.current
+        && (currentThreadIdRef.current ?? newConversationKey) === originKey
+      ) {
+        navigate(`/conversation/${created.thread_id}`);
+        setThreadPanelOpen(false);
+        window.setTimeout(() => composerRef.current?.focus(), 0);
+      }
       return created;
     } catch (caught) {
       notify(errorMessage(caught), "error");
       return null;
     } finally {
-      setCreating(false);
+      if (requestId === createRequestRef.current) {
+        setCreating(false);
+      }
     }
   }
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (text.length === 0 || sending || modelAvailability !== "ready") {
+    const sourceKey = viewKey;
+    if (text.length === 0 || sending || creating || modelAvailability !== "ready") {
       return;
     }
     if (!canWrite) {
@@ -270,60 +400,67 @@ export function ConversationPage() {
       return;
     }
 
-    setSending(true);
-    setSendFailure(null);
-    const idempotencyKey = retrySend?.text === text
-      ? retrySend.idempotencyKey
+    const previousFailure = sendFailures[sourceKey];
+    const idempotencyKey = previousFailure?.text === text
+      ? previousFailure.idempotencyKey
       : crypto.randomUUID();
-    setRetrySend(null);
+    setSendFailures((current) => withoutKey(current, sourceKey));
+    let activeThreadId = threadId;
     try {
-      const activeThread = threadId === undefined
-        ? await createConversation(titleFromMessage(text))
-        : selectedThread;
-      if (activeThread === null) {
-        setRetrySend({ text, idempotencyKey });
-        setSendFailure("Your message was not sent. It is still in the composer.");
+      if (activeThreadId === undefined) {
+        const created = await createConversation(titleFromMessage(text), sourceKey);
+        activeThreadId = created?.thread_id;
+      }
+      if (activeThreadId === undefined) {
+        setSendFailures((current) => ({
+          ...current,
+          [sourceKey]: {
+            text,
+            idempotencyKey,
+            message: "Your message was not sent. It is still in the composer.",
+          },
+        }));
         return;
       }
-      setDraft("");
+      const targetThreadId = activeThreadId;
+      setSendingThreadIds((current) => new Set(current).add(targetThreadId));
+      setDraft(sourceKey, "");
+      setDraft(targetThreadId, "");
       shouldFollowConversationRef.current = true;
-      setOptimisticMessage(optimisticOwnerMessage(
-        activeThread.thread_id,
-        principal.owner_id,
-        text,
-        idempotencyKey,
-      ));
-      const reply = await api.postMessage(activeThread.thread_id, text, idempotencyKey);
-      setMessages((current) => mergeById(
-        transcriptThreadId === activeThread.thread_id ? current : [],
-        [reply.inbound_message, reply.output_message].filter(
-          (message): message is ConversationMessage => message != null,
-        ),
-        (message) => message.message_id,
-      ));
-      setTurns((current) => mergeById(
-        transcriptThreadId === activeThread.thread_id ? current : [],
-        reply.turn == null ? [] : [reply.turn],
-        (turn) => turn.turn_id,
-      ));
-      setProcessing((current) => mergeById(
-        transcriptThreadId === activeThread.thread_id ? current : [],
-        [reply.processing],
-        (status) => status.message_id,
-      ));
-      setTranscriptThreadId(activeThread.thread_id);
-      setOptimisticMessage(null);
-      await Promise.all([loadThreads(), loadConversation(activeThread.thread_id, true)]);
+      setOptimisticSends((current) => ({
+        ...current,
+        [targetThreadId]: {
+          message: optimisticOwnerMessage(targetThreadId, principal.owner_id, text, idempotencyKey),
+          knownMessageIds: (conversationViews[targetThreadId]?.messages ?? []).map((message) => message.message_id),
+        },
+      }));
+      const reply = await api.postMessage(targetThreadId, text, idempotencyKey);
+      invalidateConversationRequest(targetThreadId);
+      applyConversationReply(targetThreadId, reply, updateConversation);
+      setOptimisticSends((current) => withoutKey(current, targetThreadId));
+      await loadThreads();
       if (reply.processing.state === "dead") {
         notify("Melli could not answer. You can try this message again.", "error");
       }
     } catch (caught) {
-      setOptimisticMessage(null);
-      setDraft(text);
-      setRetrySend({ text, idempotencyKey });
-      setSendFailure(errorMessage(caught));
+      const failureKey = activeThreadId ?? sourceKey;
+      if (activeThreadId !== undefined) {
+        const failedThreadId = activeThreadId;
+        setOptimisticSends((current) => withoutKey(current, failedThreadId));
+      }
+      setDraft(failureKey, text);
+      setSendFailures((current) => ({
+        ...current,
+        [failureKey]: { text, idempotencyKey, message: errorMessage(caught) },
+      }));
+      if (activeThreadId !== undefined && currentThreadIdRef.current !== activeThreadId) {
+        notify("A message was not sent. Return to that conversation to try again.", "error");
+      }
     } finally {
-      setSending(false);
+      if (activeThreadId !== undefined) {
+        const finishedThreadId = activeThreadId;
+        setSendingThreadIds((current) => withoutSetValue(current, finishedThreadId));
+      }
     }
   }
 
@@ -335,11 +472,17 @@ export function ConversationPage() {
       openUnlock("Confirm owner access to retry this message.");
       return;
     }
+    const sourceThreadId = threadId;
+    const recoveryKey = `${sourceThreadId}:${status.message_id}`;
+    setResumingMessageIds((current) => new Set(current).add(recoveryKey));
     try {
-      await api.resumeMessage(threadId, status.message_id);
-      await loadConversation(threadId, true);
+      const reply = await api.resumeMessage(sourceThreadId, status.message_id);
+      invalidateConversationRequest(sourceThreadId);
+      applyConversationReply(sourceThreadId, reply, updateConversation);
     } catch (caught) {
       notify(errorMessage(caught), "error");
+    } finally {
+      setResumingMessageIds((current) => withoutSetValue(current, recoveryKey));
     }
   }
 
@@ -347,38 +490,83 @@ export function ConversationPage() {
     if (threadId === undefined) {
       return;
     }
+    const requestId = inspectionRequestRef.current + 1;
+    inspectionRequestRef.current = requestId;
+    const sourceThreadId = threadId;
     setInspection(null);
     setInspectionLoading(true);
     try {
-      setInspection(await api.inspectTurn(threadId, turn.turn_id));
+      const next = await api.inspectTurn(sourceThreadId, turn.turn_id);
+      if (
+        requestId === inspectionRequestRef.current
+        && currentThreadIdRef.current === sourceThreadId
+      ) {
+        setInspection(next);
+      }
     } catch (caught) {
-      notify(errorMessage(caught), "error");
+      if (requestId === inspectionRequestRef.current) {
+        notify(errorMessage(caught), "error");
+      }
     } finally {
-      setInspectionLoading(false);
+      if (requestId === inspectionRequestRef.current) {
+        setInspectionLoading(false);
+      }
     }
+  }
+
+  function closeInspection() {
+    inspectionRequestRef.current += 1;
+    setInspection(null);
+    setInspectionLoading(false);
   }
 
   const unavailable = modelAvailability === "unavailable";
 
   return (
     <div className={`conversation-workspace ${threadPanelOpen ? "threads-open" : ""}`}>
-      <aside className="thread-panel" aria-label="Conversations">
+      <aside
+        aria-label="Conversations"
+        aria-modal={threadPanelOpen ? "true" : undefined}
+        className="thread-panel"
+        id="conversation-drawer"
+        ref={threadPanelRef}
+        role={threadPanelOpen ? "dialog" : undefined}
+        tabIndex={-1}
+      >
         <div className="thread-panel-heading">
           <span>Conversations</span>
-          <Button
-            aria-label="Start a new conversation"
-            loading={creating}
-            onClick={() => void createConversation()}
-            size="icon"
-            tone="ghost"
-          >
-            <Plus aria-hidden="true" size={18} />
-          </Button>
+          <div className="thread-panel-actions">
+            <Button
+              aria-label="Close conversations"
+              className="thread-panel-close"
+              onClick={() => setThreadPanelOpen(false)}
+              size="icon"
+              tone="ghost"
+            >
+              <PanelLeftClose aria-hidden="true" size={18} />
+            </Button>
+            <Button
+              aria-label="Start a new conversation"
+              loading={creating}
+              onClick={() => void createConversation()}
+              size="icon"
+              tone="ghost"
+            >
+              <Plus aria-hidden="true" size={18} />
+            </Button>
+          </div>
         </div>
         <div className="thread-list">
           {threadsLoading ? <LoadingState label="Opening conversations" /> : null}
+          {threadError === null ? null : (
+            <div className="thread-error" role="alert">
+              <span>{threadError}</span>
+              <Button onClick={() => void loadThreads()} size="sm" tone="ghost">Try again</Button>
+            </div>
+          )}
           {threads.map((thread) => (
             <button
+              aria-current={thread.thread_id === threadId ? "true" : undefined}
               className={thread.thread_id === threadId ? "thread-button active" : "thread-button"}
               key={thread.thread_id}
               onClick={() => {
@@ -398,12 +586,15 @@ export function ConversationPage() {
         <p className="thread-privacy"><ShieldCheck aria-hidden="true" size={14} /> Private owner history</p>
       </aside>
 
-      <section className="conversation-stage">
+      <section className="conversation-stage" inert={threadPanelOpen ? true : undefined}>
         <header className="conversation-heading">
           <Button
-            aria-label={threadPanelOpen ? "Close conversations" : "Open conversations"}
+            aria-controls="conversation-drawer"
+            aria-expanded={threadPanelOpen}
+            aria-label={threadPanelOpen ? "Conversation menu open" : "Open conversations"}
             className="thread-panel-toggle"
             onClick={() => setThreadPanelOpen((open) => !open)}
+            ref={threadPanelToggleRef}
             size="icon"
             tone="ghost"
           >
@@ -411,9 +602,9 @@ export function ConversationPage() {
           </Button>
           <div>
             <h1>{selectedThread?.title ?? "Talk with Melli"}</h1>
-            <p>{hasPendingWork ? "Melli is thinking…" : "A private conversation that can continue over time"}</p>
+            <p>{hasPendingWork || sending ? "Melli is thinking…" : "Private owner conversation"}</p>
           </div>
-          {hasPendingWork ? <Badge tone="info"><Clock3 className="spin-slow" size={13} /> Thinking</Badge> : null}
+          {hasPendingWork || sending ? <Badge tone="info"><Clock3 className="spin-slow" size={13} /> Thinking</Badge> : null}
         </header>
 
         <div
@@ -427,28 +618,36 @@ export function ConversationPage() {
           ref={conversationScrollRef}
         >
           {conversationLoading || !transcriptIsCurrent ? <LoadingState label="Opening this conversation" /> : null}
-          {error === null ? null : (
+          {conversationError === null ? null : (
             <ErrorState
               action={threadId === undefined ? undefined : (
                 <Button onClick={() => void loadConversation(threadId)}><RefreshCw size={15} /> Try again</Button>
               )}
-              message={error}
-              title="This conversation could not be opened"
+              message={conversationError}
+              title={visibleMessages.length === 0
+                ? "This conversation could not be opened"
+                : "This conversation could not be refreshed"}
             />
           )}
 
-          {!conversationLoading && transcriptIsCurrent && error === null && displayedMessages.length === 0 ? (
+          {!conversationLoading && transcriptIsCurrent && conversationError === null && displayedMessages.length === 0 ? (
             <ConversationWelcome
               availability={modelAvailability}
               onRetryModel={() => void checkModel()}
               onSelectPrompt={(prompt) => {
-                setDraft(prompt);
+                setDraft(viewKey, prompt);
                 composerRef.current?.focus();
               }}
             />
           ) : null}
 
-          <div className="message-list">
+          <div
+            aria-busy={sending || hasPendingWork}
+            aria-live="polite"
+            aria-relevant="additions text"
+            className="message-list"
+            role="log"
+          >
             {displayedMessages.map((message) => {
               const ownerMessage = message.author_principal_id === principal.owner_id;
               const turn = turnByOutputMessage.get(message.message_id);
@@ -473,7 +672,14 @@ export function ConversationPage() {
                       <div className="message-recovery" role="status">
                         <CircleAlert size={15} />
                         <span>Melli could not answer this time.</span>
-                        <Button onClick={() => void resumeMessage(status)} size="sm" tone="ghost">Try again</Button>
+                        <Button
+                          loading={resumingMessageIds.has(`${message.thread_id}:${status.message_id}`)}
+                          onClick={() => void resumeMessage(status)}
+                          size="sm"
+                          tone="ghost"
+                        >
+                          Try again
+                        </Button>
                       </div>
                     ) : null}
                   </div>
@@ -493,25 +699,32 @@ export function ConversationPage() {
           {unavailable ? (
             <p className="composer-unavailable"><LockKeyhole size={14} /> Connect a capable model before sending a message.</p>
           ) : null}
-          {sendFailure === null ? null : (
+          {sendFailure === undefined ? null : (
             <div className="composer-error" role="alert">
               <CircleAlert aria-hidden="true" size={16} />
-              <div><strong>Message not sent</strong><span>{sendFailure} Your text is still here.</span></div>
+              <div><strong>Message not sent</strong><span>{sendFailure.message} Your text is still here.</span></div>
               <Button onClick={() => composerFormRef.current?.requestSubmit()} size="sm" type="button">Try again</Button>
-              <Button aria-label="Dismiss send error" onClick={() => setSendFailure(null)} size="icon" tone="ghost" type="button">×</Button>
+              <Button
+                aria-label="Dismiss send error"
+                onClick={() => setSendFailures((current) => withoutKey(current, viewKey))}
+                size="icon"
+                tone="ghost"
+                type="button"
+              >
+                ×
+              </Button>
             </div>
           )}
           <form className="composer" onSubmit={(event) => void sendMessage(event)} ref={composerFormRef}>
             <textarea
               aria-label="Message Melli"
-              disabled={modelAvailability !== "ready"}
+              disabled={modelAvailability !== "ready" || sending}
               maxLength={100_000}
               onChange={(event) => {
                 const nextDraft = event.target.value;
-                setDraft(nextDraft);
-                if (retrySend !== null && nextDraft.trim() !== retrySend.text) {
-                  setRetrySend(null);
-                  setSendFailure(null);
+                setDraft(viewKey, nextDraft);
+                if (sendFailure !== undefined && nextDraft.trim() !== sendFailure.text) {
+                  setSendFailures((current) => withoutKey(current, viewKey));
                 }
               }}
               onKeyDown={(event) => {
@@ -526,7 +739,7 @@ export function ConversationPage() {
               value={draft}
             />
             <Button
-              disabled={draft.trim().length === 0 || modelAvailability !== "ready"}
+              disabled={draft.trim().length === 0 || modelAvailability !== "ready" || creating}
               loading={sending}
               size="icon"
               tone="primary"
@@ -540,15 +753,18 @@ export function ConversationPage() {
       </section>
 
       {threadPanelOpen ? (
-        <button aria-label="Close conversations" className="thread-panel-scrim" onClick={() => setThreadPanelOpen(false)} type="button" />
+        <button
+          aria-label="Dismiss conversation drawer"
+          className="thread-panel-scrim"
+          onClick={() => setThreadPanelOpen(false)}
+          tabIndex={-1}
+          type="button"
+        />
       ) : null}
 
       <Modal
         description="The context and privacy facts that materially shaped this answer."
-        onClose={() => {
-          setInspection(null);
-          setInspectionLoading(false);
-        }}
+        onClose={closeInspection}
         open={inspection !== null || inspectionLoading}
         title="Why this answer?"
       >
@@ -597,7 +813,7 @@ function ConversationWelcome({
 
 function AnswerExplanation({ inspection }: { readonly inspection: ConversationTurnInspection }) {
   const metadata = turnMetadata(inspection);
-  const citations = asObjectArray(inspection.retrieval_manifest.citations);
+  const usedMemoryCount = inspection.turn.evidence_ids.length;
   const summary = readString(inspection.turn.decision_record, "summary");
   const local = !metadata.externalDisclosure;
   return (
@@ -606,9 +822,9 @@ function AnswerExplanation({ inspection }: { readonly inspection: ConversationTu
         <span className="explanation-icon"><BookOpenCheck size={18} /></span>
         <div>
           <h3>Context</h3>
-          <p>{citations.length === 0
+          <p>{usedMemoryCount === 0
             ? "No saved memories were used for this answer."
-            : `Melli used ${citations.length} saved ${citations.length === 1 ? "memory" : "memories"}.`}</p>
+            : `Melli used ${usedMemoryCount} saved ${usedMemoryCount === 1 ? "memory" : "memories"}.`}</p>
         </div>
       </section>
       <section>
@@ -687,4 +903,62 @@ function mergeById<T>(
     merged.set(identify(item), item);
   }
   return [...merged.values()];
+}
+
+function emptyConversationView(): ConversationView {
+  return {
+    messages: [],
+    turns: [],
+    processing: [],
+    initialized: false,
+    loading: false,
+    error: null,
+  };
+}
+
+function applyConversationReply(
+  threadId: string,
+  reply: ConversationReply,
+  updateConversation: (
+    selectedId: string,
+    update: (current: ConversationView) => ConversationView,
+  ) => void,
+) {
+  updateConversation(threadId, (current) => ({
+    messages: mergeById(
+      current.messages,
+      [reply.inbound_message, reply.output_message].filter(
+        (message): message is ConversationMessage => message != null,
+      ),
+      (message) => message.message_id,
+    ),
+    turns: mergeById(
+      current.turns,
+      reply.turn == null ? [] : [reply.turn],
+      (turn) => turn.turn_id,
+    ),
+    processing: mergeById(
+      current.processing,
+      [reply.processing],
+      (status) => status.message_id,
+    ),
+    initialized: true,
+    loading: false,
+    error: null,
+  }));
+}
+
+function withoutKey<T>(
+  current: Readonly<Record<string, T>>,
+  key: string,
+): Readonly<Record<string, T>> {
+  const next = { ...current };
+  delete next[key];
+  return next;
+}
+
+function withoutSetValue<T>(current: ReadonlySet<T>, value: T): ReadonlySet<T> {
+  const next = new Set(current);
+  next.delete(value);
+  return next;
 }

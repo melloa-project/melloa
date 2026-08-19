@@ -76,6 +76,20 @@ describe("AppLayout", () => {
     await waitFor(() => expect(mocks.login).toHaveBeenCalledWith("b".repeat(32)));
   });
 
+  it("restores focus after closing the real autofocus owner dialog", async () => {
+    mocks.context = { ...mocks.context, canWrite: false };
+    renderLayout();
+
+    const unlock = screen.getByRole("button", { name: "Unlock" });
+    unlock.focus();
+    fireEvent.click(unlock);
+    expect(screen.getByLabelText("Owner credential")).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(unlock).toHaveFocus();
+  });
+
   it("surfaces a protection failure without filling the header with healthy internals", () => {
     mocks.context = { ...mocks.context, status: null };
     renderLayout();

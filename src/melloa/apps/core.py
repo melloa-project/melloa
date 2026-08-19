@@ -164,7 +164,7 @@ def _authenticated_owner_sensitive_mutation(
 async def _run_conversation_worker(service: ConversationService, interval: float) -> None:
     while True:
         try:
-            service.process_ready()
+            await asyncio.to_thread(service.process_ready)
         except Exception:
             _LOGGER.warning("Conversation retry worker could not process due work.")
         await asyncio.sleep(interval)
@@ -477,7 +477,7 @@ def create_app(
         "/api/v1/conversations/{thread_id}/messages",
         response_model=_ConversationReplyResponse,
     )
-    async def post_conversation_message(
+    def post_conversation_message(
         request: Request,
         response: Response,
         thread_id: RecordId,
@@ -498,7 +498,7 @@ def create_app(
         "/api/v1/conversations/{thread_id}/messages/{message_id}/resume",
         response_model=_ConversationReplyResponse,
     )
-    async def resume_conversation_message(
+    def resume_conversation_message(
         request: Request,
         response: Response,
         thread_id: RecordId,

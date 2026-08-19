@@ -77,11 +77,11 @@ function message(id: string, author: string, text: string, threadId = thread.thr
   };
 }
 
-function replyFor(text: string) {
-  const inboundMessage = message("message_owner", owner.owner_id, text);
+function replyFor(text: string, selectedThreadId = thread.thread_id) {
+  const inboundMessage = message("message_owner", owner.owner_id, text, selectedThreadId);
   return {
     inbound_message: inboundMessage,
-    output_message: message("message_melli", "melli_1", "A useful answer"),
+    output_message: message("message_melli", "melli_1", "A useful answer", selectedThreadId),
     turn: null,
     processing: { message_id: inboundMessage.message_id, state: "completed", attempts: [] },
     duplicate: false,
@@ -282,6 +282,261 @@ describe("ConversationPage", () => {
     expect(screen.getByText("Plan a museum day.")).toBeVisible();
   });
 
+  it("keeps the destination thread stable when a send finishes elsewhere", async () => {
+    const pendingSend = deferred<ReturnType<typeof replyFor>>();
+    mocks.listThreads.mockResolvedValue([thread, secondThread]);
+    mocks.transcript.mockImplementation((selectedId: string) => Promise.resolve({
+      messages: selectedId === secondThread.thread_id
+        ? [message("message_second", owner.owner_id, "Plan a museum day.", secondThread.thread_id)]
+        : [],
+      turns: [],
+      processing: [],
+    }));
+    mocks.postMessage.mockReturnValue(pendingSend.promise);
+    renderConversation();
+
+    const composer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(composer, { target: { value: "A message for the first thread" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: /A family visit/ }));
+    expect(await screen.findByText("Plan a museum day.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: secondThread.title })).toBeVisible();
+
+    await act(async () => pendingSend.resolve(replyFor(
+      "A message for the first thread",
+      thread.thread_id,
+    )));
+    expect(screen.getByRole("heading", { name: secondThread.title })).toBeVisible();
+    expect(screen.getByText("Plan a museum day.")).toBeVisible();
+    expect(screen.queryByText("Opening this conversation")).not.toBeInTheDocument();
+    expect(mocks.transcript.mock.calls.filter(([selectedId]) => selectedId === thread.thread_id)).toHaveLength(1);
+  });
+
+  it("keeps drafts and failed retries with the thread that owns them", async () => {
+    const pendingSend = deferred<ReturnType<typeof replyFor>>();
+    mocks.listThreads.mockResolvedValue([thread, secondThread]);
+    mocks.transcript.mockResolvedValue({ messages: [], turns: [], processing: [] });
+    mocks.postMessage.mockReturnValue(pendingSend.promise);
+    renderConversation();
+
+    const firstComposer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(firstComposer, { target: { value: "First-thread draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: /A family visit/ }));
+    const secondComposer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(secondComposer, { target: { value: "Second-thread draft" } });
+    await act(async () => pendingSend.reject(new Error("The private model did not respond.")));
+
+    expect(secondComposer).toHaveValue("Second-thread draft");
+    expect(screen.queryByRole("alert", { name: /Message not sent/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /A meaningful decision/ }));
+    expect(await screen.findByLabelText("Message Melli")).toHaveValue("First-thread draft");
+    expect(await screen.findByText("Message not sent")).toBeVisible();
+  });
+
+  it("keeps thread-list and transcript failures isolated", async () => {
+    const pendingThreads = deferred<typeof thread[]>();
+    mocks.listThreads.mockReturnValue(pendingThreads.promise);
+    mocks.transcript.mockRejectedValue(new Error("Transcript unavailable"));
+    renderConversation();
+
+    expect(await screen.findByRole("heading", { name: "This conversation could not be opened" })).toBeVisible();
+    await act(async () => pendingThreads.resolve([thread]));
+    expect(screen.getByRole("heading", { name: "This conversation could not be opened" })).toBeVisible();
+    expect(screen.getByText("Transcript unavailable")).toBeVisible();
+  });
+
+  it("keeps a valid transcript visible when the thread list fails", async () => {
+    mocks.listThreads.mockRejectedValue(new Error("Thread list unavailable"));
+    mocks.transcript.mockResolvedValue({
+      messages: [message("message_valid", owner.owner_id, "Visible transcript")],
+      turns: [],
+      processing: [],
+    });
+    renderConversation();
+
+    expect(await screen.findByText("Visible transcript")).toBeVisible();
+    expect(screen.getByText("Thread list unavailable")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "This conversation could not be opened" })).not.toBeInTheDocument();
+  });
+
+  it("uses the authoritative resume response without a fragile follow-up read", async () => {
+    const failedOwnerMessage = message("message_failed", owner.owner_id, "Please recover this");
+    mocks.transcript.mockResolvedValue({
+      messages: [failedOwnerMessage],
+      turns: [],
+      processing: [{
+        message_id: failedOwnerMessage.message_id,
+        state: "dead",
+        attempts: [],
+      }],
+    });
+    mocks.resumeMessage.mockResolvedValue({
+      inbound_message: failedOwnerMessage,
+      output_message: message("message_recovered", "melli_1", "Recovered answer"),
+      turn: null,
+      processing: {
+        message_id: failedOwnerMessage.message_id,
+        state: "completed",
+        attempts: [],
+      },
+      duplicate: false,
+    });
+    renderConversation();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Recovered answer")).toBeVisible();
+    expect(screen.queryByText("Melli could not answer this time.")).not.toBeInTheDocument();
+    expect(mocks.transcript).toHaveBeenCalledOnce();
+  });
+
+  it("serializes slow transcript polling and resumes after the slow read", async () => {
+    const initialTranscript = deferred<{
+      messages: ReturnType<typeof message>[];
+      turns: never[];
+      processing: { message_id: string; state: string; attempts: never[] }[];
+    }>();
+    const slowPoll = deferred<{
+      messages: ReturnType<typeof message>[];
+      turns: never[];
+      processing: { message_id: string; state: string; attempts: never[] }[];
+    }>();
+    const ownerMessage = message("message_pending", owner.owner_id, "Still working?");
+    const pendingTranscript = {
+      messages: [ownerMessage],
+      turns: [] as never[],
+      processing: [{ message_id: ownerMessage.message_id, state: "accepted", attempts: [] as never[] }],
+    };
+    mocks.transcript
+      .mockReturnValueOnce(initialTranscript.promise)
+      .mockReturnValueOnce(slowPoll.promise)
+      .mockResolvedValueOnce({ messages: [ownerMessage], turns: [], processing: [] });
+    renderConversation();
+
+    await waitFor(() => expect(mocks.transcript).toHaveBeenCalledOnce());
+    vi.useFakeTimers();
+    try {
+      await act(async () => initialTranscript.resolve(pendingTranscript));
+      await act(async () => vi.advanceTimersByTimeAsync(1_500));
+      expect(mocks.transcript).toHaveBeenCalledTimes(2);
+
+      await act(async () => vi.advanceTimersByTimeAsync(6_000));
+      expect(mocks.transcript).toHaveBeenCalledTimes(2);
+
+      await act(async () => slowPoll.resolve(pendingTranscript));
+      await act(async () => vi.advanceTimersByTimeAsync(1_499));
+      expect(mocks.transcript).toHaveBeenCalledTimes(2);
+      await act(async () => vi.advanceTimersByTimeAsync(1));
+      expect(mocks.transcript).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("discards late answer inspections after close and navigation", async () => {
+    const closedInspection = deferred<Record<string, unknown>>();
+    const navigatedInspection = deferred<Record<string, unknown>>();
+    const ownerMessage = message("message_inspection_owner", owner.owner_id, "What matters here?");
+    const melliMessage = message("message_inspection_melli", "melli_1", "Consider your constraints.");
+    const turn = {
+      turn_id: "turn_inspection",
+      thread_id: thread.thread_id,
+      triggering_message_ids: [ownerMessage.message_id],
+      evidence_ids: [],
+      model_run_ids: ["result_inspection"],
+      policy_decision_ids: [],
+      proposed_action_ids: [],
+      executed_action_ids: [],
+      output_message_ids: [melliMessage.message_id],
+      decision_record: { summary: "Late inspection summary" },
+      started_at: "2026-08-19T12:00:00Z",
+      completed_at: "2026-08-19T12:00:01Z",
+    };
+    const inspection = {
+      turn,
+      output_message: melliMessage,
+      retrieval_manifest: { citations: [] },
+      model_result: {
+        route_id: "model.local",
+        provider_id: "provider.local",
+        model_id: "capable-local-model",
+        external_disclosure: false,
+        started_at: "2026-08-19T12:00:00Z",
+        completed_at: "2026-08-19T12:00:01Z",
+        attempts: [{ processing_location: "device" }],
+      },
+    };
+    mocks.listThreads.mockResolvedValue([thread, secondThread]);
+    mocks.transcript.mockImplementation((selectedId: string) => Promise.resolve(
+      selectedId === thread.thread_id
+        ? { messages: [ownerMessage, melliMessage], turns: [turn], processing: [] }
+        : { messages: [], turns: [], processing: [] },
+    ));
+    mocks.inspectTurn
+      .mockReturnValueOnce(closedInspection.promise)
+      .mockReturnValueOnce(navigatedInspection.promise);
+    renderConversation();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Why this answer?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+    await act(async () => closedInspection.resolve(inspection));
+    expect(screen.queryByRole("dialog", { name: "Why this answer?" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Late inspection summary")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Why this answer?" }));
+    fireEvent.click(screen.getByRole("button", { name: /A family visit/ }));
+    expect(await screen.findByRole("heading", { name: secondThread.title })).toBeVisible();
+    await act(async () => navigatedInspection.resolve(inspection));
+    expect(screen.queryByRole("dialog", { name: "Why this answer?" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Late inspection summary")).not.toBeInTheDocument();
+  });
+
+  it("does not let a delayed create steal newer navigation", async () => {
+    const pendingCreate = deferred<typeof thread>();
+    mocks.listThreads.mockResolvedValue([thread, secondThread]);
+    mocks.createThread.mockReturnValue(pendingCreate.promise);
+    renderConversation();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Start a new conversation" }));
+    await waitFor(() => expect(mocks.createThread).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: /A family visit/ }));
+    expect(await screen.findByRole("heading", { name: secondThread.title })).toBeVisible();
+
+    await act(async () => pendingCreate.resolve({
+      ...thread,
+      thread_id: "thread_3",
+      title: "New conversation",
+    }));
+    expect(screen.getByRole("heading", { name: secondThread.title })).toBeVisible();
+  });
+
+  it("moves and traps focus in the mobile conversation drawer", async () => {
+    renderConversation();
+    const toggle = await screen.findByRole("button", { name: "Open conversations" });
+    toggle.focus();
+    fireEvent.click(toggle);
+
+    const drawer = screen.getByRole("dialog", { name: "Conversations" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const close = screen.getByRole("button", { name: "Close conversations" });
+    await waitFor(() => expect(close).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(screen.getByRole("button", { name: /A meaningful decision/ })).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Conversations" })).not.toBeInTheDocument(),
+    );
+    expect(drawer).not.toHaveAttribute("aria-modal");
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("creates and titles the first conversation from the owner’s first message", async () => {
     mocks.listThreads.mockResolvedValue([]);
     const created = { ...thread, title: "Help me choose between two roles" };
@@ -307,12 +562,15 @@ describe("ConversationPage", () => {
 
   it("explains only useful context and privacy by default", async () => {
     const ownerMessage = message("message_1", owner.owner_id, "Use what you know about me");
-    const melliMessage = message("message_2", "melli_1", "Here is what I would prioritize.");
+    const melliMessage = {
+      ...message("message_2", "melli_1", "Here is what I would prioritize."),
+      citation_ids: ["citation_secret"],
+    };
     const turn = {
       turn_id: "turn_secret_internal_id",
       thread_id: thread.thread_id,
       triggering_message_ids: [ownerMessage.message_id],
-      evidence_ids: [],
+      evidence_ids: ["assertion_secret"],
       model_run_ids: ["result_secret_internal_id"],
       policy_decision_ids: [],
       proposed_action_ids: [],

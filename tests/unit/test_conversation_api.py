@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
+from threading import Event, Thread
 
 from fastapi.testclient import TestClient
 
@@ -14,9 +15,11 @@ from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.core import create_app
+from melloa.domain.base import JsonObject
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import ConversationThread
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
+from melloa.domain.models import ModelRouteRequest
 from tests.conftest import record_id
 
 _BOOTSTRAP_TOKEN = "owner-conversation-test-credential-0001"
@@ -54,6 +57,7 @@ def _client(
     owner_number: int = 1,
     guardian_mode: GuardianMode = GuardianMode.NORMAL,
     seed_thread: bool = False,
+    model_response: JsonObject | Callable[[ModelRouteRequest], JsonObject] | None = None,
 ) -> TestClient:
     owner_id = record_id("owner", 1)
     ids = _ids()
@@ -77,7 +81,7 @@ def _client(
         intelligence_id=record_id("intelligence", 1),
         store=store,
         model_gateway=FakeModelGateway(
-            {"text": "I have the context."},
+            {"text": "I have the context."} if model_response is None else model_response,
             clock=lambda: fixed_time,
             id_factory=ids,
         ),
@@ -188,3 +192,77 @@ def test_guardian_stop_blocks_readiness_and_conversation_writes(fixed_time) -> N
     )
     assert created.status_code == 503
     assert created.json()["code"] == "conversation_write_unavailable"
+
+
+def test_blocked_model_invocation_does_not_block_core_liveness(fixed_time) -> None:
+    model_started = Event()
+    release_model = Event()
+
+    def blocking_response(_request: ModelRouteRequest) -> JsonObject:
+        model_started.set()
+        release_model.wait(timeout=5)
+        return {"text": "The blocked model completed."}
+
+    with _client(fixed_time, model_response=blocking_response) as client:
+        headers = _login(client)
+        created = client.post(
+            "/api/v1/conversations",
+            headers=headers,
+            json={
+                "title": "Responsiveness check",
+                "sensitivity": "personal",
+                "retention_policy": "retention.owner-conversation",
+            },
+        )
+        assert created.status_code == 201
+        thread_id = created.json()["thread_id"]
+        message_statuses: list[int] = []
+        message_errors: list[Exception] = []
+        live_statuses: list[int] = []
+        live_errors: list[Exception] = []
+        live_done = Event()
+
+        def send_message() -> None:
+            try:
+                response = client.post(
+                    f"/api/v1/conversations/{thread_id}/messages",
+                    headers=headers,
+                    json={
+                        "text": "Keep the core responsive.",
+                        "idempotency_key": "responsiveness-check-1",
+                    },
+                )
+                message_statuses.append(response.status_code)
+            except Exception as error:  # pragma: no cover - surfaced by assertions below
+                message_errors.append(error)
+
+        def check_liveness() -> None:
+            try:
+                live_statuses.append(client.get("/health/live").status_code)
+            except Exception as error:  # pragma: no cover - surfaced by assertions below
+                live_errors.append(error)
+            finally:
+                live_done.set()
+
+        message_thread = Thread(target=send_message)
+        live_thread: Thread | None = None
+        responsive = False
+        message_thread.start()
+        try:
+            assert model_started.wait(timeout=1)
+            live_thread = Thread(target=check_liveness)
+            live_thread.start()
+            responsive = live_done.wait(timeout=1)
+        finally:
+            release_model.set()
+            message_thread.join(timeout=2)
+            if live_thread is not None:
+                live_thread.join(timeout=2)
+
+        assert responsive
+        assert not message_thread.is_alive()
+        assert live_thread is not None and not live_thread.is_alive()
+        assert message_errors == []
+        assert live_errors == []
+        assert message_statuses == [200]
+        assert live_statuses == [200]
