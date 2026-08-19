@@ -6,6 +6,7 @@ import base64
 import binascii
 import stat
 from pathlib import Path
+from threading import Lock
 from typing import Final
 
 from cryptography.exceptions import InvalidSignature
@@ -102,8 +103,50 @@ class FileGuardianStatusReader:
     def __init__(self, status_path: Path, public_key_path: Path) -> None:
         self._status_path = status_path
         self._public_key_path = public_key_path
+        self._lock = Lock()
+        self._pinned_public_key: bytes | None = None
+        self._last_status: VerifiedGuardianStatus | None = None
 
     def read_status(self) -> VerifiedGuardianStatus:
-        envelope = _read_regular_file(self._status_path, _MAX_STATUS_BYTES)
-        public_key = _read_regular_file(self._public_key_path, _MAX_PUBLIC_KEY_BYTES)
-        return verify_guardian_envelope(envelope, public_key)
+        with self._lock:
+            envelope = _read_regular_file(self._status_path, _MAX_STATUS_BYTES)
+            public_key = _read_regular_file(self._public_key_path, _MAX_PUBLIC_KEY_BYTES)
+            verified = verify_guardian_envelope(envelope, public_key)
+            self._accept_observation(public_key, verified)
+            return verified
+
+    def _accept_observation(
+        self,
+        public_key: bytes,
+        current: VerifiedGuardianStatus,
+    ) -> None:
+        if self._pinned_public_key is not None and public_key != self._pinned_public_key:
+            raise GuardianVerificationError("Guardian public key changed during this process")
+
+        previous = self._last_status
+        if previous is not None:
+            if current.receipt_hash == previous.receipt_hash:
+                return
+            if (
+                current.payload.instance_id != previous.payload.instance_id
+                or current.key_id != previous.key_id
+            ):
+                raise GuardianVerificationError(
+                    "Guardian identity changed during this process"
+                )
+            if current.payload.sequence < previous.payload.sequence:
+                raise GuardianVerificationError("Guardian sequence moved backwards")
+            if current.payload.sequence == previous.payload.sequence:
+                raise GuardianVerificationError(
+                    "Guardian sequence was reused with a different receipt"
+                )
+            if (
+                current.payload.sequence == previous.payload.sequence + 1
+                and current.payload.previous_receipt_hash != previous.receipt_hash
+            ):
+                raise GuardianVerificationError(
+                    "Guardian receipt chain does not extend the last observation"
+                )
+
+        self._pinned_public_key = public_key
+        self._last_status = current
