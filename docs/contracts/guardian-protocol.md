@@ -55,9 +55,20 @@ identity or key change, and a directly consecutive receipt whose predecessor is 
 observed. A jump of more than one sequence remains valid because Melloa may legitimately miss
 intermediate Guardian transitions. A rejected read does not replace the last good observation.
 
-This is rollback and fork detection within one running reader, not a proof of freshness after a
-restart. On a new process's first read, an older but validly signed projection is indistinguishable
-from the current projection unless the deployment supplies a separately trusted persistent anchor.
-This protocol version does not define such an anchor. Signature verification therefore proves
-authenticity, while deployment controls and the process-lifetime checks provide the currently stated
-freshness protection.
+These checks establish only observed continuity within one running reader. They detect a lower
+sequence, an alternate receipt at an already observed sequence, and a broken adjacent link. They do
+not prove ancestry when sequences were skipped. Calling this general fork detection would overstate
+the evidence available in a head-only projection.
+
+They also do not prove freshness or timely revocation. A frozen exact receipt is accepted
+indefinitely because this protocol has no signed expiry, heartbeat, or protected live query. On a
+new process's first read, an older but validly signed projection is likewise indistinguishable from
+the current projection. The public key and installation identity are trust-on-first-use for each
+reader, and the envelope's key ID is pinned metadata rather than a value covered by the status
+signature.
+
+Restart continuity would require a monotonic anchor outside Melloa's write and rollback authority.
+Timely revocation requires independent Guardian enforcement such as stopping workloads, removing
+egress, or revoking credentials; an application-side status read cannot supply that guarantee. This
+protocol version defines neither mechanism. Signature verification proves authenticity, and the
+reader detects only the explicitly listed continuity violations.
