@@ -1,4 +1,11 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+} from "react";
 import { LoaderCircle, type LucideIcon } from "lucide-react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -156,22 +163,85 @@ export function Modal({
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+  const descriptionId = useId();
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const dialog = dialogRef.current;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    if (dialog === null) {
+      return;
+    }
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(
+      "a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    )].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    if (!dialog.contains(document.activeElement)) {
+      (focusable()[0] ?? dialog).focus();
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const controls = focusable();
+      if (controls.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (first === undefined || last === undefined) {
+        return;
+      }
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocused?.isConnected === true) {
+        previouslyFocused.focus();
+      }
+    };
+  }, [open]);
+
   if (!open) {
     return null;
   }
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        aria-labelledby="modal-title"
+        aria-describedby={description === undefined ? undefined : descriptionId}
+        aria-labelledby={titleId}
         aria-modal="true"
         className="modal"
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
           <div>
-            <h2 id="modal-title">{title}</h2>
-            {description === undefined ? null : <p>{description}</p>}
+            <h2 id={titleId}>{title}</h2>
+            {description === undefined ? null : <p id={descriptionId}>{description}</p>}
           </div>
           <Button aria-label="Close dialog" onClick={onClose} size="icon" tone="ghost">×</Button>
         </div>

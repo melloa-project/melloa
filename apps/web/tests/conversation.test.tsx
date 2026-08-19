@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,14 @@ const thread = {
   updated_at: "2026-08-19T12:00:00Z",
 };
 
+const secondThread = {
+  ...thread,
+  thread_id: "thread_2",
+  title: "A family visit",
+  created_at: "2026-08-19T12:05:00Z",
+  updated_at: "2026-08-19T12:05:00Z",
+};
+
 const readyRoutes = {
   routes: [{
     route_kind: "openai_compatible",
@@ -54,10 +62,10 @@ const readyRoutes = {
   }],
 };
 
-function message(id: string, author: string, text: string) {
+function message(id: string, author: string, text: string, threadId = thread.thread_id) {
   return {
     message_id: id,
-    thread_id: thread.thread_id,
+    thread_id: threadId,
     author_principal_id: author,
     source_client: "owner-console",
     parts: [{ kind: "text", text }],
@@ -67,6 +75,27 @@ function message(id: string, author: string, text: string) {
     created_at: "2026-08-19T12:00:00Z",
     observed_at: "2026-08-19T12:00:00Z",
   };
+}
+
+function replyFor(text: string) {
+  const inboundMessage = message("message_owner", owner.owner_id, text);
+  return {
+    inbound_message: inboundMessage,
+    output_message: message("message_melli", "melli_1", "A useful answer"),
+    turn: null,
+    processing: { message_id: inboundMessage.message_id, state: "completed", attempts: [] },
+    duplicate: false,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }
 
 function renderConversation(path = "/conversation/thread_1") {
@@ -97,10 +126,7 @@ describe("ConversationPage", () => {
     mocks.transcript.mockResolvedValue({ messages: [], turns: [], processing: [] });
     mocks.modelRoutes.mockResolvedValue(readyRoutes);
     mocks.createThread.mockResolvedValue(thread);
-    mocks.postMessage.mockResolvedValue({
-      processing: { state: "completed" },
-      output_message: message("message_2", "melli_1", "A useful answer"),
-    });
+    mocks.postMessage.mockResolvedValue(replyFor("What should I consider?"));
     mocks.context = {
       api: {
         listThreads: mocks.listThreads,
@@ -162,10 +188,98 @@ describe("ConversationPage", () => {
     });
     renderConversation();
 
-    expect(await screen.findByRole("heading", { name: "Melli needs a capable model" })).toBeVisible();
-    expect(screen.getByText(/old fixed tour has been removed/i)).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Melli isn’t connected yet" })).toBeVisible();
+    expect(screen.getByText(/private model connection needs attention/i)).toBeVisible();
     expect(screen.getByLabelText("Message Melli")).toBeDisabled();
     expect(screen.queryByRole("button", { name: /Fill a no-network/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the owner message immediately while Melli is answering", async () => {
+    const pending = deferred<ReturnType<typeof replyFor>>();
+    mocks.postMessage.mockReturnValue(pending.promise);
+    renderConversation();
+
+    const composer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(composer, { target: { value: "My sister is visiting next week." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("My sister is visiting next week.")).toBeVisible();
+    expect(screen.getByText("Melli is thinking")).toBeVisible();
+    expect(composer).toHaveValue("");
+
+    await act(async () => pending.resolve(replyFor("My sister is visiting next week.")));
+  });
+
+  it("keeps a failed message recoverable and reuses its idempotency key", async () => {
+    mocks.postMessage
+      .mockRejectedValueOnce(new Error("The private model did not respond."))
+      .mockResolvedValueOnce(replyFor("Please try this once."));
+    renderConversation();
+
+    const composer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(composer, { target: { value: "Please try this once." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Message not sent");
+    expect(screen.getByRole("alert")).toHaveTextContent("The private model did not respond.");
+    expect(composer).toHaveValue("Please try this once.");
+    const firstKey = mocks.postMessage.mock.calls[0]?.[2];
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.postMessage.mock.calls[1]?.[2]).toBe(firstKey);
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("does not send Enter while an input method is composing", async () => {
+    renderConversation();
+    const composer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(composer, { target: { value: "まだ入力中" } });
+
+    fireEvent.keyDown(composer, { code: "Enter", isComposing: true, key: "Enter" });
+    expect(mocks.postMessage).not.toHaveBeenCalled();
+    expect(composer).toHaveValue("まだ入力中");
+
+    fireEvent.keyDown(composer, { code: "Enter", isComposing: false, key: "Enter" });
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledOnce());
+  });
+
+  it("ignores a stale transcript after the owner switches conversations", async () => {
+    const firstTranscript = deferred<{
+      messages: ReturnType<typeof message>[];
+      turns: never[];
+      processing: never[];
+    }>();
+    const secondTranscript = deferred<{
+      messages: ReturnType<typeof message>[];
+      turns: never[];
+      processing: never[];
+    }>();
+    mocks.listThreads.mockResolvedValue([thread, secondThread]);
+    mocks.transcript.mockImplementation((selectedId: string) => (
+      selectedId === thread.thread_id ? firstTranscript.promise : secondTranscript.promise
+    ));
+    renderConversation();
+
+    await waitFor(() => expect(mocks.transcript).toHaveBeenCalledWith(thread.thread_id));
+    fireEvent.click(await screen.findByRole("button", { name: /A family visit/ }));
+    await waitFor(() => expect(mocks.transcript).toHaveBeenCalledWith(secondThread.thread_id));
+
+    await act(async () => secondTranscript.resolve({
+      messages: [message("message_second", owner.owner_id, "Plan a museum day.", secondThread.thread_id)],
+      turns: [],
+      processing: [],
+    }));
+    expect(await screen.findByText("Plan a museum day.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: secondThread.title })).toBeVisible();
+
+    await act(async () => firstTranscript.resolve({
+      messages: [message("message_first", owner.owner_id, "Stale first-thread content")],
+      turns: [],
+      processing: [],
+    }));
+    expect(screen.queryByText("Stale first-thread content")).not.toBeInTheDocument();
+    expect(screen.getByText("Plan a museum day.")).toBeVisible();
   });
 
   it("creates and titles the first conversation from the owner’s first message", async () => {

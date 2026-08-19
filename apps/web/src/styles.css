@@ -93,8 +93,12 @@ dd {
 
 .app-shell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 64px minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
   min-height: 100dvh;
+  overflow: hidden;
   background: var(--canvas);
 }
 
@@ -194,6 +198,7 @@ dd {
 }
 
 .app-main {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -446,6 +451,7 @@ dd {
 
 .conversation-stage {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
@@ -558,15 +564,6 @@ dd {
   font-size: 14px;
   line-height: 1.72;
   white-space: pre-wrap;
-}
-
-.fixture-note {
-  margin-top: 10px !important;
-  padding: 8px 10px;
-  color: var(--violet) !important;
-  font-size: 11px !important;
-  background: var(--violet-soft);
-  border-radius: 8px;
 }
 
 .why-button {
@@ -691,13 +688,8 @@ dd {
   border-color: #b9d3c7;
 }
 
-.unavailable-welcome code {
-  margin: 18px 0 12px;
-  padding: 9px 12px;
-  font-size: 12px;
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-  border-radius: 9px;
+.unavailable-welcome .button {
+  margin-top: 18px;
 }
 
 .composer-wrap {
@@ -731,6 +723,7 @@ dd {
   flex: 1;
   padding: 10px 0 8px;
   resize: none;
+  overflow-y: hidden;
   background: transparent;
   border: 0;
   outline: 0;
@@ -757,6 +750,43 @@ dd {
   margin: 0 0 7px;
   color: var(--amber);
   font-size: 11px;
+}
+
+.composer-error {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 9px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 9px 10px;
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid #efcaca;
+  border-radius: 12px;
+}
+
+.composer-error > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-error strong {
+  font-size: 11px;
+}
+
+.composer-error span {
+  overflow-wrap: anywhere;
+  color: #7d5050;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.composer-error .button-icon {
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
 }
 
 .thread-panel-scrim {
@@ -980,8 +1010,10 @@ dd {
 
 .safety-page {
   height: 100%;
+  min-height: 0;
   padding: 42px clamp(20px, 5vw, 72px) 70px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .safety-heading {
@@ -1031,21 +1063,48 @@ dd {
   font-size: 13px;
 }
 
-.safety-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.safety-content {
+  display: flex;
   width: min(980px, 100%);
   margin: 0 auto;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.safety-card {
+.safety-surface {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.safety-section,
+.safety-trust {
   display: flex;
-  min-height: 250px;
-  padding: 20px;
+  min-width: 0;
+  padding: 22px;
   flex-direction: column;
   align-items: flex-start;
   gap: 14px;
+}
+
+.safety-section + .safety-section {
+  border-left: 1px solid var(--line);
+}
+
+.safety-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.safety-trust {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
 }
 
 .safety-card-heading {
@@ -1072,7 +1131,8 @@ dd {
 }
 
 .safety-card-heading p,
-.safety-card > p {
+.safety-section > p,
+.safety-trust > p {
   margin-top: 4px;
   color: var(--muted);
   font-size: 12px;
@@ -1396,10 +1456,7 @@ dd {
   }
 
   .topbar-link {
-    width: 38px;
-    min-height: 38px;
-    padding: 0;
-    justify-content: center;
+    display: none;
   }
 
   .app-main {
@@ -1445,12 +1502,17 @@ dd {
     left: 0;
     width: min(310px, 88vw);
     box-shadow: var(--shadow-md);
+    visibility: hidden;
+    pointer-events: none;
     transform: translateX(-105%);
-    transition: transform 180ms ease;
+    transition: transform 180ms ease, visibility 0s linear 180ms;
   }
 
   .threads-open .thread-panel {
+    visibility: visible;
+    pointer-events: auto;
     transform: translateX(0);
+    transition-delay: 0s;
   }
 
   .thread-panel-toggle {
@@ -1489,8 +1551,14 @@ dd {
     padding: 24px 14px 40px;
   }
 
-  .safety-grid {
+  .safety-surface,
+  .safety-trust-grid {
     grid-template-columns: 1fr;
+  }
+
+  .safety-section + .safety-section {
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .login-page {
@@ -1585,9 +1653,23 @@ dd {
     font-size: 30px;
   }
 
-  .safety-card {
-    min-height: 0;
+  .safety-section,
+  .safety-trust {
     padding: 17px;
+  }
+
+  .composer-error {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .composer-error .button-sm {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .composer-error .button-icon {
+    grid-row: 1;
+    grid-column: 3;
   }
 
   .session-row {

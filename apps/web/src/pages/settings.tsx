@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import type { OwnerExportReadinessReport, OwnerSessionInventory } from "../api";
 import { errorMessage, useMelloa } from "../app";
 import { useOwnerUnlock } from "../components/layout";
-import { Badge, Button, Card, ErrorState, LoadingState } from "../components/ui";
+import { Badge, Button, ErrorState, LoadingState } from "../components/ui";
 import { formatInstant, formatRelative, titleCase } from "../lib/format";
 
 export function SettingsPage() {
@@ -126,8 +126,9 @@ export function SettingsPage() {
       {loading && sessions === null && exportReadiness === null ? <LoadingState label="Reading owner controls" /> : null}
       {error === null ? null : <ErrorState message={error} title="Some owner controls are unavailable" />}
 
-      <div className="safety-grid">
-        <Card className="safety-card data-card">
+      <div className="safety-content">
+        <div className="safety-surface">
+          <section className="safety-section data-section">
           <div className="safety-card-heading">
             <span className="safety-icon"><Database size={19} /></span>
             <div><h2>Your data</h2><p>Take a copy of the history Melloa currently holds.</p></div>
@@ -145,9 +146,9 @@ export function SettingsPage() {
             <Download size={16} /> Download my data
           </Button>
           <p className="fine-print">Melloa validates the archive before download. This is a portability copy, not a replacement for encrypted backups.</p>
-        </Card>
+          </section>
 
-        <Card className="safety-card">
+          <section className="safety-section sessions-section">
           <div className="safety-card-heading">
             <span className="safety-icon"><MonitorSmartphone size={19} /></span>
             <div><h2>Signed-in browsers</h2><p>Review where this owner session is active.</p></div>
@@ -176,9 +177,11 @@ export function SettingsPage() {
             <UserRoundX size={16} /> Sign out other browsers
           </Button>
           <Button onClick={() => void logout()} tone="ghost"><LogOut size={16} /> Sign out here</Button>
-        </Card>
+          </section>
+        </div>
 
-        <Card className="safety-card protection-card">
+        <div className="safety-trust-grid">
+          <section className="safety-trust protection-section">
           <div className="safety-card-heading">
             <span className="safety-icon"><ShieldCheck size={19} /></span>
             <div><h2>Independent protection</h2><p>Guardian stays outside Melli’s control.</p></div>
@@ -193,9 +196,9 @@ export function SettingsPage() {
             </dl>
           )}
           <p className="fine-print"><LockKeyhole size={14} /> This interface can read protection status, but cannot change Guardian or obtain its keys.</p>
-        </Card>
+          </section>
 
-        <Card className="safety-card access-card">
+          <section className="safety-trust access-section">
           <div className="safety-card-heading">
             <span className="safety-icon"><KeyRound size={19} /></span>
             <div><h2>Sensitive changes</h2><p>Fresh confirmation is reserved for consequential controls.</p></div>
@@ -204,7 +207,8 @@ export function SettingsPage() {
           <Badge tone={canUseSensitiveControls ? "positive" : "neutral"}>
             {canUseSensitiveControls ? "Recently confirmed" : "Confirm when needed"}
           </Badge>
-        </Card>
+          </section>
+        </div>
       </div>
     </div>
   );

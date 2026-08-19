@@ -87,7 +87,6 @@ export function LoginPage({
             <div className="password-field">
               <input
                 autoComplete="current-password"
-                autoFocus
                 className="text-input"
                 id="owner-credential"
                 minLength={32}

@@ -2,6 +2,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -34,7 +35,6 @@ import { errorMessage, useMelloa } from "../app";
 import { useOwnerUnlock } from "../components/layout";
 import { Badge, Button, ErrorState, LoadingState, Modal } from "../components/ui";
 import {
-  asObject,
   asObjectArray,
   formatDurationMs,
   formatInstant,
@@ -60,16 +60,25 @@ export function ConversationPage() {
   const navigate = useNavigate();
   const { threadId } = useParams();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const composerFormRef = useRef<HTMLFormElement | null>(null);
+  const conversationScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldFollowConversationRef = useRef(true);
   const conversationRequestRef = useRef(0);
   const [threads, setThreads] = useState<readonly ConversationThread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [messages, setMessages] = useState<readonly ConversationMessage[]>([]);
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([]);
   const [processing, setProcessing] = useState<readonly ConversationProcessingStatus[]>([]);
+  const [transcriptThreadId, setTranscriptThreadId] = useState<string | null>(null);
+  const [optimisticMessage, setOptimisticMessage] = useState<ConversationMessage | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [sendFailure, setSendFailure] = useState<string | null>(null);
+  const [retrySend, setRetrySend] = useState<{
+    readonly text: string;
+    readonly idempotencyKey: string;
+  } | null>(null);
   const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
   const [modelAvailability, setModelAvailability] = useState<ModelAvailability>("checking");
@@ -78,15 +87,22 @@ export function ConversationPage() {
   const [inspectionLoading, setInspectionLoading] = useState(false);
 
   const selectedThread = threads.find((thread) => thread.thread_id === threadId) ?? null;
+  const transcriptIsCurrent = transcriptThreadId === (threadId ?? null);
+  const visibleMessages = transcriptIsCurrent ? messages : [];
+  const visibleTurns = transcriptIsCurrent ? turns : [];
+  const visibleProcessing = transcriptIsCurrent ? processing : [];
+  const displayedMessages = optimisticMessage !== null && optimisticMessage.thread_id === threadId
+    ? [...visibleMessages, optimisticMessage]
+    : visibleMessages;
   const turnByOutputMessage = useMemo(
-    () => new Map(turns.flatMap((turn) => turn.output_message_ids.map((id) => [id, turn] as const))),
-    [turns],
+    () => new Map(visibleTurns.flatMap((turn) => turn.output_message_ids.map((id) => [id, turn] as const))),
+    [visibleTurns],
   );
   const processingByMessage = useMemo(
-    () => new Map(processing.map((status) => [status.message_id, status] as const)),
-    [processing],
+    () => new Map(visibleProcessing.map((status) => [status.message_id, status] as const)),
+    [visibleProcessing],
   );
-  const hasPendingWork = processing.some((status) => !terminalProcessingStates.has(status.state));
+  const hasPendingWork = visibleProcessing.some((status) => !terminalProcessingStates.has(status.state));
 
   const loadThreads = useCallback(async () => {
     try {
@@ -124,6 +140,8 @@ export function ConversationPage() {
       setMessages([]);
       setTurns([]);
       setProcessing([]);
+      setTranscriptThreadId(null);
+      shouldFollowConversationRef.current = true;
     }
     try {
       const transcript = await api.transcript(selectedId);
@@ -133,12 +151,19 @@ export function ConversationPage() {
       setMessages(transcript.messages);
       setTurns(transcript.turns);
       setProcessing(transcript.processing);
+      setTranscriptThreadId(selectedId);
       setError(null);
     } catch (caught) {
       if (requestId !== conversationRequestRef.current) {
         return;
       }
-      setError(errorMessage(caught));
+      if (!quiet) {
+        setMessages([]);
+        setTurns([]);
+        setProcessing([]);
+        setTranscriptThreadId(selectedId);
+        setError(errorMessage(caught));
+      }
     } finally {
       if (requestId === conversationRequestRef.current) {
         setConversationLoading(false);
@@ -163,6 +188,7 @@ export function ConversationPage() {
       setMessages([]);
       setTurns([]);
       setProcessing([]);
+      setTranscriptThreadId(null);
       return;
     }
     void loadConversation(threadId);
@@ -176,9 +202,37 @@ export function ConversationPage() {
     return () => window.clearInterval(timer);
   }, [hasPendingWork, loadConversation, threadId]);
 
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (textarea === null) {
+      return;
+    }
+    textarea.style.height = "auto";
+    const height = Math.min(Math.max(textarea.scrollHeight, 43), 180);
+    textarea.style.height = `${height}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 180 ? "auto" : "hidden";
+  }, [draft]);
+
+  useLayoutEffect(() => {
+    const container = conversationScrollRef.current;
+    if (container === null || (!shouldFollowConversationRef.current && !sending)) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
+  }, [displayedMessages, sending, visibleProcessing]);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, processing]);
+    if (!threadPanelOpen) {
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setThreadPanelOpen(false);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [threadPanelOpen]);
 
   async function createConversation(title = "New conversation") {
     if (!canWrite) {
@@ -217,22 +271,57 @@ export function ConversationPage() {
     }
 
     setSending(true);
+    setSendFailure(null);
+    const idempotencyKey = retrySend?.text === text
+      ? retrySend.idempotencyKey
+      : crypto.randomUUID();
+    setRetrySend(null);
     try {
       const activeThread = threadId === undefined
         ? await createConversation(titleFromMessage(text))
         : selectedThread;
       if (activeThread === null) {
+        setRetrySend({ text, idempotencyKey });
+        setSendFailure("Your message was not sent. It is still in the composer.");
         return;
       }
       setDraft("");
-      const reply = await api.postMessage(activeThread.thread_id, text, crypto.randomUUID());
+      shouldFollowConversationRef.current = true;
+      setOptimisticMessage(optimisticOwnerMessage(
+        activeThread.thread_id,
+        principal.owner_id,
+        text,
+        idempotencyKey,
+      ));
+      const reply = await api.postMessage(activeThread.thread_id, text, idempotencyKey);
+      setMessages((current) => mergeById(
+        transcriptThreadId === activeThread.thread_id ? current : [],
+        [reply.inbound_message, reply.output_message].filter(
+          (message): message is ConversationMessage => message != null,
+        ),
+        (message) => message.message_id,
+      ));
+      setTurns((current) => mergeById(
+        transcriptThreadId === activeThread.thread_id ? current : [],
+        reply.turn == null ? [] : [reply.turn],
+        (turn) => turn.turn_id,
+      ));
+      setProcessing((current) => mergeById(
+        transcriptThreadId === activeThread.thread_id ? current : [],
+        [reply.processing],
+        (status) => status.message_id,
+      ));
+      setTranscriptThreadId(activeThread.thread_id);
+      setOptimisticMessage(null);
       await Promise.all([loadThreads(), loadConversation(activeThread.thread_id, true)]);
       if (reply.processing.state === "dead") {
         notify("Melli could not answer. You can try this message again.", "error");
       }
     } catch (caught) {
+      setOptimisticMessage(null);
       setDraft(text);
-      notify(errorMessage(caught), "error");
+      setRetrySend({ text, idempotencyKey });
+      setSendFailure(errorMessage(caught));
     } finally {
       setSending(false);
     }
@@ -327,8 +416,17 @@ export function ConversationPage() {
           {hasPendingWork ? <Badge tone="info"><Clock3 className="spin-slow" size={13} /> Thinking</Badge> : null}
         </header>
 
-        <div className="conversation-scroll">
-          {conversationLoading ? <LoadingState label="Opening this conversation" /> : null}
+        <div
+          className="conversation-scroll"
+          onScroll={(event) => {
+            const element = event.currentTarget;
+            shouldFollowConversationRef.current = (
+              element.scrollHeight - element.scrollTop - element.clientHeight < 120
+            );
+          }}
+          ref={conversationScrollRef}
+        >
+          {conversationLoading || !transcriptIsCurrent ? <LoadingState label="Opening this conversation" /> : null}
           {error === null ? null : (
             <ErrorState
               action={threadId === undefined ? undefined : (
@@ -339,7 +437,7 @@ export function ConversationPage() {
             />
           )}
 
-          {!conversationLoading && error === null && messages.length === 0 ? (
+          {!conversationLoading && transcriptIsCurrent && error === null && displayedMessages.length === 0 ? (
             <ConversationWelcome
               availability={modelAvailability}
               onRetryModel={() => void checkModel()}
@@ -351,11 +449,10 @@ export function ConversationPage() {
           ) : null}
 
           <div className="message-list">
-            {messages.map((message) => {
+            {displayedMessages.map((message) => {
               const ownerMessage = message.author_principal_id === principal.owner_id;
               const turn = turnByOutputMessage.get(message.message_id);
               const status = ownerMessage ? processingByMessage.get(message.message_id) : undefined;
-              const synthetic = turn === undefined ? false : isSyntheticTurn(turn, processingByMessage);
               return (
                 <article className={`chat-message ${ownerMessage ? "owner-message" : "melli-message"}`} key={message.message_id}>
                   <span className="message-avatar" aria-hidden="true">
@@ -363,11 +460,10 @@ export function ConversationPage() {
                   </span>
                   <div className="message-bubble">
                     <div className="message-meta">
-                      <strong>{ownerMessage ? "You" : synthetic ? "Test fixture" : "Melli"}</strong>
+                      <strong>{ownerMessage ? "You" : "Melli"}</strong>
                       <time dateTime={message.created_at}>{formatInstant(message.created_at)}</time>
                     </div>
                     <p>{messageBody(message)}</p>
-                    {synthetic ? <p className="fixture-note">This saved test response was not Melli thinking.</p> : null}
                     {!ownerMessage && turn !== undefined ? (
                       <button className="why-button" onClick={() => void explainTurn(turn)} type="button">
                         Why this answer?
@@ -390,7 +486,6 @@ export function ConversationPage() {
                 <div className="message-bubble"><span /><span /><span /><em>Melli is thinking</em></div>
               </article>
             ) : null}
-            <div ref={endRef} />
           </div>
         </div>
 
@@ -398,14 +493,29 @@ export function ConversationPage() {
           {unavailable ? (
             <p className="composer-unavailable"><LockKeyhole size={14} /> Connect a capable model before sending a message.</p>
           ) : null}
-          <form className="composer" onSubmit={(event) => void sendMessage(event)}>
+          {sendFailure === null ? null : (
+            <div className="composer-error" role="alert">
+              <CircleAlert aria-hidden="true" size={16} />
+              <div><strong>Message not sent</strong><span>{sendFailure} Your text is still here.</span></div>
+              <Button onClick={() => composerFormRef.current?.requestSubmit()} size="sm" type="button">Try again</Button>
+              <Button aria-label="Dismiss send error" onClick={() => setSendFailure(null)} size="icon" tone="ghost" type="button">×</Button>
+            </div>
+          )}
+          <form className="composer" onSubmit={(event) => void sendMessage(event)} ref={composerFormRef}>
             <textarea
               aria-label="Message Melli"
               disabled={modelAvailability !== "ready"}
               maxLength={100_000}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                const nextDraft = event.target.value;
+                setDraft(nextDraft);
+                if (retrySend !== null && nextDraft.trim() !== retrySend.text) {
+                  setRetrySend(null);
+                  setSendFailure(null);
+                }
+              }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
                 }
@@ -465,9 +575,8 @@ function ConversationWelcome({
     return (
       <div className="conversation-welcome unavailable-welcome">
         <span className="welcome-mark"><Sparkles size={24} /></span>
-        <h2>Melli needs a capable model</h2>
-        <p>The old fixed tour has been removed from the owner experience because it could not understand you. Start the baseline with the reviewed model route, then return here.</p>
-        <code>make preview PREVIEW_MODEL=ollama</code>
+        <h2>Melli isn’t connected yet</h2>
+        <p>A private model connection needs attention before Melli can answer. Once it is ready, check again here.</p>
         <Button onClick={onRetryModel}><RefreshCw size={15} /> Check again</Button>
       </div>
     );
@@ -547,24 +656,35 @@ function plainLocation(value: string): string {
   return "within the configured private boundary";
 }
 
-function isSyntheticTurn(
-  turn: ConversationTurn,
-  processingByMessage: ReadonlyMap<string, ConversationProcessingStatus>,
-): boolean {
-  for (const messageId of turn.triggering_message_ids) {
-    const status = processingByMessage.get(messageId);
-    if (status === undefined) {
-      continue;
-    }
-    for (let index = status.attempts.length - 1; index >= 0; index -= 1) {
-      const summary = asObject(status.attempts[index]?.model_result_summary);
-      if (summary === null) {
-        continue;
-      }
-      const routeId = readString(summary, "route_id");
-      const providerId = readString(summary, "provider_id");
-      return providerId === "provider.synthetic" || routeId.startsWith("model.fake.");
-    }
+function optimisticOwnerMessage(
+  threadId: string,
+  ownerId: string,
+  text: string,
+  idempotencyKey: string,
+): ConversationMessage {
+  const now = new Date().toISOString();
+  return {
+    message_id: `optimistic-${idempotencyKey}`,
+    thread_id: threadId,
+    author_principal_id: ownerId,
+    source_client: "owner-console",
+    parts: [{ kind: "text", text }],
+    citation_ids: [],
+    delivery_state: "recorded",
+    sensitivity: "personal",
+    created_at: now,
+    observed_at: now,
+  };
+}
+
+function mergeById<T>(
+  current: readonly T[],
+  additions: readonly T[],
+  identify: (item: T) => string,
+): readonly T[] {
+  const merged = new Map(current.map((item) => [identify(item), item]));
+  for (const item of additions) {
+    merged.set(identify(item), item);
   }
-  return false;
+  return [...merged.values()];
 }
