@@ -108,6 +108,12 @@ export function SettingsPage() {
   ) ?? [];
   const includedGroups = exportReadiness?.coverage.filter((item) => item.included).length ?? 0;
   const totalGroups = exportReadiness?.coverage.length ?? 0;
+  const includedLabels = exportReadiness?.coverage
+    .filter((item) => item.included)
+    .map((item) => item.label) ?? [];
+  const omittedLabels = exportReadiness?.coverage
+    .filter((item) => !item.included)
+    .map((item) => item.label) ?? [];
 
   return (
     <div className="safety-page">
@@ -131,21 +137,35 @@ export function SettingsPage() {
           <section className="safety-section data-section">
           <div className="safety-card-heading">
             <span className="safety-icon"><Database size={19} /></span>
-            <div><h2>Your data</h2><p>Take a copy of the history Melloa currently holds.</p></div>
+            <div><h2>Your data</h2><p>Take a readable portability copy of current owner content.</p></div>
           </div>
           <div className="plain-status">
-            <span><strong>{includedGroups}</strong> of {totalGroups || "?"} current data groups included</span>
+            <span><strong>{includedGroups}</strong> of {totalGroups || "?"} known data groups included</span>
             <Badge tone={exportReadiness?.encrypted === true ? "positive" : "warning"}>
               {exportReadiness?.encrypted === true ? "Encrypted" : "Not encrypted"}
             </Badge>
           </div>
+          {exportReadiness === null ? null : (
+            <details className="export-details">
+              <summary>What this copy includes</summary>
+              <div className="export-coverage">
+                <p><strong>Included</strong>{includedLabels.join(" · ")}</p>
+                <p><strong>Not included</strong>{omittedLabels.join(" · ")}</p>
+              </div>
+              <ul className="export-limitations">
+                {exportReadiness.limitations.map((limitation) => (
+                  <li key={limitation}>{limitation}</li>
+                ))}
+              </ul>
+            </details>
+          )}
           {exportReadiness?.encrypted === false ? (
-            <p className="safety-warning"><TriangleAlert size={16} /> The current browser download is a preview ZIP and is not encrypted. Keep it private.</p>
+            <p className="safety-warning"><TriangleAlert size={16} /> This partial browser ZIP is not encrypted. Keep it private.</p>
           ) : null}
           <Button loading={exporting} onClick={() => void downloadExport()} tone="primary">
-            <Download size={16} /> Download my data
+            <Download size={16} /> Download portability copy
           </Button>
-          <p className="fine-print">Melloa validates the archive before download. This is a portability copy, not a replacement for encrypted backups.</p>
+          <p className="fine-print">Melloa validates file contents and hashes before download. This readable ZIP is not a restore bundle or a replacement for encrypted backups.</p>
           </section>
 
           <section className="safety-section sessions-section">

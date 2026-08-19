@@ -53,12 +53,30 @@ describe("SettingsPage", () => {
     mocks.exportReadiness.mockResolvedValue({
       encrypted: false,
       coverage: [
-        { included: true },
-        { included: true },
-        { included: false },
+        { group: "conversation-history", label: "Active conversations", included: true },
+        { group: "answer-provenance", label: "Answer provenance", included: true },
+        { group: "memory-history", label: "Memory history", included: true },
+        {
+          group: "conversation-deletion-receipts",
+          label: "Conversation deletion receipts",
+          included: false,
+        },
+        {
+          group: "account-and-security-history",
+          label: "Account and browser history",
+          included: false,
+        },
+        {
+          group: "system-events-and-audit-history",
+          label: "System event and audit history",
+          included: false,
+        },
       ],
       validation_checks: [],
-      limitations: [],
+      limitations: [
+        "The browser archive is not encrypted.",
+        "Backups remain separate from this copy.",
+      ],
     });
     mocks.revokeOtherSessions.mockResolvedValue({ revoked_count: 1 });
     mocks.context = {
@@ -87,8 +105,12 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Data & safety" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Your data" })).toBeVisible();
-    expect(screen.getByText("2")).toBeVisible();
+    expect(screen.getByText("3")).toBeVisible();
     expect(screen.getByText("Not encrypted")).toBeVisible();
+    fireEvent.click(screen.getByText("What this copy includes"));
+    expect(screen.getByText("Active conversations · Answer provenance · Memory history")).toBeVisible();
+    expect(screen.getByText(/Conversation deletion receipts/)).toBeVisible();
+    expect(screen.getByText("Backups remain separate from this copy.")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Independent protection" })).toBeVisible();
     expect(screen.getByText("Offline")).toBeVisible();
     expect(screen.queryByText(/Telegram/i)).not.toBeInTheDocument();
@@ -101,7 +123,7 @@ describe("SettingsPage", () => {
     mocks.context = { ...mocks.context, canUseSensitiveControls: false };
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Download my data/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Download portability copy/ }));
     expect(mocks.unlock).toHaveBeenCalledWith(expect.stringMatching(/private history/i));
     expect(mocks.downloadExportPreview).not.toHaveBeenCalled();
     expect(screen.getByText(/Ordinary conversation remains available/i)).toBeVisible();

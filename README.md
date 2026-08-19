@@ -55,6 +55,9 @@ This remains disposable and is not the target owner experience.
 The concise, implementation-independent rules are in
 [trust boundaries](docs/trust-boundaries.md).
 
+The current readable portability copy and its exclusions are documented in
+[owner export](docs/owner-export.md).
+
 ## Work on Melloa
 
 ```bash

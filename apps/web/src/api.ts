@@ -125,6 +125,8 @@ export type SystemStatus = {
 };
 
 export type ExportCoverageItem = {
+  readonly group: string;
+  readonly label: string;
   readonly included: boolean;
 };
 

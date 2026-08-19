@@ -239,9 +239,10 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
     assert conversations["conversations"][0]["messages"][1]["corrects_message_id"] == (
         original_message_id
     )
-    assert memories_document["memories"][0]["value"] == {
+    assert memories_document["assertions"][0]["assertion"]["value"] == {
         "statement": "Use durable context."
     }
+    assert memories_document["assertions"][0]["current_state"]["version"] == 1
     with zipfile.ZipFile(io.BytesIO(archive_after_deletion.content)) as exported:
         conversations_after_deletion = json.loads(exported.read("conversations.json"))
     assert conversations_after_deletion["conversations"] == []

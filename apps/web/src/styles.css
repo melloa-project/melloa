@@ -1254,6 +1254,49 @@ dd {
   font-size: 17px;
 }
 
+.export-details {
+  width: 100%;
+  padding: 10px 11px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.export-details summary {
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.export-coverage {
+  display: grid;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.export-coverage p {
+  display: grid;
+  gap: 2px;
+}
+
+.export-coverage strong {
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.export-limitations {
+  display: grid;
+  gap: 5px;
+  padding-left: 17px;
+  margin: 11px 0 0;
+  color: var(--faint);
+  font-size: 10px;
+}
+
 .safety-warning {
   display: flex;
   align-items: flex-start;

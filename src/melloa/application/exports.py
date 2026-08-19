@@ -21,24 +21,35 @@ from melloa.domain.base import (
     new_record_id,
     utc_now,
 )
-from melloa.ports.memory import MemoryStore
+from melloa.ports.memory import MemoryContentDeletedError, MemoryStore
 
 
 class ExportBundleError(RuntimeError):
     """The owner archive could not be assembled or validated."""
 
 
-ExportGroup = Literal["conversations", "messages-and-answers", "memories"]
-_EXPORT_GROUPS: tuple[ExportGroup, ...] = (
-    "conversations",
-    "messages-and-answers",
-    "memories",
+ExportGroup = Literal[
+    "conversation-history",
+    "answer-provenance",
+    "memory-history",
+    "conversation-deletion-receipts",
+    "account-and-security-history",
+    "system-events-and-audit-history",
+]
+_EXPORT_COVERAGE: tuple[tuple[ExportGroup, str, bool], ...] = (
+    ("conversation-history", "Active conversations, messages, and answers", True),
+    ("answer-provenance", "Reply attempts and context behind completed answers", True),
+    ("memory-history", "Retained memories, corrections, and change history", True),
+    ("conversation-deletion-receipts", "Conversation deletion receipts", False),
+    ("account-and-security-history", "Account and signed-in browser history", False),
+    ("system-events-and-audit-history", "Internal system and audit history", False),
 )
 
 
 class ExportCoverageItem(ContractModel):
     group: ExportGroup
-    included: bool = True
+    label: str
+    included: bool
 
 
 class OwnerExportReadinessReport(ContractModel):
@@ -73,49 +84,76 @@ class OwnerExportService:
     def readiness(self, principal: AuthenticatedOwner) -> OwnerExportReadinessReport:
         self._require_owner(principal)
         return OwnerExportReadinessReport(
-            coverage=tuple(ExportCoverageItem(group=group) for group in _EXPORT_GROUPS),
+            coverage=tuple(
+                ExportCoverageItem(group=group, label=label, included=included)
+                for group, label, included in _EXPORT_COVERAGE
+            ),
             validation_checks=(
                 {"check": "archive-structure", "performed_before_download": True},
                 {"check": "content-hashes", "performed_before_download": True},
             ),
             limitations=(
                 "The browser archive is not encrypted.",
-                "Authentication secrets and provider credentials are never included.",
+                "Deleted conversation content cannot be reconstructed; its deletion receipts "
+                "are not included.",
+                "A deleted memory value may remain in a conversation's completed-answer "
+                "provenance if that answer used it.",
+                "Failed reply attempts include recorded outcome and disclosure summaries, not "
+                "full failed answer payloads.",
+                "Login sessions, credentials, model connection secrets, system events, and audit "
+                "records are not included.",
+                "Backups are separate and may retain older data according to their independently "
+                "configured expiry.",
             ),
         )
 
     def build_archive(self, principal: AuthenticatedOwner) -> OwnerExportArchive:
         self._require_owner(principal)
+        readiness = self.readiness(principal)
         export_id = self._id_factory("export")
         generated_at = self._clock()
         threads = self._conversation.list_threads(principal)
-        conversations = [
-            {
+        conversations = []
+        for thread in threads:
+            turns = self._conversation.list_turns(principal, thread.thread_id)
+            conversations.append({
                 "thread": thread.model_dump(mode="json"),
                 "messages": [
                     message.model_dump(mode="json")
                     for message in self._conversation.list_messages(principal, thread.thread_id)
                 ],
-                "turns": [
-                    turn.model_dump(mode="json")
-                    for turn in self._conversation.list_turns(principal, thread.thread_id)
+                "turns": [turn.model_dump(mode="json") for turn in turns],
+                "processing": [
+                    processing.model_dump(mode="json")
+                    for processing in self._conversation.list_processing(
+                        principal,
+                        thread.thread_id,
+                    )
                 ],
-            }
-            for thread in threads
-        ]
-        memories = [
-            memory.model_dump(mode="json")
-            for memory in self._memory.list_assertions(principal.owner_id)
-        ]
+                "answer_provenance": [
+                    self._conversation.inspect_turn(
+                        principal,
+                        thread_id=thread.thread_id,
+                        turn_id=turn.turn_id,
+                    ).model_dump(mode="json")
+                    for turn in turns
+                ],
+            })
+        memories = self._memory_history(principal.owner_id)
         payloads = {
             "conversations.json": canonical_json_bytes({"conversations": conversations}),
-            "memories.json": canonical_json_bytes({"memories": memories}),
+            "memories.json": canonical_json_bytes(memories),
         }
         manifest = {
-            "format": "melloa-owner-export-v1",
+            "format": "melloa-owner-export-v2",
             "export_id": export_id,
             "generated_at": generated_at.isoformat(),
             "owner_id": principal.owner_id,
+            "encrypted": readiness.encrypted,
+            "coverage": [
+                item.model_dump(mode="json") for item in readiness.coverage
+            ],
+            "limitations": list(readiness.limitations),
             "files": [
                 {
                     "path": path,
@@ -132,6 +170,53 @@ class OwnerExportService:
             filename=f"melloa-owner-export-{export_id}.zip",
             content=content,
         )
+
+    def _memory_history(self, owner_id: RecordId) -> JsonObject:
+        metadata_items = self._memory.list_assertion_metadata(owner_id)
+        assertion_ids = frozenset(item.assertion_id for item in metadata_items)
+        assertions: list[JsonObject] = []
+        for metadata in metadata_items:
+            deletion = None
+            try:
+                assertion_document = self._memory.get_assertion(
+                    metadata.assertion_id
+                ).model_dump(mode="json")
+                content_state = "retained"
+            except MemoryContentDeletedError:
+                assertion_document = metadata.model_dump(mode="json")
+                content_state = "deleted"
+                deletion = self._memory.get_assertion_content_deletion(
+                    metadata.assertion_id
+                )
+                if deletion is None:
+                    raise ExportBundleError(
+                        "deleted memory content is missing its deletion evidence"
+                    ) from None
+            assertions.append(
+                {
+                    "content_state": content_state,
+                    "assertion": assertion_document,
+                    "current_state": self._memory.get_assertion_state(
+                        metadata.assertion_id
+                    ).model_dump(mode="json"),
+                    "state_changes": [
+                        change.model_dump(mode="json")
+                        for change in self._memory.list_assertion_state_changes(
+                            metadata.assertion_id
+                        )
+                    ],
+                    "deletion_tombstone": (
+                        None if deletion is None else deletion.model_dump(mode="json")
+                    ),
+                }
+            )
+        return {
+            "assertions": assertions,
+            "provenance_edges": [
+                edge.model_dump(mode="json")
+                for edge in self._memory.list_provenance_edges(assertion_ids)
+            ],
+        }
 
     def _require_owner(self, principal: AuthenticatedOwner) -> None:
         if principal.owner_id != self._owner_id:
