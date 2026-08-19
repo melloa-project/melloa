@@ -17,6 +17,14 @@ class ProcessingLocation(StrEnum):
     APPROVED_PROVIDER = "approved_provider"
 
 
+class ModelInvocationTarget(ContractModel):
+    """The bounded destination known before a model call returns."""
+
+    provider_id: QualifiedName
+    model_id: str = Field(min_length=1, max_length=256)
+    processing_location: ProcessingLocation
+
+
 class ModelHealthState(StrEnum):
     HEALTHY = "healthy"
     UNAVAILABLE = "unavailable"

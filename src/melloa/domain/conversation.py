@@ -15,7 +15,7 @@ from melloa.domain.base import (
     RecordId,
 )
 from melloa.domain.classification import Sensitivity
-from melloa.domain.models import ModelResult, ProcessingLocation
+from melloa.domain.models import ModelInvocationTarget, ModelResult, ProcessingLocation
 from melloa.domain.retrieval import RetrievalManifest
 
 
@@ -146,6 +146,7 @@ class ConversationProcessingAttempt(ContractModel):
     retry_at: AwareDatetime | None = None
     retrieval_manifest_id: RecordId | None = None
     model_result_summary: ConversationProcessingModelResult | None = None
+    failed_model_target: ModelInvocationTarget | None = None
     disclosed_memory_ids: tuple[RecordId, ...] = ()
     external_disclosure: bool = False
 
@@ -158,6 +159,17 @@ class ConversationProcessingAttempt(ContractModel):
         if self.model_result_summary is not None:
             if self.request_id != self.model_result_summary.request_id:
                 raise ValueError("processing request does not match its model result")
+        if self.failed_model_target is not None:
+            if (
+                self.model_result_summary is not None
+                or self.outcome is ConversationProcessingOutcome.SUCCEEDED
+            ):
+                raise ValueError("successful model results cannot carry a failed target")
+            if self.external_disclosure != (
+                self.failed_model_target.processing_location
+                is ProcessingLocation.APPROVED_PROVIDER
+            ):
+                raise ValueError("processing disclosure does not match the failed target")
         if (
             self.model_result_summary is not None
             and self.external_disclosure

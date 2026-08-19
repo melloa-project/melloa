@@ -721,7 +721,11 @@ def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
     )
 
     def fail_provider(_request):
-        raise ModelInvocationError(external_disclosure=True)
+        raise ModelInvocationError(
+            provider_id="provider.synthetic-external",
+            model_id="review-model-v2",
+            processing_location=ProcessingLocation.APPROVED_PROVIDER,
+        )
 
     backend = FakeModelGateway(
         fail_provider,
@@ -752,6 +756,13 @@ def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
     assert accepted.processing.last_error_code == "model.gateway_failed"
     assert attempt.external_disclosure is True
     assert attempt.model_result_summary is None
+    assert attempt.failed_model_target is not None
+    assert attempt.failed_model_target.provider_id == "provider.synthetic-external"
+    assert attempt.failed_model_target.model_id == "review-model-v2"
+    assert (
+        attempt.failed_model_target.processing_location
+        is ProcessingLocation.APPROVED_PROVIDER
+    )
     assert attempt.disclosed_memory_ids == (memory.assertion_id,)
     assert attempt.retrieval_manifest_id is not None
     assert store.get_retrieval_manifest(attempt.retrieval_manifest_id).external_disclosure is True

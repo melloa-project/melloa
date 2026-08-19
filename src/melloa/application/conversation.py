@@ -42,6 +42,7 @@ from melloa.domain.conversation import (
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.models import (
     ConversationModelOutput,
+    ModelInvocationTarget,
     ModelRequest,
     ModelResult,
     ProcessingLocation,
@@ -510,6 +511,7 @@ class ConversationService:
                 retrieval_manifest=retrieval_manifest,
                 request_id=model_request.request_id,
                 external_disclosure=error.external_disclosure,
+                failed_model_target=error.target,
             )
         except Exception:
             return self._record_processing_failure(
@@ -718,6 +720,7 @@ class ConversationService:
         model_result: ModelResult | None = None,
         request_id: RecordId | None = None,
         external_disclosure: bool | None = None,
+        failed_model_target: ModelInvocationTarget | None = None,
     ) -> ConversationProcessingStatus:
         completed_at = max(self._clock(), started_at)
         if model_result is not None:
@@ -756,6 +759,7 @@ class ConversationService:
             model_result=model_result,
             request_id=request_id,
             external_disclosure=disclosed,
+            failed_model_target=failed_model_target,
         )
         return self._store.record_reply_failure(
             claim,
@@ -777,6 +781,7 @@ class ConversationService:
         error_code: QualifiedName | None = None,
         retry_at: datetime | None = None,
         external_disclosure: bool | None = None,
+        failed_model_target: ModelInvocationTarget | None = None,
     ) -> ConversationProcessingAttempt:
         if model_result is not None:
             request_id = model_result.request_id
@@ -809,6 +814,7 @@ class ConversationService:
             model_result_summary=(
                 None if model_result is None else processing_model_result(model_result)
             ),
+            failed_model_target=failed_model_target,
             disclosed_memory_ids=disclosed_memory_ids,
             external_disclosure=disclosed,
         )

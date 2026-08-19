@@ -170,6 +170,12 @@ def test_failed_approved_provider_call_reports_possible_disclosure(fixed_time) -
         gateway.invoke(approved_request)
 
     assert failure.value.external_disclosure is True
+    assert failure.value.target.provider_id == "provider.local-test"
+    assert failure.value.target.model_id == "qwen-test"
+    assert (
+        failure.value.target.processing_location
+        is ProcessingLocation.APPROVED_PROVIDER
+    )
 
 
 def test_gateway_invokes_bounded_json_completion_and_accounts_usage(fixed_time) -> None:

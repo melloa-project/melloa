@@ -28,6 +28,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import type {
   ConversationMessage,
+  ConversationProcessingAttempt,
   ConversationProcessingStatus,
   ConversationReply,
   ConversationThread,
@@ -792,6 +793,9 @@ export function ConversationPage() {
               const ownerMessage = message.author_principal_id === principal.owner_id;
               const turn = turnByOutputMessage.get(message.message_id);
               const status = ownerMessage ? processingByMessage.get(message.message_id) : undefined;
+              const failedExternalAttempts = status?.attempts.filter((attempt) => (
+                attempt.external_disclosure && attempt.outcome !== "succeeded"
+              )) ?? [];
               return (
                 <article className={`chat-message ${ownerMessage ? "owner-message" : "melli-message"}`} key={message.message_id}>
                   <span className="message-avatar" aria-hidden="true">
@@ -821,6 +825,9 @@ export function ConversationPage() {
                         Why this answer?
                       </button>
                     ) : null}
+                    {failedExternalAttempts.length === 0 ? null : (
+                      <FailedExternalDisclosure attempts={failedExternalAttempts} />
+                    )}
                     {status?.state === "dead" ? (
                       <div className="message-recovery" role="status">
                         <CircleAlert size={15} />
@@ -1088,6 +1095,35 @@ function AnswerExplanation({ inspection }: { readonly inspection: ConversationTu
   );
 }
 
+function FailedExternalDisclosure({
+  attempts,
+}: {
+  readonly attempts: readonly ConversationProcessingAttempt[];
+}) {
+  return (
+    <div className="external-disclosure-warning" role="alert">
+      <CircleAlert aria-hidden="true" size={17} />
+      <div>
+        <strong>{attempts.length === 1
+          ? "External model attempt failed"
+          : `${attempts.length} external model attempts failed`}</strong>
+        <ul>
+          {attempts.map((attempt) => (
+            <li key={attempt.attempt_id}>
+              <span>
+                {disclosedContext(attempt.disclosed_memory_ids.length)} may have reached{" "}
+                {failedDestination(attempt)}.
+              </span>
+              <small>Attempt {attempt.attempt} · {formatInstant(attempt.completed_at)}</small>
+            </li>
+          ))}
+        </ul>
+        <p>No usable answer was recorded from {attempts.length === 1 ? "this attempt" : "these attempts"}.</p>
+      </div>
+    </div>
+  );
+}
+
 function titleFromMessage(message: string): string {
   const firstLine = message.split("\n", 1)[0]?.trim() ?? "";
   if (firstLine.length <= 52) {
@@ -1104,6 +1140,22 @@ function plainLocation(value: string): string {
     return "on the private network";
   }
   return "within the configured private boundary";
+}
+
+function disclosedContext(memoryCount: number): string {
+  if (memoryCount === 0) {
+    return "Your message";
+  }
+  return `Your message and ${memoryCount} saved ${memoryCount === 1 ? "memory" : "memories"}`;
+}
+
+function failedDestination(attempt: ConversationProcessingAttempt): string {
+  const target = attempt.failed_model_target ?? attempt.model_result_summary;
+  if (target == null) {
+    return "the configured external model (destination details unavailable for this earlier attempt)";
+  }
+  const provider = titleCase(target.provider_id.replace(/^provider[._-]/, ""));
+  return `${provider} (${target.model_id})`;
 }
 
 function optimisticOwnerMessage(

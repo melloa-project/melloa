@@ -650,6 +650,61 @@ dd {
   flex: 1;
 }
 
+.external-disclosure-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  width: min(520px, 100%);
+  margin-top: 12px;
+  padding: 11px 12px;
+  color: #70470f;
+  background: var(--amber-soft);
+  border: 1px solid #efd5a5;
+  border-radius: 10px;
+}
+
+.external-disclosure-warning > svg {
+  margin-top: 1px;
+  color: var(--amber);
+}
+
+.external-disclosure-warning strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.external-disclosure-warning ul {
+  padding: 0;
+  margin: 7px 0 0;
+  list-style: none;
+}
+
+.external-disclosure-warning li + li {
+  padding-top: 7px;
+  margin-top: 7px;
+  border-top: 1px solid rgb(149 96 24 / 18%);
+}
+
+.external-disclosure-warning li span,
+.external-disclosure-warning li small,
+.external-disclosure-warning p {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.external-disclosure-warning li small {
+  margin-top: 2px;
+  color: #80643c;
+  font-size: 10px;
+}
+
+.external-disclosure-warning p {
+  margin-top: 7px;
+  font-weight: 650;
+}
+
 .thinking-message .message-bubble {
   display: flex;
   align-items: center;

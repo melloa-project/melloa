@@ -134,8 +134,9 @@ class OpenAICompatibleModelGateway:
                 raise ValueError("model exceeded the cost ceiling")
         except Exception as error:
             raise ModelInvocationError(
-                external_disclosure=self.config.processing_location
-                is ProcessingLocation.APPROVED_PROVIDER
+                provider_id=self.config.provider_id,
+                model_id=self.config.model_id,
+                processing_location=self.config.processing_location,
             ) from error
         return ModelResult(
             result_id=self._id_factory("model_result"),

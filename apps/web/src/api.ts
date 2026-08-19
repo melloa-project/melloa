@@ -70,14 +70,66 @@ export type ConversationTurn = {
   readonly completed_at?: string | null;
 };
 
+export type ProcessingLocation = "device" | "private_network" | "approved_provider";
+
+export type ModelInvocationTarget = {
+  readonly provider_id: string;
+  readonly model_id: string;
+  readonly processing_location: ProcessingLocation;
+};
+
+export type ConversationProcessingModelResult = ModelInvocationTarget & {
+  readonly result_id: string;
+  readonly request_id: string;
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly cost_gbp: number;
+  readonly started_at: string;
+  readonly completed_at: string;
+  readonly external_disclosure: boolean;
+};
+
 export type ConversationProcessingAttempt = {
-  readonly model_result_summary?: JsonObject | null;
+  readonly attempt_id: string;
+  readonly work_id: string;
+  readonly message_id: string;
+  readonly attempt: number;
+  readonly request_id?: string | null;
+  readonly outcome: "succeeded" | "retry_scheduled" | "dead";
+  readonly error_code?: string | null;
+  readonly started_at: string;
+  readonly completed_at: string;
+  readonly retry_at?: string | null;
+  readonly retrieval_manifest_id?: string | null;
+  readonly model_result_summary?: ConversationProcessingModelResult | null;
+  readonly failed_model_target?: ModelInvocationTarget | null;
+  readonly disclosed_memory_ids: readonly string[];
+  readonly external_disclosure: boolean;
+};
+
+export type ConversationProcessingResumption = {
+  readonly resumption_id: string;
+  readonly work_id: string;
+  readonly message_id: string;
+  readonly requested_by: string;
+  readonly requested_at: string;
+  readonly prior_attempts: number;
+  readonly added_attempts: number;
 };
 
 export type ConversationProcessingStatus = {
+  readonly work_id: string;
+  readonly thread_id: string;
   readonly message_id: string;
   readonly state: string;
+  readonly attempt_count: number;
+  readonly max_attempts: number;
+  readonly available_at: string;
+  readonly lease_expires_at?: string | null;
+  readonly last_error_code?: string | null;
+  readonly completed_at?: string | null;
   readonly attempts: readonly ConversationProcessingAttempt[];
+  readonly resumptions: readonly ConversationProcessingResumption[];
 };
 
 export type ConversationTranscript = {

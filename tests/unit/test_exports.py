@@ -22,7 +22,9 @@ from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus, ProvenanceEdge, ProvenanceRelation
+from melloa.domain.models import ProcessingLocation
 from melloa.ports.memory import AssertionContentDeletionWrite
+from melloa.ports.model import ModelInvocationError
 from tests.conftest import record_id
 
 _OWNER_CREDENTIAL = "owner-export-test-credential-value-0001"
@@ -271,3 +273,89 @@ def test_export_preserves_retained_and_deleted_memory_history(fixed_time) -> Non
     )
     assert memories["assertions"][1]["state_changes"][0]["version"] == 1
     assert memories["provenance_edges"][0]["edge_id"] == edge.edge_id
+
+
+def test_export_includes_failed_external_destination_without_provider_output(
+    fixed_time,
+) -> None:
+    owner_id = record_id("owner", 1)
+    memory = Assertion(
+        assertion_id=record_id("assertion", 1),
+        subject_id=owner_id,
+        predicate="preference.export-disclosure",
+        value={"statement": "Use this context carefully."},
+        epistemic_status=EpistemicStatus.OWNER_CONFIRMED,
+        status=AssertionStatus.CONFIRMED,
+        confidence=1.0,
+        source_authority=TrustLabel.OWNER_AUTHORED,
+        sensitivity=Sensitivity.PERSONAL,
+        observed_at=fixed_time,
+    )
+    repository = InMemoryMemoryRepository((memory,))
+    principal = AuthenticatedOwner(
+        owner_id=owner_id,
+        session_id=record_id("session", 1),
+        authentication_method="auth.synthetic-opaque-token",
+        authenticated_at=fixed_time,
+        reauthenticated_until=fixed_time + timedelta(minutes=5),
+        expires_at=fixed_time + timedelta(minutes=30),
+    )
+
+    def fail_external(_request):
+        raise ModelInvocationError(
+            provider_id="provider.export-approved",
+            model_id="export-model-v1",
+            processing_location=ProcessingLocation.APPROVED_PROVIDER,
+        )
+
+    ids = _ids()
+    conversation = ConversationService(
+        owner_id=owner_id,
+        intelligence_id=record_id("intelligence", 1),
+        store=InMemoryConversationStore(id_factory=ids),
+        model_gateway=FakeModelGateway(
+            fail_external,
+            clock=lambda: fixed_time,
+            id_factory=ids,
+        ),
+        retriever=PolicyConstrainedRetriever(
+            repository,
+            clock=lambda: fixed_time,
+            id_factory=ids,
+        ),
+        guardian_reader=_guardian(fixed_time),
+        clock=lambda: fixed_time,
+        id_factory=ids,
+    )
+    thread = conversation.create_thread(
+        principal,
+        title="Exported disclosure",
+        sensitivity=Sensitivity.PERSONAL,
+    )
+    conversation.post_owner_message(
+        principal,
+        thread_id=thread.thread_id,
+        text="Use the context with the external model.",
+        idempotency_key="export-failed-disclosure",
+    )
+    service = OwnerExportService(
+        owner_id=owner_id,
+        conversation=conversation,
+        memory=repository,
+        clock=lambda: fixed_time,
+        id_factory=_ids(),
+    )
+
+    archive = service.build_archive(principal)
+
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as exported:
+        conversations = json.loads(exported.read("conversations.json"))
+    attempt = conversations["conversations"][0]["processing"][0]["attempts"][0]
+    assert attempt["failed_model_target"] == {
+        "provider_id": "provider.export-approved",
+        "model_id": "export-model-v1",
+        "processing_location": "approved_provider",
+    }
+    assert attempt["disclosed_memory_ids"] == [memory.assertion_id]
+    assert attempt["model_result_summary"] is None
+    assert conversations["conversations"][0]["answer_provenance"] == []

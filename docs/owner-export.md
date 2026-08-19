@@ -26,8 +26,8 @@ and exact contents before returning it.
 The current archive does not include:
 
 - conversation content that the owner already deleted, or conversation deletion receipts;
-- full provider output from failed reply attempts (recorded outcomes and disclosure summaries are
-  included);
+- full provider output from failed reply attempts (recorded outcomes, possible external destination,
+  and disclosed-memory IDs are included);
 - login sessions, authentication secrets, provider credentials, or signed-in browser history;
 - general system events or audit-chain records;
 - database backups or their encryption keys.

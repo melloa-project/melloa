@@ -2,6 +2,10 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type {
+  ConversationProcessingAttempt,
+  ConversationProcessingStatus,
+} from "../src/api";
 import { ConversationPage } from "../src/pages/conversation";
 
 const mocks = vi.hoisted(() => ({
@@ -80,6 +84,64 @@ function replyFor(text: string, selectedThreadId = thread.thread_id) {
     turn: null,
     processing: { message_id: inboundMessage.message_id, state: "completed", attempts: [] },
     duplicate: false,
+  };
+}
+
+function failedExternalAttempt(
+  attempt: number,
+  memoryIds: readonly string[],
+  target: "failed" | "result" = "failed",
+): ConversationProcessingAttempt {
+  const modelTarget = {
+    provider_id: attempt === 1 ? "provider.acme-cloud" : "provider.second-cloud",
+    model_id: attempt === 1 ? "reasoner-v2" : "reasoner-v3",
+    processing_location: "approved_provider" as const,
+  };
+  return {
+    attempt_id: `attempt_${attempt}`,
+    work_id: "work_external",
+    message_id: "message_external",
+    attempt,
+    request_id: `request_${attempt}`,
+    outcome: "retry_scheduled",
+    error_code: target === "failed" ? "model.gateway_failed" : "model.invalid_output",
+    started_at: `2026-08-19T12:00:0${attempt}Z`,
+    completed_at: `2026-08-19T12:00:0${attempt}Z`,
+    retry_at: `2026-08-19T12:01:0${attempt}Z`,
+    retrieval_manifest_id: `manifest_${attempt}`,
+    model_result_summary: target === "result" ? {
+      ...modelTarget,
+      result_id: `result_${attempt}`,
+      request_id: `request_${attempt}`,
+      input_tokens: 20,
+      output_tokens: 0,
+      cost_gbp: 0,
+      started_at: `2026-08-19T12:00:0${attempt}Z`,
+      completed_at: `2026-08-19T12:00:0${attempt}Z`,
+      external_disclosure: true,
+    } : null,
+    failed_model_target: target === "failed" ? modelTarget : null,
+    disclosed_memory_ids: memoryIds,
+    external_disclosure: true,
+  };
+}
+
+function processingStatus(
+  messageId: string,
+  state: "ready" | "completed",
+  attempts: readonly ConversationProcessingAttempt[],
+): ConversationProcessingStatus {
+  return {
+    work_id: "work_external",
+    thread_id: thread.thread_id,
+    message_id: messageId,
+    state,
+    attempt_count: attempts.length,
+    max_attempts: 5,
+    available_at: "2026-08-19T12:01:00Z",
+    completed_at: state === "completed" ? "2026-08-19T12:02:00Z" : null,
+    attempts,
+    resumptions: [],
   };
 }
 
@@ -330,6 +392,80 @@ describe("ConversationPage", () => {
     await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledTimes(2));
     expect(mocks.postMessage.mock.calls[1]?.[2]).toBe(firstKey);
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  });
+
+  it("warns as soon as a failed external attempt is waiting to retry", async () => {
+    const ownerMessage = message("message_external", owner.owner_id, "Use my saved context");
+    const failedAttempt = failedExternalAttempt(
+      1,
+      ["memory_one", "memory_two"],
+    );
+    mocks.transcript.mockResolvedValue({
+      messages: [ownerMessage],
+      turns: [],
+      processing: [processingStatus(ownerMessage.message_id, "ready", [failedAttempt])],
+    });
+    renderConversation();
+
+    const warning = await screen.findByRole("alert");
+    expect(warning).toHaveTextContent("External model attempt failed");
+    expect(warning).toHaveTextContent(
+      "Your message and 2 saved memories may have reached Acme Cloud (reasoner-v2).",
+    );
+    expect(warning).toHaveTextContent("No usable answer was recorded from this attempt.");
+    expect(screen.getByText("Melli is thinking…")).toBeVisible();
+  });
+
+  it("keeps every failed external disclosure visible after a later answer succeeds", async () => {
+    const ownerMessage = message("message_external", owner.owner_id, "Try another model");
+    const melliMessage = message("message_external_answer", "melli_1", "Recovered answer");
+    const firstFailure = failedExternalAttempt(1, ["memory_one"]);
+    const secondFailure = {
+      ...failedExternalAttempt(2, [], "result"),
+      outcome: "dead" as const,
+      retry_at: null,
+    };
+    const success: ConversationProcessingAttempt = {
+      ...failedExternalAttempt(3, []),
+      attempt_id: "attempt_3",
+      request_id: "request_3",
+      outcome: "succeeded",
+      error_code: null,
+      retry_at: null,
+      model_result_summary: {
+        provider_id: "provider.recovery-cloud",
+        model_id: "reasoner-v4",
+        processing_location: "approved_provider",
+        result_id: "result_3",
+        request_id: "request_3",
+        input_tokens: 20,
+        output_tokens: 10,
+        cost_gbp: 0.01,
+        started_at: "2026-08-19T12:02:00Z",
+        completed_at: "2026-08-19T12:02:01Z",
+        external_disclosure: true,
+      },
+      failed_model_target: null,
+    };
+    mocks.transcript.mockResolvedValue({
+      messages: [ownerMessage, melliMessage],
+      turns: [],
+      processing: [processingStatus(
+        ownerMessage.message_id,
+        "completed",
+        [firstFailure, secondFailure, success],
+      )],
+    });
+    renderConversation();
+
+    expect(await screen.findByText("Recovered answer")).toBeVisible();
+    const warning = screen.getByRole("alert");
+    expect(warning).toHaveTextContent("2 external model attempts failed");
+    expect(warning).toHaveTextContent("Attempt 1");
+    expect(warning).toHaveTextContent("Attempt 2");
+    expect(warning).toHaveTextContent("Acme Cloud (reasoner-v2)");
+    expect(warning).toHaveTextContent("Second Cloud (reasoner-v3)");
+    expect(warning).toHaveTextContent("No usable answer was recorded from these attempts.");
   });
 
   it("does not send Enter while an input method is composing", async () => {

@@ -19,7 +19,8 @@ from melloa.domain.base import JsonObject
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import ConversationThread
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
-from melloa.domain.models import ModelRequest
+from melloa.domain.models import ModelRequest, ProcessingLocation
+from melloa.ports.model import ModelInvocationError
 from tests.conftest import record_id
 
 _BOOTSTRAP_TOKEN = "owner-conversation-test-credential-0001"
@@ -182,6 +183,49 @@ def test_owner_conversation_round_trip_uses_one_transcript_read(fixed_time) -> N
     ]
     assert len(document["turns"]) == 1
     assert document["processing"][0]["state"] == "completed"
+
+
+def test_failed_external_destination_is_returned_and_remains_in_transcript(
+    fixed_time,
+) -> None:
+    def fail_external(_request: ModelRequest) -> JsonObject:
+        raise ModelInvocationError(
+            provider_id="provider.approved-test",
+            model_id="capable-external-v1",
+            processing_location=ProcessingLocation.APPROVED_PROVIDER,
+        )
+
+    client = _client(fixed_time, model_response=fail_external)
+    headers = _login(client)
+    created = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"title": "External failure", "sensitivity": "personal"},
+    )
+    thread_id = created.json()["thread_id"]
+
+    sent = client.post(
+        f"/api/v1/conversations/{thread_id}/messages",
+        headers=headers,
+        json={
+            "text": "Use the approved model.",
+            "idempotency_key": "failed-external-destination",
+        },
+    )
+
+    assert sent.status_code == 202
+    attempt = sent.json()["processing"]["attempts"][0]
+    assert attempt["external_disclosure"] is True
+    assert attempt["failed_model_target"] == {
+        "provider_id": "provider.approved-test",
+        "model_id": "capable-external-v1",
+        "processing_location": "approved_provider",
+    }
+    assert attempt["model_result_summary"] is None
+
+    transcript = client.get(f"/api/v1/conversations/{thread_id}/transcript")
+    assert transcript.status_code == 200
+    assert transcript.json()["processing"][0]["attempts"][0] == attempt
 
 
 def test_owner_can_correct_a_message_with_transcript_provenance(fixed_time) -> None:
