@@ -583,6 +583,35 @@ dd {
   font-size: 10px;
 }
 
+.message-correct {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+}
+
+.message-correct:hover {
+  color: var(--green);
+  background: rgb(255 255 255 / 68%);
+}
+
+.correction-badge {
+  padding: 2px 6px;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  background: rgb(255 255 255 / 72%);
+  border-radius: 999px;
+}
+
 .message-bubble > p {
   color: #2c352f;
   font-size: 14px;
@@ -849,7 +878,7 @@ dd {
 
 .modal-backdrop {
   position: fixed;
-  z-index: 100;
+  z-index: 130;
   inset: 0;
   display: grid;
   padding: 20px;
@@ -914,6 +943,41 @@ dd {
 .text-input:focus {
   border-color: #8bb6a5;
   box-shadow: 0 0 0 3px rgb(23 107 84 / 8%);
+}
+
+.correction-input {
+  width: 100%;
+  min-height: 132px;
+  padding: 11px 12px;
+  line-height: 1.55;
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  outline: none;
+}
+
+.correction-input:focus {
+  border-color: #8bb6a5;
+  box-shadow: 0 0 0 3px rgb(23 107 84 / 8%);
+}
+
+.correction-limit {
+  padding: 10px 11px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+  background: var(--surface-soft);
+  border-radius: 9px;
+}
+
+.correction-error {
+  padding: 9px 11px;
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--red-soft);
+  border-radius: 9px;
 }
 
 .modal-actions {

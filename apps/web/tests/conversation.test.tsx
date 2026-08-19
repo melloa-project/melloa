@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   transcript: vi.fn(),
   conversationAvailability: vi.fn(),
   postMessage: vi.fn(),
+  correctMessage: vi.fn(),
   resumeMessage: vi.fn(),
   inspectTurn: vi.fn(),
   notify: vi.fn(),
@@ -112,6 +113,7 @@ describe("ConversationPage", () => {
       mocks.transcript,
       mocks.conversationAvailability,
       mocks.postMessage,
+      mocks.correctMessage,
       mocks.resumeMessage,
       mocks.inspectTurn,
       mocks.notify,
@@ -138,6 +140,7 @@ describe("ConversationPage", () => {
         transcript: mocks.transcript,
         conversationAvailability: mocks.conversationAvailability,
         postMessage: mocks.postMessage,
+        correctMessage: mocks.correctMessage,
         resumeMessage: mocks.resumeMessage,
         inspectTurn: mocks.inspectTurn,
       },
@@ -211,6 +214,75 @@ describe("ConversationPage", () => {
       "Conversation deleted from active data. Backup expiry is not verified.",
       "success",
     ));
+  });
+
+  it("corrects owner wording and hides the superseded exchange", async () => {
+    const originalOwner = message(
+      "message_original_owner",
+      owner.owner_id,
+      "My sister arrives Tuesday.",
+    );
+    const originalAnswer = {
+      ...message("message_original_melli", "melli_1", "I will plan around Tuesday."),
+      reply_to_message_id: originalOwner.message_id,
+    };
+    const correctedOwner = {
+      ...message(
+        "message_corrected_owner",
+        owner.owner_id,
+        "My sister arrives Thursday.",
+      ),
+      corrects_message_id: originalOwner.message_id,
+    };
+    const correctedAnswer = {
+      ...message("message_corrected_melli", "melli_1", "I will plan around Thursday."),
+      reply_to_message_id: correctedOwner.message_id,
+    };
+    mocks.transcript.mockResolvedValue({
+      messages: [originalOwner, originalAnswer],
+      turns: [],
+      processing: [],
+    });
+    mocks.correctMessage.mockResolvedValue({
+      inbound_message: correctedOwner,
+      output_message: correctedAnswer,
+      turn: null,
+      processing: {
+        message_id: correctedOwner.message_id,
+        state: "completed",
+        attempts: [],
+      },
+      duplicate: false,
+    });
+    renderConversation();
+
+    expect(await screen.findByText("My sister arrives Tuesday.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Correct message" }));
+    const dialog = screen.getByRole("dialog", { name: "Correct your message" });
+    expect(within(dialog).getByLabelText("Corrected message")).toHaveValue(
+      "My sister arrives Tuesday.",
+    );
+    expect(within(dialog).getByText(/remains in correction history/i)).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Save correction" })).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText("Corrected message"), {
+      target: { value: "My sister arrives Thursday." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save correction" }));
+
+    await waitFor(() => expect(mocks.correctMessage).toHaveBeenCalledWith(
+      thread.thread_id,
+      originalOwner.message_id,
+      "My sister arrives Thursday.",
+      expect.any(String),
+    ));
+    expect(await screen.findByText("My sister arrives Thursday.")).toBeVisible();
+    expect(screen.getByText("I will plan around Thursday.")).toBeVisible();
+    expect(screen.getByText("Corrected")).toBeVisible();
+    expect(screen.queryByText("My sister arrives Tuesday.")).not.toBeInTheDocument();
+    expect(screen.queryByText("I will plan around Tuesday.")).not.toBeInTheDocument();
+    expect(mocks.transcript).toHaveBeenCalledOnce();
+    expect(mocks.notify).toHaveBeenCalledWith("Message corrected.", "success");
   });
 
   it("removes the fixed response from the owner path when no capable model exists", async () => {

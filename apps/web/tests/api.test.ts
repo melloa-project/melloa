@@ -81,6 +81,34 @@ describe("MelloaApi", () => {
     expect(new Headers(calls[1]?.init?.headers).get("X-Melloa-CSRF")).toBe("csrf-proof");
   });
 
+  it("posts a CSRF-bound correction to encoded message coordinates", async () => {
+    const calls: Array<{ readonly input: string; readonly init?: RequestInit }> = [];
+    const api = new MelloaApi(async (input, init) => {
+      calls.push({ input: String(input), init });
+      return calls.length === 1
+        ? jsonResponse({ principal, csrf_token: "csrf-proof" })
+        : jsonResponse({ duplicate: false });
+    });
+
+    await api.login("owner-credential");
+    await api.correctMessage(
+      "thread/private",
+      "message?original",
+      "Corrected owner wording",
+      "correction:1",
+    );
+
+    expect(calls[1]?.input).toBe(
+      "/api/v1/conversations/thread%2Fprivate/messages/message%3Foriginal/correction",
+    );
+    expect(calls[1]?.init?.method).toBe("POST");
+    expect(calls[1]?.init?.body).toBe(JSON.stringify({
+      text: "Corrected owner wording",
+      idempotency_key: "correction:1",
+    }));
+    expect(new Headers(calls[1]?.init?.headers).get("X-Melloa-CSRF")).toBe("csrf-proof");
+  });
+
   it("does not erase ordinary writing proof when only fresh confirmation expired", async () => {
     let requests = 0;
     const api = new MelloaApi(async () => {

@@ -15,6 +15,7 @@ import {
   MessageCircleMore,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
   RefreshCw,
   Send,
@@ -73,6 +74,13 @@ type OptimisticSend = {
   readonly knownMessageIds: readonly string[];
 };
 
+type CorrectionDraft = {
+  readonly message: ConversationMessage;
+  readonly text: string;
+  readonly idempotencyKey: string;
+  readonly error: string | null;
+};
+
 const newConversationKey = "new-conversation";
 
 export function ConversationPage() {
@@ -107,6 +115,8 @@ export function ConversationPage() {
   const [threadPanelOpen, setThreadPanelOpen] = useState(false);
   const [inspection, setInspection] = useState<ConversationTurnInspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
+  const [correction, setCorrection] = useState<CorrectionDraft | null>(null);
+  const [correcting, setCorrecting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -129,6 +139,18 @@ export function ConversationPage() {
   const displayedMessages = optimisticSend !== undefined && !optimisticRecorded
     ? [...visibleMessages, optimisticSend.message]
     : visibleMessages;
+  const supersededMessageIds = new Set(
+    displayedMessages.flatMap((message) => (
+      message.corrects_message_id == null ? [] : [message.corrects_message_id]
+    )),
+  );
+  const activeDisplayedMessages = displayedMessages.filter((message) => (
+    !supersededMessageIds.has(message.message_id)
+    && (
+      message.reply_to_message_id == null
+      || !supersededMessageIds.has(message.reply_to_message_id)
+    )
+  ));
   const turnByOutputMessage = useMemo(
     () => new Map(visibleTurns.flatMap((turn) => turn.output_message_ids.map((id) => [id, turn] as const))),
     [visibleTurns],
@@ -299,7 +321,7 @@ export function ConversationPage() {
       return;
     }
     container.scrollTop = container.scrollHeight;
-  }, [displayedMessages, sending, visibleProcessing]);
+  }, [activeDisplayedMessages, sending, visibleProcessing]);
 
   useEffect(() => {
     if (!threadPanelOpen) {
@@ -352,6 +374,8 @@ export function ConversationPage() {
     inspectionRequestRef.current += 1;
     setInspection(null);
     setInspectionLoading(false);
+    setCorrection(null);
+    setCorrecting(false);
     setDeleteOpen(false);
   }, [threadId]);
 
@@ -526,6 +550,59 @@ export function ConversationPage() {
     setInspectionLoading(false);
   }
 
+  function beginCorrection(message: ConversationMessage) {
+    if (!canWrite) {
+      openUnlock("Confirm owner access to correct this message.");
+      return;
+    }
+    setCorrection({
+      message,
+      text: messageBody(message),
+      idempotencyKey: crypto.randomUUID(),
+      error: null,
+    });
+  }
+
+  async function submitCorrection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (correction === null || threadId === undefined || correcting) {
+      return;
+    }
+    const text = correction.text.trim();
+    if (text.length === 0 || text === messageBody(correction.message).trim()) {
+      return;
+    }
+    const sourceThreadId = threadId;
+    const targetMessageId = correction.message.message_id;
+    const idempotencyKey = correction.idempotencyKey;
+    setCorrecting(true);
+    setCorrection((current) => current === null ? null : { ...current, error: null });
+    try {
+      const reply = await api.correctMessage(
+        sourceThreadId,
+        targetMessageId,
+        text,
+        idempotencyKey,
+      );
+      if (deletedThreadIdsRef.current.has(sourceThreadId)) {
+        return;
+      }
+      invalidateConversationRequest(sourceThreadId);
+      applyConversationReply(sourceThreadId, reply, updateConversation);
+      setCorrection(null);
+      await loadThreads();
+      notify("Message corrected.", "success");
+    } catch (caught) {
+      setCorrection((current) => (
+        current === null || current.message.message_id !== targetMessageId
+          ? current
+          : { ...current, error: errorMessage(caught) }
+      ));
+    } finally {
+      setCorrecting(false);
+    }
+  }
+
   function requestConversationDeletion() {
     if (selectedThread === null) {
       return;
@@ -693,7 +770,7 @@ export function ConversationPage() {
             />
           )}
 
-          {!conversationLoading && transcriptIsCurrent && conversationError === null && displayedMessages.length === 0 ? (
+          {!conversationLoading && transcriptIsCurrent && conversationError === null && activeDisplayedMessages.length === 0 ? (
             <ConversationWelcome
               availability={modelAvailability}
               onRetryModel={() => void checkModel()}
@@ -711,7 +788,7 @@ export function ConversationPage() {
             className="message-list"
             role="log"
           >
-            {displayedMessages.map((message) => {
+            {activeDisplayedMessages.map((message) => {
               const ownerMessage = message.author_principal_id === principal.owner_id;
               const turn = turnByOutputMessage.get(message.message_id);
               const status = ownerMessage ? processingByMessage.get(message.message_id) : undefined;
@@ -724,6 +801,19 @@ export function ConversationPage() {
                     <div className="message-meta">
                       <strong>{ownerMessage ? "You" : "Melli"}</strong>
                       <time dateTime={message.created_at}>{formatInstant(message.created_at)}</time>
+                      {message.corrects_message_id == null ? null : (
+                        <span className="correction-badge">Corrected</span>
+                      )}
+                      {!ownerMessage || message.message_id.startsWith("optimistic-") ? null : (
+                        <button
+                          aria-label="Correct message"
+                          className="message-correct"
+                          onClick={() => beginCorrection(message)}
+                          type="button"
+                        >
+                          <Pencil aria-hidden="true" size={12} /> Correct
+                        </button>
+                      )}
                     </div>
                     <p>{messageBody(message)}</p>
                     {!ownerMessage && turn !== undefined ? (
@@ -833,6 +923,60 @@ export function ConversationPage() {
       >
         {inspectionLoading ? <LoadingState label="Reading answer context" /> : null}
         {inspection === null ? null : <AnswerExplanation inspection={inspection} />}
+      </Modal>
+
+      <Modal
+        description="Melli will answer the corrected wording instead of treating it as a new topic."
+        onClose={() => {
+          if (!correcting) {
+            setCorrection(null);
+          }
+        }}
+        open={correction !== null}
+        title="Correct your message"
+      >
+        {correction === null ? null : (
+          <form className="stack-form" onSubmit={(event) => void submitCorrection(event)}>
+            <label className="field-label" htmlFor="message-correction">Corrected message</label>
+            <textarea
+              autoFocus
+              className="correction-input"
+              disabled={correcting}
+              id="message-correction"
+              maxLength={100_000}
+              onChange={(event) => setCorrection((current) => (
+                current === null
+                  ? null
+                  : { ...current, text: event.target.value, error: null }
+              ))}
+              rows={5}
+              value={correction.text}
+            />
+            <p className="correction-limit">
+              The earlier wording remains in correction history for provenance. Deleting the
+              conversation removes both versions from active data.
+            </p>
+            {correction.error === null ? null : (
+              <p className="correction-error" role="alert">{correction.error}</p>
+            )}
+            <div className="modal-actions">
+              <Button disabled={correcting} onClick={() => setCorrection(null)} tone="ghost" type="button">
+                Cancel
+              </Button>
+              <Button
+                disabled={
+                  correction.text.trim().length === 0
+                  || correction.text.trim() === messageBody(correction.message).trim()
+                }
+                loading={correcting}
+                tone="primary"
+                type="submit"
+              >
+                Save correction
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       <Modal

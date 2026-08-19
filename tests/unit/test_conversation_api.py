@@ -184,6 +184,111 @@ def test_owner_conversation_round_trip_uses_one_transcript_read(fixed_time) -> N
     assert document["processing"][0]["state"] == "completed"
 
 
+def test_owner_can_correct_a_message_with_transcript_provenance(fixed_time) -> None:
+    client = _client(fixed_time)
+    headers = _login(client)
+    created = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"title": "Correctable history", "sensitivity": "personal"},
+    )
+    assert created.status_code == 201
+    thread_id = created.json()["thread_id"]
+    sent = client.post(
+        f"/api/v1/conversations/{thread_id}/messages",
+        headers=headers,
+        json={
+            "text": "My sister arrives Tuesday.",
+            "idempotency_key": "correction-original",
+        },
+    )
+    assert sent.status_code == 200
+    original_id = sent.json()["inbound_message"]["message_id"]
+    original_reply_id = sent.json()["output_message"]["message_id"]
+    correction_path = (
+        f"/api/v1/conversations/{thread_id}/messages/{original_id}/correction"
+    )
+
+    missing_csrf = client.post(
+        correction_path,
+        json={
+            "text": "My sister arrives Thursday.",
+            "idempotency_key": "correction-valid",
+        },
+    )
+    assert missing_csrf.status_code == 403
+    no_change = client.post(
+        correction_path,
+        headers=headers,
+        json={
+            "text": "  My sister arrives Tuesday.  ",
+            "idempotency_key": "correction-no-change",
+        },
+    )
+    assert no_change.status_code == 409
+    melli_target = client.post(
+        f"/api/v1/conversations/{thread_id}/messages/{original_reply_id}/correction",
+        headers=headers,
+        json={
+            "text": "An owner cannot rewrite Melli's answer.",
+            "idempotency_key": "correction-melli-target",
+        },
+    )
+    assert melli_target.status_code == 404
+
+    corrected = client.post(
+        correction_path,
+        headers=headers,
+        json={
+            "text": "My sister arrives Thursday.",
+            "idempotency_key": "correction-valid",
+        },
+    )
+    assert corrected.status_code == 200
+    corrected_document = corrected.json()
+    corrected_id = corrected_document["inbound_message"]["message_id"]
+    assert corrected_document["inbound_message"]["corrects_message_id"] == original_id
+    assert corrected_document["output_message"]["reply_to_message_id"] == corrected_id
+
+    duplicate = client.post(
+        correction_path,
+        headers=headers,
+        json={
+            "text": "My sister arrives Thursday.",
+            "idempotency_key": "correction-valid",
+        },
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["duplicate"] is True
+    second_correction = client.post(
+        correction_path,
+        headers=headers,
+        json={
+            "text": "My sister arrives Friday.",
+            "idempotency_key": "correction-second",
+        },
+    )
+    assert second_correction.status_code == 409
+
+    transcript = client.get(f"/api/v1/conversations/{thread_id}/transcript")
+    assert transcript.status_code == 200
+    document = transcript.json()
+    assert sorted(item["parts"][0]["text"] for item in document["messages"]) == sorted([
+        "My sister arrives Tuesday.",
+        "I have the context.",
+        "My sister arrives Thursday.",
+        "I have the context.",
+    ])
+    corrected_transcript_message = next(
+        item for item in document["messages"] if item["message_id"] == corrected_id
+    )
+    assert corrected_transcript_message["corrects_message_id"] == original_id
+    corrected_turn = next(
+        turn for turn in document["turns"] if turn["triggering_message_ids"] == [corrected_id]
+    )
+    assert corrected_turn["decision_record"]["corrects_message_id"] == original_id
+
+
 def test_foreign_owner_cannot_discover_a_thread(fixed_time) -> None:
     client = _client(fixed_time, owner_number=2, seed_thread=True)
     _login(client)

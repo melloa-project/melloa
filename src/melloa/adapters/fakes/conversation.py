@@ -190,6 +190,7 @@ class InMemoryConversationStore:
             raise ConversationConflictError("reply work does not match the accepted message")
         with self._lock:
             self._require_thread(message.thread_id)
+            thread = self._threads[message.thread_id]
             key = (message.thread_id, idempotency_key)
             existing_id = self._inbound_idempotency.get(key)
             if existing_id is not None:
@@ -199,6 +200,38 @@ class InMemoryConversationStore:
                 raise ConversationConflictError(f"message ID conflicts: {message.message_id}")
             if work.work_id in self._reply_work or message.message_id in self._work_by_message:
                 raise ConversationConflictError("accepted message already has reply work")
+            corrected_work_id: RecordId | None = None
+            if message.corrects_message_id is not None:
+                target = self._messages.get(message.corrects_message_id)
+                if (
+                    target is None
+                    or target.thread_id != message.thread_id
+                    or target.author_principal_id != thread.owner_id
+                    or message.author_principal_id != thread.owner_id
+                ):
+                    raise ConversationConflictError(
+                        "correction target is not an owner message in this thread"
+                    )
+                if any(
+                    existing.corrects_message_id == target.message_id
+                    for existing in self._messages.values()
+                ):
+                    raise ConversationConflictError("owner message was already corrected")
+                corrected_work_id = self._work_by_message.get(target.message_id)
+            if corrected_work_id is not None:
+                corrected_work = self._reply_work[corrected_work_id]
+                if corrected_work.state in {
+                    ConversationProcessingState.READY,
+                    ConversationProcessingState.RUNNING,
+                }:
+                    self._reply_work[corrected_work_id] = replace(
+                        corrected_work,
+                        state=ConversationProcessingState.CANCELLED,
+                        available_at=message.created_at,
+                        updated_at=message.created_at,
+                        lease_owner=None,
+                        lease_expires_at=None,
+                    )
             self._messages[message.message_id] = message
             self._inbound_idempotency[key] = message.message_id
             self._reply_work[work.work_id] = _ReplyWorkRecord(
@@ -210,7 +243,6 @@ class InMemoryConversationStore:
                 updated_at=work.created_at,
             )
             self._work_by_message[message.message_id] = work.work_id
-            thread = self._threads[message.thread_id]
             if message.created_at > thread.updated_at:
                 self._threads[message.thread_id] = thread.model_copy(
                     update={"updated_at": message.created_at}

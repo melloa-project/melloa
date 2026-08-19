@@ -224,14 +224,66 @@ class ConversationService:
         text: str,
         idempotency_key: str,
     ) -> ConversationReply:
+        return self._accept_owner_message(
+            principal,
+            thread_id=thread_id,
+            text=text,
+            idempotency_key=idempotency_key,
+            corrects_message_id=None,
+        )
+
+    def correct_owner_message(
+        self,
+        principal: AuthenticatedOwner,
+        *,
+        thread_id: RecordId,
+        message_id: RecordId,
+        text: str,
+        idempotency_key: str,
+    ) -> ConversationReply:
+        return self._accept_owner_message(
+            principal,
+            thread_id=thread_id,
+            text=text,
+            idempotency_key=idempotency_key,
+            corrects_message_id=message_id,
+        )
+
+    def _accept_owner_message(
+        self,
+        principal: AuthenticatedOwner,
+        *,
+        thread_id: RecordId,
+        text: str,
+        idempotency_key: str,
+        corrects_message_id: RecordId | None,
+    ) -> ConversationReply:
         thread = self._store.get_thread(thread_id)
         self._require_thread_owner(principal, thread)
         if not 1 <= len(idempotency_key) <= 256:
             raise ValueError("idempotency key must contain between 1 and 256 characters")
         existing = self._store.get_inbound_by_idempotency_key(thread_id, idempotency_key)
         if existing is not None:
-            self._require_same_submission(existing, text)
+            self._require_same_submission(existing, text, corrects_message_id)
             return self._process_accepted(existing, duplicate=True)
+        if corrects_message_id is not None:
+            target = self._store.get_message(corrects_message_id)
+            if (
+                target.thread_id != thread_id
+                or target.author_principal_id != principal.owner_id
+            ):
+                raise ConversationNotFoundError(
+                    f"owner message not found: {corrects_message_id}"
+                )
+            if self._message_text(target).strip() == text.strip():
+                raise ConversationConflictError(
+                    "corrected owner message must change its text"
+                )
+            if any(
+                message.corrects_message_id == corrects_message_id
+                for message in self._store.list_messages(thread_id)
+            ):
+                raise ConversationConflictError("owner message was already corrected")
         self._require_write_mode()
         now = self._clock()
         inbound = ConversationMessage(
@@ -240,6 +292,7 @@ class ConversationService:
             author_principal_id=principal.owner_id,
             source_client="client.owner-console",
             parts=(MessagePart(kind=MessageKind.TEXT, text=text),),
+            corrects_message_id=corrects_message_id,
             sensitivity=thread.sensitivity,
             created_at=now,
             observed_at=now,
@@ -257,7 +310,11 @@ class ConversationService:
             max_attempts=self._max_processing_attempts,
         )
         if not accepted.created:
-            self._require_same_submission(accepted.message, text)
+            self._require_same_submission(
+                accepted.message,
+                text,
+                corrects_message_id,
+            )
             return self._process_accepted(accepted.message, duplicate=True)
         return self._process_accepted(accepted.message, duplicate=False)
 
@@ -552,6 +609,7 @@ class ConversationService:
                 "prompt_version": model_request.prompt_version,
                 "runtime_version": self._runtime_version,
                 "message_sensitivity": model_request.sensitivity.value,
+                "corrects_message_id": inbound.corrects_message_id,
                 "cost_gbp": result.cost_gbp,
                 "external_disclosure": result.external_disclosure,
             },
@@ -608,6 +666,7 @@ class ConversationService:
             input={
                 "thread_id": thread.thread_id,
                 "message_id": message.message_id,
+                "corrects_message_id": message.corrects_message_id,
                 "text": text,
                 "retrieval_manifest_id": retrieval_manifest.manifest_id,
                 "memory_citations": [
@@ -768,8 +827,16 @@ class ConversationService:
             raise ConversationConflictError("owner reply work requires one text part")
         return message.parts[0].text
 
-    def _require_same_submission(self, inbound: ConversationMessage, text: str) -> None:
-        if self._message_text(inbound) != text:
+    def _require_same_submission(
+        self,
+        inbound: ConversationMessage,
+        text: str,
+        corrects_message_id: RecordId | None,
+    ) -> None:
+        if (
+            self._message_text(inbound) != text
+            or inbound.corrects_message_id != corrects_message_id
+        ):
             raise ConversationConflictError(
                 "idempotency key was reused with different message content"
             )

@@ -514,6 +514,29 @@ def create_app(
         return _reply_response(reply)
 
     @app.post(
+        "/api/v1/conversations/{thread_id}/messages/{message_id}/correction",
+        response_model=_ConversationReplyResponse,
+    )
+    def correct_conversation_message(
+        request: Request,
+        response: Response,
+        thread_id: RecordId,
+        message_id: RecordId,
+        payload: _PostOwnerMessageRequest,
+        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner_mutation)],
+    ) -> _ConversationReplyResponse:
+        reply = _conversation(request).correct_owner_message(
+            principal,
+            thread_id=thread_id,
+            message_id=message_id,
+            text=payload.text,
+            idempotency_key=payload.idempotency_key,
+        )
+        if reply.processing.state is not ConversationProcessingState.COMPLETED:
+            response.status_code = status.HTTP_202_ACCEPTED
+        return _reply_response(reply)
+
+    @app.post(
         "/api/v1/conversations/{thread_id}/messages/{message_id}/resume",
         response_model=_ConversationReplyResponse,
     )

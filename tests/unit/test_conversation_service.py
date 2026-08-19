@@ -208,6 +208,134 @@ def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
         )
 
 
+def test_owner_correction_preserves_linkage_and_is_idempotent(fixed_time) -> None:
+    service, store, model = service_fixture(fixed_time)
+    owner = principal(fixed_time)
+    thread = service.create_thread(
+        owner,
+        title="Correctable context",
+        sensitivity=Sensitivity.PERSONAL,
+    )
+    original = service.post_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        text="My sister arrives on Tuesday.",
+        idempotency_key="original-message",
+    )
+    assert original.output_message is not None
+
+    with pytest.raises(ConversationConflictError, match="must change its text"):
+        service.correct_owner_message(
+            owner,
+            thread_id=thread.thread_id,
+            message_id=original.inbound_message.message_id,
+            text="  My sister arrives on Tuesday.  ",
+            idempotency_key="no-op-correction",
+        )
+    with pytest.raises(ConversationNotFoundError, match="owner message not found"):
+        service.correct_owner_message(
+            owner,
+            thread_id=thread.thread_id,
+            message_id=original.output_message.message_id,
+            text="This cannot correct Melli's answer.",
+            idempotency_key="melli-target",
+        )
+
+    corrected = service.correct_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        message_id=original.inbound_message.message_id,
+        text="My sister arrives on Thursday.",
+        idempotency_key="correction-message",
+    )
+    duplicate = service.correct_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        message_id=original.inbound_message.message_id,
+        text="My sister arrives on Thursday.",
+        idempotency_key="correction-message",
+    )
+
+    assert corrected.inbound_message.corrects_message_id == (
+        original.inbound_message.message_id
+    )
+    assert corrected.output_message is not None
+    assert corrected.output_message.reply_to_message_id == corrected.inbound_message.message_id
+    assert corrected.turn is not None
+    assert corrected.turn.decision_record["corrects_message_id"] == (
+        original.inbound_message.message_id
+    )
+    assert duplicate.duplicate is True
+    assert duplicate.inbound_message == corrected.inbound_message
+    assert duplicate.output_message == corrected.output_message
+    assert len(model.requests) == 2
+    assert model.requests[1].input["text"] == "My sister arrives on Thursday."
+    assert model.requests[1].input["corrects_message_id"] == (
+        original.inbound_message.message_id
+    )
+    assert set(store.list_messages(thread.thread_id)) == {
+        original.inbound_message,
+        original.output_message,
+        corrected.inbound_message,
+        corrected.output_message,
+    }
+
+    with pytest.raises(ConversationConflictError, match="already corrected"):
+        service.correct_owner_message(
+            owner,
+            thread_id=thread.thread_id,
+            message_id=original.inbound_message.message_id,
+            text="My sister arrives on Friday.",
+            idempotency_key="second-correction",
+        )
+
+
+def test_owner_correction_cancels_superseded_pending_reply(fixed_time) -> None:
+    invocations = 0
+
+    def recover_for_correction(_request):
+        nonlocal invocations
+        invocations += 1
+        if invocations == 1:
+            raise TimeoutError("synthetic provider outage")
+        return {"text": "Answered from the corrected wording."}
+
+    service, store, model = service_fixture(
+        fixed_time,
+        response=recover_for_correction,
+    )
+    owner = principal(fixed_time)
+    thread = service.create_thread(
+        owner,
+        title="Pending correction",
+        sensitivity=Sensitivity.INTERNAL,
+    )
+    original = service.post_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        text="The appointment is Tuesday.",
+        idempotency_key="pending-original",
+    )
+    assert original.processing.state is ConversationProcessingState.READY
+
+    corrected = service.correct_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        message_id=original.inbound_message.message_id,
+        text="The appointment is Thursday.",
+        idempotency_key="pending-correction",
+    )
+
+    assert store.reply_processing(original.inbound_message.message_id).state is (
+        ConversationProcessingState.CANCELLED
+    )
+    assert corrected.processing.state is ConversationProcessingState.COMPLETED
+    assert corrected.output_message is not None
+    assert corrected.output_message.parts[0].text == "Answered from the corrected wording."
+    assert len(model.requests) == 2
+    assert service.process_ready() == ()
+
+
 def test_accepted_message_retries_after_backoff_and_completes(fixed_time) -> None:
     clock = MutableClock(fixed_time)
     invocations = 0

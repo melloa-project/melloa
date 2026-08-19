@@ -217,6 +217,46 @@ class PostgresConversationStore:
             )
             if existing is not None:
                 return InboundAppendResult(message=existing, created=False)
+            if message.corrects_message_id is not None:
+                target = self.get_message(message.corrects_message_id)
+                if (
+                    target.thread_id != message.thread_id
+                    or target.author_principal_id != thread.owner_id
+                    or message.author_principal_id != thread.owner_id
+                ):
+                    raise ConversationConflictError(
+                        "correction target is not an owner message in this thread"
+                    )
+                prior_correction = self._connection.execute(
+                    """
+                    SELECT 1
+                      FROM melloa.conversation_messages
+                     WHERE thread_id = %s
+                       AND document ->> 'corrects_message_id' = %s
+                    """,
+                    (message.thread_id, target.message_id),
+                ).fetchone()
+                if prior_correction is not None:
+                    raise ConversationConflictError("owner message was already corrected")
+                self._connection.execute(
+                    """
+                    UPDATE melloa.jobs_outbox
+                       SET state = 'cancelled',
+                           available_at = %s,
+                           updated_at = GREATEST(updated_at, %s),
+                           lease_owner = NULL,
+                           lease_expires_at = NULL
+                     WHERE work_type = %s
+                       AND idempotency_key = %s
+                       AND state IN ('ready', 'running')
+                    """,
+                    (
+                        message.created_at,
+                        message.created_at,
+                        _REPLY_WORK_TYPE,
+                        self._reply_work_key(target.message_id),
+                    ),
+                )
             self._persist_message(message)
             try:
                 self._connection.execute(

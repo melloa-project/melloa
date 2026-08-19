@@ -98,6 +98,32 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
                 },
             )
             assert accepted.status_code == 202
+            original_message_id = accepted.json()["inbound_message"]["message_id"]
+            corrected = first_client.post(
+                f"/api/v1/conversations/{thread_id}/messages/"
+                f"{original_message_id}/correction",
+                headers=headers,
+                json={
+                    "text": "This correction must survive a process restart.",
+                    "idempotency_key": "postgres-message-correction-1",
+                },
+            )
+            assert corrected.status_code == 202
+            corrected_message_id = corrected.json()["inbound_message"]["message_id"]
+            assert corrected.json()["inbound_message"]["corrects_message_id"] == (
+                original_message_id
+            )
+
+        original_work_state = first_connection.execute(
+            """
+            SELECT state
+              FROM melloa.jobs_outbox
+             WHERE work_type = 'conversation.owner_reply'
+               AND payload ->> 'message_id' = %s
+            """,
+            (original_message_id,),
+        ).fetchone()
+        assert original_work_state == ("cancelled",)
 
         assertion = Assertion(
             assertion_id=id_factory("assertion"),
@@ -141,9 +167,13 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
                 f"/api/v1/conversations/{thread_id}/transcript"
             )
             assert transcript.status_code == 200
-            assert transcript.json()["messages"][0]["parts"][0]["text"] == (
-                "This must survive a process restart."
-            )
+            transcript_messages = transcript.json()["messages"]
+            assert [message["parts"][0]["text"] for message in transcript_messages] == [
+                "This must survive a process restart.",
+                "This correction must survive a process restart.",
+            ]
+            assert transcript_messages[1]["message_id"] == corrected_message_id
+            assert transcript_messages[1]["corrects_message_id"] == original_message_id
 
             archive = second_client.post(
                 "/api/v1/data-export/archive",
@@ -200,12 +230,15 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
             """,
             (thread_id,),
         ).fetchone()
-        assert cancelled_work_count == (1,)
+        assert cancelled_work_count == (2,)
 
     with zipfile.ZipFile(io.BytesIO(archive.content)) as exported:
         conversations = json.loads(exported.read("conversations.json"))
         memories_document = json.loads(exported.read("memories.json"))
     assert conversations["conversations"][0]["thread"]["title"] == "Durable owner context"
+    assert conversations["conversations"][0]["messages"][1]["corrects_message_id"] == (
+        original_message_id
+    )
     assert memories_document["memories"][0]["value"] == {
         "statement": "Use durable context."
     }

@@ -287,6 +287,22 @@ export class MelloaApi {
     );
   }
 
+  async correctMessage(
+    threadId: string,
+    messageId: string,
+    text: string,
+    idempotencyKey: string,
+  ): Promise<ConversationReply> {
+    return this.#request<ConversationReply>(
+      `/api/v1/conversations/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/correction`,
+      {
+        method: "POST",
+        body: { text, idempotency_key: idempotencyKey },
+        csrf: true,
+      },
+    );
+  }
+
   async resumeMessage(threadId: string, messageId: string): Promise<ConversationReply> {
     return this.#request<ConversationReply>(
       `/api/v1/conversations/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/resume`,
