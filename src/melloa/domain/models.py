@@ -132,7 +132,7 @@ class OwnerModelRouteReport(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     owner_id: RecordId
     generated_at: AwareDatetime
-    routes: tuple[ModelRouteStatus, ...] = Field(min_length=1)
+    routes: tuple[ModelRouteStatus, ...] = ()
 
     @model_validator(mode="after")
     def validate_routes(self) -> OwnerModelRouteReport:

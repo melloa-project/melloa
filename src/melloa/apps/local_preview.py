@@ -184,7 +184,7 @@ def core_command(
         sys.executable,
         "-m",
         "melloa.apps.cli",
-        "serve-mvp",
+        "serve",
         "--status",
         str(paths.guardian_status),
         "--public-key",
@@ -239,22 +239,20 @@ def preview_contract(config: OpenAICompatibleRouteConfig | None) -> str:
     return (
         "Preview contract: loopback services · signed Guardian offline · owner text and "
         f"selected memory go to the on-device {config.display_name} model "
-        f"({config.model_id}) · no external disclosure · labelled synthetic fallback "
-        "remains · process-local disposable state."
+        f"({config.model_id}) · no external disclosure · process-local disposable state."
     )
 
 
 def preview_next_action(config: OpenAICompatibleRouteConfig | None) -> str:
     if config is None:
         return (
-            'Open the console, paste the credential, create a conversation, and choose '
-            '"Fill a no-network tour message." Then inspect "Why this response?" '
-            "and download an export from Operations."
+            "Open the console and paste the credential to inspect private access and data "
+            "controls. No model is configured, so conversation is unavailable in this launch."
         )
     return (
-        "Open the console, paste the credential, create a conversation, and choose "
-        'one of the "Eligible model required" starters. Edit and send it, then inspect '
-        '"Why this response?" for the on-device route and no external disclosure.'
+        "Open the console, paste the credential, and start a conversation naturally. "
+        'After Melli replies, use "Why this answer?" when the context or privacy '
+        "behind the answer matters."
     )
 
 
@@ -460,7 +458,6 @@ def run_preview(args: argparse.Namespace) -> int:
         print(
             "\nMelloa is ready.\n"
             f"\n  Release:           {CURRENT_RELEASE.release_display}"
-            f" · {CURRENT_RELEASE.milestone} · {CURRENT_RELEASE.architecture_baseline}"
             f"\n  Owner Console:     {console_url}"
             f"\n  Owner credential:  {credential}"
             f"\n\n{preview_next_action(model_route_config)}"

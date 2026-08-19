@@ -14,7 +14,8 @@ There is deliberately no `set_mode`, `transition`, `stop`, firewall, credential-
 
 ## Version 1 envelope
 
-`schemas/guardian/signed-status-v1.json` defines an Ed25519 envelope containing an unpadded base64url payload and signature. `schemas/guardian/status-payload-v1.json` defines:
+The independently owned Guardian repository defines the signed Ed25519 envelope. Melloa accepts
+only a verified payload containing:
 
 - protocol version;
 - stable Guardian installation ID;

@@ -9,7 +9,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --host 127.0.0.1",
-    "screenshots:mvp": "node tests/visual/current-mvp.mjs",
+    "screenshots": "node tests/visual/owner-experience.mjs",
     "start": "node server.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

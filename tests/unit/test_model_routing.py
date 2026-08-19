@@ -325,9 +325,8 @@ def test_route_attempt_and_result_trace_invariants(fixed_time) -> None:
         ModelResult.model_validate(result_document)
 
 
-def test_router_requires_nonempty_unique_registry(fixed_time) -> None:
-    with pytest.raises(ValueError, match="at least one"):
-        DeterministicModelRouter((), clock=lambda: fixed_time)
+def test_router_allows_no_model_but_requires_unique_routes(fixed_time) -> None:
+    assert DeterministicModelRouter((), clock=lambda: fixed_time).route_statuses() == ()
     local = route(
         route_id="model.local",
         location=ProcessingLocation.DEVICE,

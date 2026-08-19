@@ -93,7 +93,7 @@ class ConversationRoutePolicy:
     provider_retention_policy: QualifiedName = "retention.no-training"
     minimum_reliability: float = 0.0
     fallback_route_ids: tuple[QualifiedName, ...] = ()
-    prompt_version: str = "m1-conversation-v1"
+    prompt_version: str = "conversation-response-v1"
 
     def __post_init__(self) -> None:
         if not 1 <= self.latency_deadline_ms <= 3_600_000:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 
 import pytest
 
@@ -13,13 +12,6 @@ from melloa.domain.events import (
     EventIntegrity,
     EventProducer,
     EventSource,
-)
-from melloa.domain.policy import (
-    AuthorizationRequest,
-    CanonicalAction,
-    RiskLevel,
-    SideEffect,
-    action_hash,
 )
 
 
@@ -68,37 +60,4 @@ def audit_content(fixed_time: datetime, event: EventEnvelope) -> AuditContent:
         action="events.append",
         object_ids=(event.event_id,),
         metadata={"synthetic": True},
-    )
-
-
-@pytest.fixture
-def external_action() -> CanonicalAction:
-    return CanonicalAction(
-        capability_id="client.fake",
-        operation="messages.send",
-        resource="synthetic:owner",
-        purpose="conversation.owner_reply",
-        arguments={"text": "hello"},
-        risk=RiskLevel.R2_EXTERNAL_REPUTATIONAL,
-        side_effects=(SideEffect.EXTERNAL_COMMUNICATION,),
-        input_sensitivity=(Sensitivity.PERSONAL,),
-        output_sensitivity=(Sensitivity.PERSONAL,),
-        external_destinations=("synthetic:owner",),
-        estimated_cost_gbp=Decimal("0.001"),
-    )
-
-
-@pytest.fixture
-def authorization_request(
-    fixed_time: datetime,
-    external_action: CanonicalAction,
-) -> AuthorizationRequest:
-    return AuthorizationRequest(
-        request_id=record_id("request", 1),
-        proposal_id=record_id("proposal", 1),
-        principal_id=record_id("intelligence", 1),
-        action=external_action,
-        action_hash=action_hash(external_action),
-        guardian_sequence=3,
-        requested_at=fixed_time,
     )

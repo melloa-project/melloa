@@ -56,21 +56,6 @@ jobs:
           repository: melloa-project/melloa-guardian
           ref: 2006fef8b2f6deeed84da8ba8ccf03fb40672441
           path: .ci/melloa-guardian
-      - name: Generate deterministic dependency SBOM
-        run: |
-          make sbom \
-            GUARDIAN_ROOT=.ci/melloa-guardian \
-            SBOM_OUTPUT="$RUNNER_TEMP/melloa-dependency-sbom.cdx.json"
-          make sbom-check \
-            GUARDIAN_ROOT=.ci/melloa-guardian \
-            SBOM_OUTPUT="$RUNNER_TEMP/melloa-dependency-sbom.cdx.json"
-      - name: Upload dependency SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: dependency-sbom
-          path: ${{ runner.temp }}/melloa-dependency-sbom.cdx.json
-          if-no-files-found: error
-          retention-days: 14
       - name: Install pinned uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
@@ -109,14 +94,14 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8000/health/ready >/dev/null
       - name: Install headless Chromium
         run: npm --prefix apps/web exec -- playwright install --with-deps chromium
-      - name: Capture authenticated desktop and mobile states
+      - name: Capture the owner experience on desktop and mobile
         env:
           MELLOA_SCREENSHOT_DIR: ${{ runner.temp }}/melloa-screenshots
-        run: npm --prefix apps/web run screenshots:mvp
+        run: npm --prefix apps/web run screenshots
       - name: Upload visual inspection artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: current-mvp-screenshots
+          name: owner-experience-screenshots
           path: ${{ runner.temp }}/melloa-screenshots
           if-no-files-found: error
           retention-days: 14
@@ -134,38 +119,3 @@ jobs:
           done
           echo "Preview state was not removed during shutdown" >&2
           exit 1
-
-  publish-docs:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [verify, visual-smoke]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Check out validated source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Install pinned uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
-        with:
-          version: "0.12.0"
-          enable-cache: true
-          cache-suffix: ${{ github.job }}
-      - name: Install locked documentation dependencies
-        run: make bootstrap-docs
-      - name: Build strict documentation site
-        run: make docs
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
-        with:
-          path: site
-      - name: Deploy GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128

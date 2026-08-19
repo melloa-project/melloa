@@ -4,17 +4,16 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  LockKeyhole,
-  Network,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
+  TriangleAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import type { SystemStatus } from "../api";
 import { errorMessage } from "../app";
-import { titleCase } from "../lib/format";
-import { Badge, Button, Card } from "../components/ui";
+import { Button, Card } from "../components/ui";
 
 export function LoginPage({
   login,
@@ -30,12 +29,10 @@ export function LoginPage({
   const [submitting, setSubmitting] = useState(false);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const releaseLabel = status?.release_display ?? "Release unverified";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const input = form.elements.namedItem("credential");
+    const input = event.currentTarget.elements.namedItem("credential");
     if (!(input instanceof HTMLInputElement)) {
       return;
     }
@@ -62,42 +59,28 @@ export function LoginPage({
     }
   }
 
+  const privateAccessVerified = status?.public_ingress === false;
+
   return (
     <main className="login-page">
-      <section className="login-context" aria-labelledby="login-context-title">
+      <section className="login-story" aria-labelledby="login-title">
         <div className="login-brand">
-          <span className="brand-mark"><Network aria-hidden="true" size={19} /></span>
-          <div><strong>Melloa</strong><span>Owner Console</span></div>
+          <span className="melli-mark"><Sparkles aria-hidden="true" size={20} /></span>
+          <span><strong>Melli</strong><small>Private with Melloa</small></span>
         </div>
-        <div className="login-copy">
-          <Badge tone="positive"><ShieldCheck aria-hidden="true" size={14} /> Private by design</Badge>
-          <h1 id="login-context-title">Your conversation with Melli, under your control.</h1>
-          <p>
-            Talk directly, inspect the route behind every response, and keep Guardian authority
-            outside the application plane.
-          </p>
+        <div className="login-promise">
+          <p className="eyebrow">A relationship that can continue</p>
+          <h1 id="login-title">Pick up where you left off.</h1>
+          <p>Melli is being built to understand your history, goals, and changing context—not make you administer an AI runtime.</p>
         </div>
-        <div className="login-boundaries">
-          <div><LockKeyhole aria-hidden="true" size={17} /><span><strong>Application authentication</strong><small>Private network membership is not enough.</small></span></div>
-          <div><ShieldCheck aria-hidden="true" size={17} /><span><strong>Guardian remains independent</strong><small>This console reads signed status only.</small></span></div>
-          <div><KeyRound aria-hidden="true" size={17} /><span><strong>No browser persistence</strong><small>Your credential and mutation proof stay out of storage.</small></span></div>
-        </div>
+        <p className="login-reset-note">This build is still an early owner-experience reset. Expect gaps, and do not use the disposable baseline for irreplaceable personal history.</p>
       </section>
 
-      <section className="login-form-column">
+      <section className="login-access">
         <Card className="login-card">
           <div className="login-card-heading">
-            <div className="login-card-kicker">
-              <p className="eyebrow">Private owner access</p>
-              <span
-                aria-label={`Runtime release: ${releaseLabel}`}
-                className={`release-identity ${status === null ? "release-identity-unverified" : ""}`}
-              >
-                {releaseLabel}
-              </span>
-            </div>
-            <h2>Welcome back</h2>
-            <p>Use the credential generated for this local runtime.</p>
+            <span className="login-lock"><KeyRound aria-hidden="true" size={19} /></span>
+            <div><h2>Continue privately</h2><p>Use the owner credential printed by the local launcher.</p></div>
           </div>
           <form className="stack-form" onSubmit={(event) => void submit(event)}>
             <label className="field-label" htmlFor="owner-credential">Owner credential</label>
@@ -114,7 +97,7 @@ export function LoginPage({
               />
               <button
                 aria-label={showCredential ? "Hide credential" : "Show credential"}
-                onClick={() => setShowCredential((value) => !value)}
+                onClick={() => setShowCredential((visible) => !visible)}
                 type="button"
               >
                 {showCredential ? <EyeOff aria-hidden="true" size={18} /> : <Eye aria-hidden="true" size={18} />}
@@ -122,17 +105,17 @@ export function LoginPage({
             </div>
             {error === null ? null : <p className="form-error" role="alert">{error}</p>}
             <Button loading={submitting} tone="primary" type="submit">
-              Open Owner Console <ArrowRight aria-hidden="true" size={16} />
+              Continue to Melli <ArrowRight aria-hidden="true" size={16} />
             </Button>
           </form>
-          <div className="login-runtime-state">
-            <span className={`status-dot status-${status === null ? "unknown" : "healthy"}`} />
+          <div className={`login-protection ${privateAccessVerified ? "verified" : "unverified"}`}>
+            {privateAccessVerified ? <ShieldCheck size={17} /> : <TriangleAlert size={17} />}
             <div>
-              <strong>{status === null ? "Private core not verified" : `Guardian ${titleCase(status.guardian.mode)}`}</strong>
-              <small>{status === null ? "Check the backend and signed status paths." : `Sequence ${status.guardian.sequence} · no public ingress`}</small>
+              <strong>{privateAccessVerified ? "Private access verified" : "Protection status unavailable"}</strong>
+              <small>{privateAccessVerified ? "No public application ingress" : "Check the local core before continuing"}</small>
             </div>
             <Button
-              aria-label="Retry signed status check"
+              aria-label="Retry protection status"
               loading={refreshingStatus}
               onClick={() => void retryStatus()}
               size="icon"
@@ -143,7 +126,7 @@ export function LoginPage({
             </Button>
           </div>
         </Card>
-        <p className="login-help">Fresh setup? Follow <code>docs/run-current-mvp.md</code>.</p>
+        <p className="login-help">First run? See <code>docs/getting-started.md</code>.</p>
       </section>
     </main>
   );

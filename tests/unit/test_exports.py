@@ -1,863 +1,114 @@
 from __future__ import annotations
 
+import io
 import json
 import zipfile
-from datetime import timedelta
-from itertools import count
-from pathlib import Path
+from collections import defaultdict
+from collections.abc import Callable
+from datetime import datetime
 
-import pytest
+from fastapi.testclient import TestClient
 
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
-from melloa.application.exports import (
-    ExportBundleError,
-    OwnerExportService,
-    validate_bundle,
-    validate_encrypted_package,
-    write_encrypted_package,
-)
-from melloa.apps.synthetic import build_synthetic_runtime
-from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.classification import Sensitivity
-from melloa.domain.conversation import ConversationMessage, DeliveryState, MessageKind, MessagePart
-from melloa.domain.exports import (
-    CanonicalExportManifest,
-    CanonicalExportValidationReport,
-    EncryptedExportPackageHeader,
-    EncryptedExportPackageValidationReport,
-    ExportFileEntry,
-    ExportFileKind,
-)
+from melloa.apps.runtime import build_runtime
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
-from melloa.release import CURRENT_RELEASE
+from tests.conftest import record_id
 
-_BOOTSTRAP_TOKEN = "synthetic-owner-bootstrap-token-value-0001"
+_OWNER_CREDENTIAL = "owner-export-test-credential-value-0001"
 
 
-def test_owner_export_writes_valid_schema_readable_bundle(tmp_path, fixed_time) -> None:
-    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
-    reply = runtime.conversation_service.post_owner_message(
-        _owner(runtime.owner_id, fixed_time),
-        thread_id=runtime.telegram_thread_id,
-        text="What should I inspect before enabling a real provider?",
-        idempotency_key="export-model-activity",
-    )
-    assert reply.turn is not None
-    bundle_dir = tmp_path / "export"
+def _ids() -> Callable[[str], str]:
+    counts: defaultdict[str, int] = defaultdict(int)
 
-    manifest = OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        delivery=runtime.delivery_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        retention=runtime.retention_service,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
+    def create(prefix: str) -> str:
+        counts[prefix] += 1
+        return record_id(prefix, counts[prefix])
 
-    report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-    assert report.valid is True
-    assert report.export_id == manifest.export_id
-    assert report.record_counts["conversations/deliveries.jsonl"] == 0
-    assert report.record_counts["conversations/threads.jsonl"] == 1
-    assert report.record_counts["assertions/inspections.jsonl"] == 1
-    assert report.record_counts["inspection/model-activity.jsonl"] == 1
-    assert report.record_counts["inspection/retention.jsonl"] == 1
-    assert (bundle_dir / "schemas/owner-export/manifest-v1.json").is_file()
-    assert (bundle_dir / "schemas/inspection/owner-model-activity-v1.json").is_file()
-    assert (bundle_dir / "schemas/retention/owner-report-v1.json").is_file()
-    assert (bundle_dir / "schemas/conversation/delivery-work-status-v1.json").is_file()
-    assert "export.preview-unencrypted" in manifest.limitations
-    assert manifest.encrypted is False
-    assert manifest.includes_sql_snapshot is False
-    assert manifest.includes_blobs is False
-    assert manifest.source_runtime == CURRENT_RELEASE.runtime_identifier
-    activity_records = [
-        json.loads(line)
-        for line in (bundle_dir / "inspection/model-activity.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-        if line
-    ]
-    assert activity_records[0]["total_runs"] == 1
-    assert activity_records[0]["total_cost_gbp"] == 0.0
-    assert activity_records[0]["external_disclosure_runs"] == 0
-    assert activity_records[0]["entries"][0]["turn_id"] == reply.turn.turn_id
-    assert activity_records[0]["entries"][0]["route_id"] == "model.fake.deterministic"
-    assert activity_records[0]["entries"][0]["external_disclosure"] is False
+    return create
 
 
-def test_owner_export_writes_validated_zip_from_authenticated_live_state(
-    tmp_path,
-    fixed_time,
-) -> None:
-    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
-    principal = _owner(runtime.owner_id, fixed_time)
-    runtime.conversation_service.post_owner_message(
-        principal,
-        thread_id=runtime.telegram_thread_id,
-        text="Include this live conversation in my export.",
-        idempotency_key="export-live-archive",
-    )
-    archive_path = tmp_path / "owner-export.zip"
-
-    manifest = runtime.export_service.write_validated_zip(
-        archive_path,
-        schema_root=_schema_root(),
-        principal=principal,
-    )
-
-    with zipfile.ZipFile(archive_path) as archive:
-        names = tuple(sorted(archive.namelist()))
-        assert archive.testzip() is None
-        assert "manifest.json" in names
-        assert "checksums.sha256" in names
-        assert "conversations/messages.jsonl" in names
-        assert all(not name.startswith("/") and ".." not in Path(name).parts for name in names)
-        messages = archive.read("conversations/messages.jsonl").decode("utf-8")
-        assert "Include this live conversation in my export." in messages
-        assert _BOOTSTRAP_TOKEN not in "".join(
-            archive.read(name).decode("utf-8") for name in names
-        )
-        extracted = tmp_path / "extracted"
-        archive.extractall(extracted)
-
-    validation = validate_bundle(extracted, clock=lambda: fixed_time)
-    assert validation.valid is True
-    assert validation.export_id == manifest.export_id
-    with pytest.raises(ExportBundleError, match="already exists"):
-        runtime.export_service.write_validated_zip(
-            archive_path,
-            schema_root=_schema_root(),
-            principal=principal,
-        )
-
-    foreign_archive = tmp_path / "foreign.zip"
-    with pytest.raises(ExportBundleError, match="does not own"):
-        runtime.export_service.write_validated_zip(
-            foreign_archive,
-            schema_root=_schema_root(),
-            principal=principal.model_copy(
-                update={"owner_id": "owner_00000000000000000000000000000002"}
-            ),
-        )
-    assert not foreign_archive.exists()
-
-
-def test_owner_export_writes_encrypted_package_for_validated_bundle(
-    tmp_path,
-    fixed_time,
-) -> None:
-    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
-    principal = _owner(runtime.owner_id, fixed_time)
-    runtime.conversation_service.post_owner_message(
-        principal,
-        thread_id=runtime.telegram_thread_id,
-        text="Encrypt this owner export bundle.",
-        idempotency_key="export-encrypted-package",
-    )
-    bundle_dir = tmp_path / "export"
-    manifest = runtime.export_service.write_bundle(
-        bundle_dir,
-        schema_root=_schema_root(),
-        principal=principal,
-    )
-    package_path = tmp_path / "owner-export.melloaenc"
-
-    header = write_encrypted_package(
-        bundle_dir,
-        package_path,
-        passphrase="correct horse battery staple",
-        clock=lambda: fixed_time,
-    )
-    report = validate_encrypted_package(
-        package_path,
-        passphrase="correct horse battery staple",
-        clock=lambda: fixed_time,
-    )
-
-    assert header.inner_export_id == manifest.export_id
-    assert header.cipher == "aes-256-gcm"
-    assert package_path.read_bytes().startswith(b"MELLOA-EXPORT-AESGCM-V1\n")
-    assert b"Encrypt this owner export bundle." not in package_path.read_bytes()
-    assert report.valid is True
-    assert report.package_header == header
-    assert report.bundle_validation is not None
-    assert report.bundle_validation.export_id == manifest.export_id
-
-    wrong_passphrase = validate_encrypted_package(
-        package_path,
-        passphrase="correct horse battery wrong",
-        clock=lambda: fixed_time,
-    )
-    assert wrong_passphrase.valid is False
-    assert wrong_passphrase.errors == ("encrypted export package authentication failed",)
-
-    tampered = tmp_path / "tampered.melloaenc"
-    tampered_bytes = bytearray(package_path.read_bytes())
-    tampered_bytes[-1] ^= 0x01
-    tampered.write_bytes(tampered_bytes)
-    tampered_report = validate_encrypted_package(
-        tampered,
-        passphrase="correct horse battery staple",
-        clock=lambda: fixed_time,
-    )
-    assert tampered_report.valid is False
-    assert tampered_report.errors == ("encrypted export package authentication failed",)
-
-    unsupported_headers = (
-        (
-            "unsupported-version.melloaenc",
-            {"package_format_version": "2.0.0"},
-            "encrypted export package format is unsupported",
-        ),
-        (
-            "unsupported-scrypt.melloaenc",
-            {"scrypt_n": 2**14},
-            "encrypted export package key-derivation parameters are unsupported",
-        ),
-        (
-            "invalid-tag-size.melloaenc",
-            {"ciphertext_size_bytes": header.plaintext_zip_size_bytes + 17},
-            "encrypted export package ciphertext size is invalid",
-        ),
-    )
-    for filename, updates, expected_error in unsupported_headers:
-        malformed = tmp_path / filename
-        _rewrite_encrypted_package_header(package_path, malformed, updates)
-        malformed_report = validate_encrypted_package(
-            malformed,
-            passphrase="correct horse battery staple",
-            clock=lambda: fixed_time,
-        )
-        assert malformed_report.valid is False
-        assert malformed_report.errors == (expected_error,)
-
-    with pytest.raises(ExportBundleError, match="already exists"):
-        write_encrypted_package(
-            bundle_dir,
-            package_path,
-            passphrase="correct horse battery staple",
-            clock=lambda: fixed_time,
-        )
-    with pytest.raises(ExportBundleError, match="passphrase"):
-        write_encrypted_package(
-            bundle_dir,
-            tmp_path / "short-passphrase.melloaenc",
-            passphrase="too short",
-            clock=lambda: fixed_time,
-        )
-
-    short_direct = validate_encrypted_package(
-        package_path,
-        passphrase="too short",
-        clock=lambda: fixed_time,
-    )
-    assert short_direct.valid is False
-    assert short_direct.errors == (
-        "export package passphrase must contain 16 to 4096 characters",
-    )
-
-    with pytest.raises(ExportBundleError, match="bundle must validate"):
-        write_encrypted_package(
-            tmp_path / "missing-bundle",
-            tmp_path / "missing-bundle.melloaenc",
-            passphrase="correct horse battery staple",
-            clock=lambda: fixed_time,
-        )
-
-
-def test_encrypted_export_validation_reports_malformed_packages(
-    tmp_path,
-    fixed_time,
-) -> None:
-    passphrase = "correct horse battery staple"
-    unknown = tmp_path / "unknown.melloaenc"
-    unknown.write_bytes(b"not-a-melloa-package")
-    assert validate_encrypted_package(
-        unknown,
-        passphrase=passphrase,
-        clock=lambda: fixed_time,
-    ).errors == ("encrypted export package has an unknown format",)
-
-    truncated = tmp_path / "truncated.melloaenc"
-    truncated.write_bytes(b"MELLOA-EXPORT-AESGCM-V1\n")
-    assert validate_encrypted_package(
-        truncated,
-        passphrase=passphrase,
-        clock=lambda: fixed_time,
-    ).errors == ("encrypted export package header is truncated",)
-
-    invalid_length = tmp_path / "invalid-length.melloaenc"
-    invalid_length.write_bytes(b"MELLOA-EXPORT-AESGCM-V1\n" + (0).to_bytes(4, "big"))
-    assert validate_encrypted_package(
-        invalid_length,
-        passphrase=passphrase,
-        clock=lambda: fixed_time,
-    ).errors == ("encrypted export package header length is invalid",)
-
-    invalid_header = tmp_path / "invalid-header.melloaenc"
-    invalid_header.write_bytes(
-        b"MELLOA-EXPORT-AESGCM-V1\n" + (2).to_bytes(4, "big") + b"{}"
-    )
-    invalid_header_report = validate_encrypted_package(
-        invalid_header,
-        passphrase=passphrase,
-        clock=lambda: fixed_time,
-    )
-    assert invalid_header_report.valid is False
-    assert "Field required" in invalid_header_report.errors[0]
-
-
-def _rewrite_encrypted_package_header(
-    source: Path,
-    target: Path,
-    updates: dict[str, object],
-) -> None:
-    magic = b"MELLOA-EXPORT-AESGCM-V1\n"
-    payload = source.read_bytes()
-    header_length_offset = len(magic)
-    header_offset = header_length_offset + 4
-    header_length = int.from_bytes(payload[header_length_offset:header_offset], "big")
-    ciphertext_offset = header_offset + header_length
-    header = json.loads(payload[header_offset:ciphertext_offset])
-    header.update(updates)
-    header_bytes = json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    target.write_bytes(
-        magic
-        + len(header_bytes).to_bytes(4, "big")
-        + header_bytes
-        + payload[ciphertext_offset:]
-    )
-
-
-def test_owner_export_includes_redacted_delivery_status(
-    tmp_path,
-    fixed_time,
-) -> None:
-    runtime = _runtime(fixed_time, mode=GuardianMode.NORMAL)
-    principal = _owner(runtime.owner_id, fixed_time)
-    reply = runtime.conversation_service.post_owner_message(
-        principal,
-        thread_id=runtime.telegram_thread_id,
-        text="Create a reply that can be delivered.",
-        idempotency_key="export-delivery-message",
-    )
-    assert reply.output_message is not None
-    submitted = runtime.delivery_service.enqueue_owner_delivery(
-        principal,
-        thread_id=runtime.telegram_thread_id,
-        message_id=reply.output_message.message_id,
-        client_adapter="client.fake",
-        destination_ref="synthetic:owner",
-        idempotency_key="export-delivery-work",
-    )
-    bundle_dir = tmp_path / "export"
-
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        delivery=runtime.delivery_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-
-    report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-    delivery_text = (bundle_dir / "conversations/deliveries.jsonl").read_text(
-        encoding="utf-8"
-    )
-    records = [json.loads(line) for line in delivery_text.splitlines() if line]
-
-    assert report.valid is True
-    assert report.record_counts["conversations/deliveries.jsonl"] == 1
-    assert records[0]["work_id"] == submitted.status.work_id
-    assert records[0]["message_id"] == reply.output_message.message_id
-    assert records[0]["state"] == "completed"
-    assert records[0]["attempts"][0]["adapter_receipt"]["message_id"] == (
-        reply.output_message.message_id
-    )
-    assert "Create a reply" not in delivery_text
-    assert "No external model" not in delivery_text
-
-
-def test_owner_export_includes_deleted_memory_tombstone_evidence(
-    tmp_path,
-    fixed_time,
-) -> None:
-    runtime = _runtime(fixed_time, mode=GuardianMode.NO_ACTIONS)
-    runtime.memory_service.delete_content(
-        AuthenticatedOwner(
-            owner_id=runtime.owner_id,
-            session_id="session_00000000000000000000000000000001",
-            authentication_method="auth.owner-export-test",
-            authenticated_at=fixed_time,
-            reauthenticated_until=fixed_time + timedelta(minutes=5),
-            expires_at=fixed_time + timedelta(minutes=30),
-        ),
-        runtime.seed_assertion_id,
-    )
-    bundle_dir = tmp_path / "export"
-
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-
-    report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-    records = [
-        json.loads(line)
-        for line in (bundle_dir / "assertions/inspections.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-        if line
-    ]
-
-    assert report.valid is True
-    assert report.record_counts["assertions/inspections.jsonl"] == 1
-    assert records[0]["content_state"] == "deleted"
-    assert "value" not in records[0]["assertion"]
-    assert records[0]["deletion_tombstone"]["assertion_id"] == runtime.seed_assertion_id
-    assert records[0]["deletion_tombstone"]["content_hash"].startswith("sha256:")
-    assert records[0]["backup_expiry"]["state"] == "not-configured"
-
-
-def test_import_validation_rejects_tampered_jsonl_record(tmp_path, fixed_time) -> None:
-    runtime = _runtime(fixed_time)
-    bundle_dir = tmp_path / "export"
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-
-    messages_path = bundle_dir / "conversations/messages.jsonl"
-    messages = [
-        json.loads(line)
-        for line in messages_path.read_text(encoding="utf-8").splitlines()
-        if line
-    ]
-    messages.append(
-        {
-            "contract_version": "1.0.0",
-            "message_id": "message_00000000000000000000000000000099",
-            "thread_id": "thread_0000000000000000000000000000ffff",
-        }
-    )
-    messages_path.write_text(
-        "".join(json.dumps(message, sort_keys=True) + "\n" for message in messages),
-        encoding="utf-8",
-    )
-
-    report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-    assert report.valid is False
-    assert any("checksum mismatch" in error for error in report.errors)
-    assert any("does not match its schema model" in error for error in report.errors)
-
-
-def test_export_refuses_non_empty_target_and_missing_schema_root(
-    tmp_path,
-    fixed_time,
-) -> None:
-    runtime = _runtime(fixed_time)
-    target = tmp_path / "export"
-    target.mkdir()
-    (target / "existing").write_text("do not overwrite\n", encoding="utf-8")
-    service = OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    )
-
-    with pytest.raises(ExportBundleError, match="must be empty"):
-        service.write_bundle(target, schema_root=_schema_root())
-
-    file_target = tmp_path / "not-a-directory"
-    file_target.write_text("not a directory\n", encoding="utf-8")
-    with pytest.raises(ExportBundleError, match="must be a directory"):
-        service.write_bundle(file_target, schema_root=_schema_root())
-
-    empty_target = tmp_path / "second-export"
-    with pytest.raises(ExportBundleError, match="required schema is missing"):
-        service.write_bundle(empty_target, schema_root=tmp_path / "missing-schemas")
-
-
-def test_import_validation_reports_missing_checksum_manifest_and_references(
-    tmp_path,
-    fixed_time,
-) -> None:
-    missing_report = validate_bundle(tmp_path / "missing", clock=lambda: fixed_time)
-    assert missing_report.valid is False
-    assert "checksums.sha256 is missing" in missing_report.errors[0]
-
-    runtime = _runtime(fixed_time)
-    bundle_dir = tmp_path / "export"
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-
-    (bundle_dir / "conversations/turns.jsonl").unlink()
-    deleted_report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-    assert deleted_report.valid is False
-    assert any("checksum references missing files" in error for error in deleted_report.errors)
-
-    bundle_dir = tmp_path / "reference-export"
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-    orphan = ConversationMessage(
-        message_id="message_00000000000000000000000000000099",
-        thread_id="thread_0000000000000000000000000000ffff",
-        author_principal_id=runtime.owner_id,
-        source_client="client.owner-console",
-        parts=(MessagePart(kind=MessageKind.TEXT, text="orphan"),),
-        delivery_state=DeliveryState.DELIVERED,
-        sensitivity=Sensitivity.PERSONAL,
-        created_at=fixed_time,
-        observed_at=fixed_time,
-    )
-    messages_path = bundle_dir / "conversations/messages.jsonl"
-    with messages_path.open("ab") as handle:
-        handle.write(orphan.model_dump_json().encode("utf-8") + b"\n")
-
-    reference_report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-    assert reference_report.valid is False
-    assert any("message references missing thread" in error for error in reference_report.errors)
-
-    bundle_dir = tmp_path / "activity-reference-export"
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-    activity_path = bundle_dir / "inspection/model-activity.jsonl"
-    activity_records = [
-        json.loads(line)
-        for line in activity_path.read_text(encoding="utf-8").splitlines()
-        if line
-    ]
-    activity_records[0]["entries"] = (
-        {
-            "turn_id": "turn_0000000000000000000000000000ffff",
-            "thread_id": runtime.telegram_thread_id,
-            "result_id": "result_00000000000000000000000000000001",
-            "request_id": "request_00000000000000000000000000000001",
-            "route_id": "model.fake.deterministic",
-            "provider_id": "provider.synthetic",
-            "model_id": "deterministic-fixture-v1",
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cost_gbp": 0.0,
-            "started_at": fixed_time.isoformat(),
-            "completed_at": fixed_time.isoformat(),
-            "external_disclosure": False,
-            "disclosure": None,
-        },
-    )
-    activity_records[0]["total_runs"] = 1
-    activity_records[0]["external_disclosure_runs"] = 0
-    activity_records[0]["total_input_tokens"] = 0
-    activity_records[0]["total_output_tokens"] = 0
-    activity_records[0]["total_cost_gbp"] = 0.0
-    activity_records[0]["external_cost_gbp"] = 0.0
-    activity_records[0]["window_start"] = (fixed_time - timedelta(seconds=1)).isoformat()
-    activity_records[0]["window_end"] = (fixed_time + timedelta(seconds=1)).isoformat()
-    activity_path.write_text(
-        "".join(json.dumps(record, sort_keys=True) + "\n" for record in activity_records),
-        encoding="utf-8",
-    )
-
-    activity_reference_report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-
-    assert activity_reference_report.valid is False
-    assert any(
-        "model activity references missing turn" in error
-        for error in activity_reference_report.errors
-    )
-
-
-def test_import_validation_reports_retention_reference_errors(
-    tmp_path,
-    fixed_time,
-) -> None:
-    runtime = _runtime(fixed_time)
-    bundle_dir = tmp_path / "retention-reference-export"
-    OwnerExportService(
-        owner_id=runtime.owner_id,
-        intelligence_id=runtime.intelligence_id,
-        conversation=runtime.conversation_service,
-        delivery=runtime.delivery_service,
-        memory=runtime.memory_service,
-        memory_repository=runtime.memory_store,
-        retention=runtime.retention_service,
-        clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
-    ).write_bundle(bundle_dir, schema_root=_schema_root())
-    retention_path = bundle_dir / "inspection/retention.jsonl"
-    retention_records = [
-        json.loads(line)
-        for line in retention_path.read_text(encoding="utf-8").splitlines()
-        if line
-    ]
-    retention_records[0]["owner_id"] = "owner_0000000000000000000000000000ffff"
-    retention_records.append({**retention_records[0], "owner_id": runtime.owner_id})
-    retention_path.write_text(
-        "".join(json.dumps(record, sort_keys=True) + "\n" for record in retention_records),
-        encoding="utf-8",
-    )
-
-    retention_reference_report = validate_bundle(bundle_dir, clock=lambda: fixed_time)
-
-    assert retention_reference_report.valid is False
-    assert any(
-        "retention export contains multiple owner reports" in error
-        for error in retention_reference_report.errors
-    )
-    assert any(
-        "retention report owner does not match manifest" in error
-        for error in retention_reference_report.errors
-    )
-
-
-def test_import_validation_reports_malformed_checksum_file(tmp_path, fixed_time) -> None:
-    malformed = tmp_path / "malformed"
-    malformed.mkdir()
-    (malformed / "checksums.sha256").write_text("not a checksum\n", encoding="utf-8")
-    malformed_report = validate_bundle(malformed, clock=lambda: fixed_time)
-    assert malformed_report.valid is False
-    assert "invalid line" in malformed_report.errors[0]
-
-    duplicate = tmp_path / "duplicate"
-    duplicate.mkdir()
-    digest = "0" * 64
-    duplicate.joinpath("checksums.sha256").write_text(
-        f"{digest}  manifest.json\n{digest}  manifest.json\n",
-        encoding="utf-8",
-    )
-    duplicate_report = validate_bundle(duplicate, clock=lambda: fixed_time)
-    assert duplicate_report.valid is False
-    assert "duplicate paths" in duplicate_report.errors[0]
-
-
-def test_export_contracts_reject_misleading_or_unsafe_metadata(fixed_time) -> None:
-    with pytest.raises(ValueError, match="data files require"):
-        ExportFileEntry(
-            path="conversations/messages.jsonl",
-            kind=ExportFileKind.DATA,
-            content_hash="sha256:" + "0" * 64,
-            size_bytes=0,
-        )
-    with pytest.raises(ValueError, match="record count"):
-        ExportFileEntry(
-            path="conversations/messages.jsonl",
-            kind=ExportFileKind.DATA,
-            record_type="export.conversation-message",
-            schema_path="schemas/conversation/message-v1.json",
-            content_hash="sha256:" + "0" * 64,
-            size_bytes=0,
-        )
-    with pytest.raises(ValueError, match="schema path must be relative"):
-        ExportFileEntry(
-            path="conversations/messages.jsonl",
-            kind=ExportFileKind.DATA,
-            record_type="export.conversation-message",
-            schema_path="../schemas/message-v1.json",
-            content_hash="sha256:" + "0" * 64,
-            size_bytes=0,
-            record_count=0,
-        )
-    with pytest.raises(ValueError, match="schema files cannot"):
-        ExportFileEntry(
-            path="schemas/conversation/message-v1.json",
-            kind=ExportFileKind.SCHEMA,
-            record_type="export.conversation-message",
-            content_hash="sha256:" + "0" * 64,
-            size_bytes=10,
-        )
-    with pytest.raises(ValueError, match="relative and contained"):
-        ExportFileEntry(
-            path="../secret",
-            kind=ExportFileKind.SCHEMA,
-            content_hash="sha256:" + "0" * 64,
-            size_bytes=10,
-        )
-
-    entry = ExportFileEntry(
-        path="conversations/messages.jsonl",
-        kind=ExportFileKind.DATA,
-        record_type="export.conversation-message",
-        schema_path="schemas/conversation/message-v1.json",
-        content_hash="sha256:" + "0" * 64,
-        size_bytes=0,
-        record_count=0,
-    )
-    with pytest.raises(ValueError, match="file paths must be unique"):
-        CanonicalExportManifest(
-            export_id="export_00000000000000000000000000000001",
-            owner_id="owner_00000000000000000000000000000001",
-            intelligence_id="intelligence_00000000000000000000000000000001",
-            created_at=fixed_time,
-            source_runtime="test",
-            encrypted=False,
-            includes_sql_snapshot=False,
-            includes_blobs=False,
-            files=(entry, entry),
-        )
-    with pytest.raises(ValueError, match="cannot claim encryption"):
-        CanonicalExportManifest(
-            export_id="export_00000000000000000000000000000001",
-            owner_id="owner_00000000000000000000000000000001",
-            intelligence_id="intelligence_00000000000000000000000000000001",
-            created_at=fixed_time,
-            source_runtime="test",
-            encrypted=True,
-            includes_sql_snapshot=False,
-            includes_blobs=False,
-            files=(entry,),
-        )
-    with pytest.raises(ValueError, match="authentication tag"):
-        EncryptedExportPackageHeader(
-            created_at=fixed_time,
-            inner_export_id="export_00000000000000000000000000000001",
-            scrypt_n=32768,
-            scrypt_r=8,
-            scrypt_p=1,
-            salt_b64="AAAAAAAAAAAAAAAAAAAAAA",
-            nonce_b64="AAAAAAAAAAAAAAAA",
-            plaintext_zip_hash="sha256:" + "0" * 64,
-            plaintext_zip_size_bytes=100,
-            ciphertext_size_bytes=100,
-        )
-    encrypted_header = EncryptedExportPackageHeader(
-        created_at=fixed_time,
-        inner_export_id="export_00000000000000000000000000000001",
-        scrypt_n=32768,
-        scrypt_r=8,
-        scrypt_p=1,
-        salt_b64="AAAAAAAAAAAAAAAAAAAAAA",
-        nonce_b64="AAAAAAAAAAAAAAAA",
-        plaintext_zip_hash="sha256:" + "0" * 64,
-        plaintext_zip_size_bytes=100,
-        ciphertext_size_bytes=116,
-    )
-    valid_bundle_report = CanonicalExportValidationReport(
-        export_id="export_00000000000000000000000000000001",
-        validated_at=fixed_time,
-        valid=True,
-        files_checked=1,
-    )
-    invalid_bundle_report = CanonicalExportValidationReport(
-        export_id="export_00000000000000000000000000000001",
-        validated_at=fixed_time,
-        valid=False,
-        files_checked=1,
-        errors=("bundle invalid",),
-    )
-    with pytest.raises(ValueError, match="cannot contain errors"):
-        EncryptedExportPackageValidationReport(
-            package_header=encrypted_header,
-            bundle_validation=valid_bundle_report,
-            validated_at=fixed_time,
-            valid=True,
-            errors=("unexpected",),
-        )
-    with pytest.raises(ValueError, match="requires package and bundle data"):
-        EncryptedExportPackageValidationReport(validated_at=fixed_time, valid=True)
-    with pytest.raises(ValueError, match="requires a valid bundle"):
-        EncryptedExportPackageValidationReport(
-            package_header=encrypted_header,
-            bundle_validation=invalid_bundle_report,
-            validated_at=fixed_time,
-            valid=True,
-        )
-    with pytest.raises(ValueError, match="must explain"):
-        EncryptedExportPackageValidationReport(validated_at=fixed_time, valid=False)
-    with pytest.raises(ValueError, match="valid export report cannot contain errors"):
-        CanonicalExportValidationReport(
-            validated_at=fixed_time,
-            valid=True,
-            files_checked=1,
-            errors=("bad",),
-        )
-    with pytest.raises(ValueError, match="invalid export report must explain"):
-        CanonicalExportValidationReport(
-            validated_at=fixed_time,
-            valid=False,
-            files_checked=1,
-        )
-
-
-def _runtime(fixed_time, *, mode: GuardianMode = GuardianMode.READ_ONLY):
-    guardian = FakeGuardianStatusReader.from_payload(
+def _guardian(observed_at: datetime) -> FakeGuardianStatusReader:
+    return FakeGuardianStatusReader.from_payload(
         GuardianStatusPayload(
-            instance_id="home-guardian",
-            mode=mode,
+            instance_id="export-test-guardian",
+            mode=GuardianMode.NORMAL,
             sequence=1,
-            changed_at=fixed_time,
-            reason_code="guardian.export-test",
+            changed_at=observed_at,
+            reason_code="guardian.test",
         ),
         receipt_hash="sha256:" + "1" * 64,
     )
-    return build_synthetic_runtime(
-        guardian,
-        _BOOTSTRAP_TOKEN,
+
+
+def test_authenticated_owner_downloads_small_provider_independent_archive(fixed_time) -> None:
+    runtime = build_runtime(
+        _guardian(fixed_time),
+        _OWNER_CREDENTIAL,
         clock=lambda: fixed_time,
-        id_factory=_fixed_ids(),
+        id_factory=_ids(),
     )
+    with TestClient(runtime.app, base_url="https://testserver") as client:
+        assert client.get("/api/v1/data-export").status_code == 401
+        login = client.post(
+            "/api/v1/auth/session",
+            json={"credential": _OWNER_CREDENTIAL},
+        )
+        csrf = login.json()["csrf_token"]
+        headers = {"X-Melloa-CSRF": csrf}
+        created = client.post(
+            "/api/v1/conversations",
+            headers=headers,
+            json={
+                "title": "A private plan",
+                "sensitivity": "personal",
+                "retention_policy": "retention.owner-conversation",
+            },
+        )
+        assert created.status_code == 201
+        thread_id = created.json()["thread_id"]
+        accepted = client.post(
+            f"/api/v1/conversations/{thread_id}/messages",
+            headers=headers,
+            json={
+                "text": "Remember the context, not this credential.",
+                "idempotency_key": "export-message-1",
+            },
+        )
+        assert accepted.status_code == 202
 
+        readiness = client.get("/api/v1/data-export")
+        assert readiness.status_code == 200
+        assert [item["group"] for item in readiness.json()["coverage"]] == [
+            "conversations",
+            "messages-and-answers",
+            "memories",
+        ]
+        assert readiness.json()["encrypted"] is False
 
-def _owner(owner_id: str, fixed_time) -> AuthenticatedOwner:
-    return AuthenticatedOwner(
-        owner_id=owner_id,
-        session_id="session_00000000000000000000000000000001",
-        authentication_method="auth.owner-export-test",
-        authenticated_at=fixed_time,
-        reauthenticated_until=fixed_time + timedelta(minutes=5),
-        expires_at=fixed_time + timedelta(minutes=30),
+        response = client.post("/api/v1/data-export/archive", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "melloa-owner-export-" in response.headers["content-disposition"]
+    assert _OWNER_CREDENTIAL.encode() not in response.content
+
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert set(archive.namelist()) == {
+            "manifest.json",
+            "conversations.json",
+            "memories.json",
+        }
+        manifest = json.loads(archive.read("manifest.json"))
+        conversations = json.loads(archive.read("conversations.json"))
+        memories = json.loads(archive.read("memories.json"))
+
+    assert manifest["format"] == "melloa-owner-export-v1"
+    assert {item["path"] for item in manifest["files"]} == {
+        "conversations.json",
+        "memories.json",
+    }
+    assert conversations["conversations"][0]["thread"]["title"] == "A private plan"
+    assert conversations["conversations"][0]["messages"][0]["parts"][0]["text"].startswith(
+        "Remember the context"
     )
-
-
-def _fixed_ids():
-    identifiers = count(1)
-
-    def factory(prefix: str) -> str:
-        return f"{prefix}_{next(identifiers):032x}"
-
-    return factory
-
-
-def _schema_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "schemas"
+    assert memories == {"memories": []}

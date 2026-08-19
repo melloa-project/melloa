@@ -1,79 +1,61 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
-  Activity,
-  Bot,
-  Brain,
-  ChevronRight,
-  CircleUserRound,
-  DatabaseZap,
-  History,
+  createContext,
+  type FormEvent,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
+import {
   LockKeyhole,
-  LogOut,
   MessageCircleMore,
-  Network,
   Settings,
+  ShieldAlert,
   ShieldCheck,
-  SlidersHorizontal,
+  Sparkles,
   X,
 } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 
 import { errorMessage, useMelloa } from "../app";
-import { formatRelative, titleCase } from "../lib/format";
-import { Badge, Button, IconButton, Modal } from "./ui";
+import { Button, IconButton, Modal } from "./ui";
 
-const navigation = [
-  { to: "/conversation", label: "Conversation", icon: MessageCircleMore },
-  { to: "/timeline", label: "Timeline", icon: History },
-  { to: "/activity", label: "Activity", icon: Activity },
-  { to: "/memory", label: "Memory", icon: Brain },
-  { to: "/providers", label: "Providers", icon: Bot },
-  { to: "/operations", label: "Operations", icon: DatabaseZap },
-  { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+type UnlockOwner = (reason?: string) => void;
+
+const OwnerUnlockContext = createContext<UnlockOwner | null>(null);
+
+export function useOwnerUnlock(): UnlockOwner {
+  const value = useContext(OwnerUnlockContext);
+  if (value === null) {
+    throw new Error("useOwnerUnlock must be used inside the Melloa layout");
+  }
+  return value;
+}
 
 export function AppLayout() {
   const {
-    principal,
     status,
-    canMutate,
+    canWrite,
     login,
-    logout,
     notices,
     dismissNotice,
     notify,
   } = useMelloa();
-  const location = useLocation();
-  const pageShellRef = useRef<HTMLElement | null>(null);
   const [reauthOpen, setReauthOpen] = useState(false);
   const [reauthenticating, setReauthenticating] = useState(false);
-  const page = navigation.find((item) => location.pathname.startsWith(item.to));
-  const pageShellClassName = page?.to === "/conversation"
-    ? "page-shell page-shell-conversation"
-    : "page-shell page-shell-standard";
-  const recentAuthRelative = formatRelative(principal.reauthenticated_until);
-  const sessionExpiryRelative = formatRelative(principal.expires_at);
-  const mutationState = canMutate ? "changes unlocked" : "read only";
-  const statusVerified = status !== null;
-  const releaseLabel = status?.release_display ?? "Release unverified";
-  const ingressVerifiedPrivate = status?.public_ingress === false;
-  const ingressLabel = ingressVerifiedPrivate ? "Private only" : "Ingress unverified";
-  const guardianLabel = statusVerified ? `Guardian ${titleCase(status.guardian.mode)}` : "Guardian unverified";
-  const guardianDetail = statusVerified ? `Signed sequence ${status.guardian.sequence}` : "Signed status unavailable";
-  const actionLabel = statusVerified
-    ? status.external_actions_enabled ? "Actions enabled" : "Actions bounded"
-    : "Authority unverified";
+  const [reauthReason, setReauthReason] = useState(
+    "Re-enter your local owner credential to continue.",
+  );
 
-  useEffect(() => {
-    if (typeof pageShellRef.current?.scrollTo === "function") {
-      pageShellRef.current.scrollTo({ left: 0, top: 0 });
-    }
-  }, [location.pathname]);
+  const openUnlock = useMemo<UnlockOwner>(() => (reason) => {
+    setReauthReason(reason ?? "Re-enter your local owner credential to continue.");
+    setReauthOpen(true);
+  }, []);
+
+  const protectionUnavailable = status === null || status.public_ingress !== false;
 
   async function reauthenticate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const input = form.elements.namedItem("credential");
+    const input = event.currentTarget.elements.namedItem("credential");
     if (!(input instanceof HTMLInputElement)) {
       return;
     }
@@ -83,7 +65,7 @@ export function AppLayout() {
     try {
       await login(credential);
       setReauthOpen(false);
-      notify("Changes unlocked with recent owner authentication.", "success");
+      notify("Owner access confirmed.", "success");
     } catch (error) {
       notify(errorMessage(error), "error");
     } finally {
@@ -92,161 +74,89 @@ export function AppLayout() {
   }
 
   return (
-    <div className="app-frame">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true"><Network size={19} /></span>
-          <div><strong>Melloa</strong><span>Owner Console</span></div>
-        </div>
+    <OwnerUnlockContext.Provider value={openUnlock}>
+      <div className="app-shell">
+        <header className="topbar">
+          <NavLink aria-label="Open Melli" className="melli-brand" to="/conversation">
+            <span className="melli-mark" aria-hidden="true"><Sparkles size={18} /></span>
+            <span><strong>Melli</strong><small>Private with Melloa</small></span>
+          </NavLink>
 
-        <nav className="sidebar-nav" aria-label="Primary navigation">
-          {navigation.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-              key={to}
-              to={to}
-            >
-              <Icon aria-hidden="true" size={18} />
-              <span>{label}</span>
-              <ChevronRight aria-hidden="true" className="nav-chevron" size={15} />
-            </NavLink>
-          ))}
-        </nav>
-
-        <NavLink
-          aria-label="Open Guardian boundary settings"
-          className="sidebar-boundary"
-          to="/settings"
-        >
-          <div className="boundary-icon"><ShieldCheck aria-hidden="true" size={17} /></div>
-          <div>
-            <strong>Guardian is separate</strong>
-            <span>Status is read-only here. Control stays on the owner path.</span>
-          </div>
-        </NavLink>
-
-        <button
-          aria-label={`Owner session: ${mutationState}; recent authentication ${recentAuthRelative}; session expires ${sessionExpiryRelative}`}
-          className="owner-chip"
-          title={`Owner ${principal.owner_id}`}
-          type="button"
-          onClick={() => setReauthOpen(true)}
-        >
-          <CircleUserRound aria-hidden="true" size={20} />
-          <span><strong>Owner</strong><small>Recent auth {recentAuthRelative}</small></span>
-          <Badge tone={canMutate ? "positive" : "warning"}>
-            {canMutate ? "Unlocked" : "Read only"}
-          </Badge>
-        </button>
-      </aside>
-
-      <div className="main-column">
-        <header className="authority-bar">
-          <div className="mobile-brand">
-            <span className="brand-mark" aria-hidden="true"><Network size={17} /></span>
-            <strong>Melloa</strong>
-          </div>
-          <div className="authority-title">
-            <span>{page?.label ?? "Owner Console"}</span>
-            <small>Private first-party surface</small>
-          </div>
-          <div className="authority-status">
-            <span
-              aria-label={`Runtime release: ${releaseLabel}`}
-              className={`release-identity ${statusVerified ? "" : "release-identity-unverified"}`}
-            >
-              {releaseLabel}
-            </span>
-            <span
-              aria-label={ingressVerifiedPrivate ? "Public ingress disabled by signed status" : "Public ingress is not verified"}
-              className={`status-item ${statusVerified ? "" : "status-item-warning"}`}
-            >
-              <span className={`status-dot status-${ingressVerifiedPrivate ? "healthy" : "unknown"}`} />
-              {ingressLabel}
-            </span>
-            <NavLink
-              aria-label={`Open Guardian boundary settings: ${guardianLabel}; ${guardianDetail}`}
-              className={`status-item status-link ${statusVerified ? "" : "status-item-warning"}`}
-              to="/settings"
-            >
-              <ShieldCheck aria-hidden="true" size={15} />
-              <span>{guardianLabel}</span>
-              <small>{statusVerified ? `Seq ${status.guardian.sequence}` : "No signed status"}</small>
-            </NavLink>
-            <Badge tone={statusVerified && status.external_actions_enabled === false ? "positive" : "warning"}>
-              {actionLabel}
-            </Badge>
-            {!canMutate ? (
-              <Button onClick={() => setReauthOpen(true)} size="sm" tone="primary">
-                <LockKeyhole aria-hidden="true" size={15} /> Unlock changes
+          <div className="topbar-actions">
+            {protectionUnavailable ? (
+              <span className="protection-warning" role="status">
+                <ShieldAlert aria-hidden="true" size={16} /> Protection status unavailable
+              </span>
+            ) : (
+              <span className="protection-ok" title="Private access verified">
+                <ShieldCheck aria-hidden="true" size={16} />
+                <span className="sr-only">Private access verified</span>
+              </span>
+            )}
+            {!canWrite ? (
+              <Button
+                onClick={() => openUnlock("Confirm owner access to write in this private session.")}
+                size="sm"
+                tone="primary"
+              >
+                <LockKeyhole aria-hidden="true" size={15} /> Unlock
               </Button>
             ) : null}
+            <NavLink aria-label="Data and safety" className="topbar-link" to="/settings">
+              <Settings aria-hidden="true" size={18} />
+              <span>Data &amp; safety</span>
+            </NavLink>
           </div>
         </header>
 
-        <main className={pageShellClassName} ref={pageShellRef}><Outlet /></main>
-      </div>
+        <main className="app-main"><Outlet /></main>
 
-      <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navigation.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            className={({ isActive }) => `mobile-nav-link ${isActive ? "active" : ""}`}
-            key={to}
-            to={to}
-          >
-            <Icon aria-hidden="true" size={19} />
-            <span>{label}</span>
-          </NavLink>
-        ))}
-      </nav>
+        <nav className="mobile-primary" aria-label="Primary navigation">
+          <NavLink to="/conversation"><MessageCircleMore aria-hidden="true" size={19} /><span>Melli</span></NavLink>
+          <NavLink to="/settings"><Settings aria-hidden="true" size={19} /><span>Safety</span></NavLink>
+        </nav>
 
-      <div className="toast-stack" aria-live="polite">
-        {notices.map((notice) => (
-          <div className={`toast toast-${notice.tone}`} key={notice.id} role="status">
-            <span>{notice.message}</span>
-            <IconButton
-              icon={X}
-              label="Dismiss notification"
-              onClick={() => dismissNotice(notice.id)}
-              tone="ghost"
+        <div className="toast-stack" aria-live="polite">
+          {notices.map((notice) => (
+            <div className={`toast toast-${notice.tone}`} key={notice.id} role="status">
+              <span>{notice.message}</span>
+              <IconButton
+                icon={X}
+                label="Dismiss notification"
+                onClick={() => dismissNotice(notice.id)}
+                tone="ghost"
+              />
+            </div>
+          ))}
+        </div>
+
+        <Modal
+          description={reauthReason}
+          onClose={() => setReauthOpen(false)}
+          open={reauthOpen}
+          title="Confirm it’s you"
+        >
+          <form className="stack-form" onSubmit={(event) => void reauthenticate(event)}>
+            <label className="field-label" htmlFor="reauth-credential">Owner credential</label>
+            <input
+              autoComplete="current-password"
+              autoFocus
+              className="text-input"
+              id="reauth-credential"
+              minLength={32}
+              name="credential"
+              required
+              type="password"
             />
-          </div>
-        ))}
+            <div className="modal-actions">
+              <Button onClick={() => setReauthOpen(false)} type="button">Cancel</Button>
+              <Button loading={reauthenticating} tone="primary" type="submit">
+                Continue
+              </Button>
+            </div>
+          </form>
+        </Modal>
       </div>
-
-      <Modal
-        description="The credential is submitted to the same-origin private core and cleared immediately."
-        onClose={() => setReauthOpen(false)}
-        open={reauthOpen}
-        title="Unlock owner changes"
-      >
-        <form className="stack-form" onSubmit={(event) => void reauthenticate(event)}>
-          <label className="field-label" htmlFor="reauth-credential">Owner credential</label>
-          <input
-            autoComplete="current-password"
-            autoFocus
-            className="text-input"
-            id="reauth-credential"
-            minLength={32}
-            name="credential"
-            required
-            type="password"
-          />
-          <div className="modal-actions">
-            <Button onClick={() => setReauthOpen(false)} type="button">Cancel</Button>
-            <Button loading={reauthenticating} tone="primary" type="submit">
-              Unlock changes
-            </Button>
-          </div>
-        </form>
-        <button className="signout-link" type="button" onClick={() => void logout()}>
-          <LogOut aria-hidden="true" size={15} /> Sign out instead
-        </button>
-      </Modal>
-
-      <div className="sr-only" aria-live="polite">
-        Recent authentication {recentAuthRelative}. Session expires {sessionExpiryRelative}.
-      </div>
-    </div>
+    </OwnerUnlockContext.Provider>
   );
 }

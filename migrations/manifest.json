@@ -1,13 +1,11 @@
 {
   "manifest_version": "1.0.0",
   "migrations": {
-    "0001_m0_foundation.sql": "sha256:b976c85db4c3841c14737c4f9610ca83b362a383b730e3ac7f09aab799e9f48f",
+    "0001_m0_foundation.sql": "sha256:3803358523a9a8f1a76d0bf560088539854185888692b986d276bc697b630941",
     "0002_m1_conversation_retrieval.sql": "sha256:90b1ce7170aa7a9ebda24bacbc63f48b9456525f0fe07f4cb54366d8a6010ab2",
     "0003_m1_projection_trigger_privilege.sql": "sha256:c2f4ce8d46fcec197833c9d9829911839a06db93836798b34facadc5cd5956d6",
     "0004_m1_assertion_state_history.sql": "sha256:ec9da887cc725ca68550ee2152e663b6daaa8cdfad81798e1f8b0d06a0f1d84e",
-    "0005_m1_outbound_delivery.sql": "sha256:3b92486d589677c3b46ea2cb5b5fb51b9084f95bc2430b1fc030501b1054dc38",
     "0006_m1_assertion_content_boundary.sql": "sha256:f9891c35a5c51728853522b39ab2aaa140eb9208cb11bb11f469304578f20afb",
-    "0007_m1_telegram_durable_state.sql": "sha256:1d43f671b0ab1e061366c583215ff6392e0b04d857efcc7cf68ae0e959718adf",
     "0008_m1_assertion_content_deletion.sql": "sha256:279139d51a43a2fd553d467640f8a4eeef49b820ed07663837957854cef51fa7",
     "0009_m1_owner_sessions.sql": "sha256:be220e027758f090d43ca174641913274f2c42e55bdc4444a2f1c46f0fdf4d9a",
     "0010_m1_owner_session_retention_cleanup.sql": "sha256:cfd3a48c57378693b0c4d2a39362f1318c08cec404f12b0224188c137e56492d"

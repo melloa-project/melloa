@@ -5,67 +5,66 @@ import { describe, expect, it, vi } from "vitest";
 import type { SystemStatus } from "../src/api";
 import { LoginPage } from "../src/pages/login";
 
-const verifiedStatus: SystemStatus = {
+const status: SystemStatus = {
   contract_version: "1.0.0",
   service: "melloa-core",
   version: "0.2.0",
   release_display: "v0.2.0 preview",
   stage: "preview",
-  milestone: "M1",
-  architecture_baseline: "v0.2",
-  generated_at: "2026-08-18T12:00:00Z",
+  generated_at: "2026-08-19T12:00:00Z",
+  access_scope: "loopback",
   public_ingress: false,
   external_actions_enabled: false,
   guardian: {
-    mode: "no-actions",
-    sequence: 4,
-    changed_at: "2026-08-18T11:59:00Z",
-    receipt_hash: "sha256:guardian-receipt",
-    key_id: "guardian.status-v1",
+    mode: "offline",
+    sequence: 2,
+    changed_at: "2026-08-19T12:00:00Z",
+    receipt_hash: `sha256:${"1".repeat(64)}`,
+    key_id: "guardian-key",
   },
 };
 
 describe("LoginPage", () => {
-  it("states the private and independent authority boundaries", () => {
-    render(<MemoryRouter><LoginPage login={vi.fn()} refreshStatus={vi.fn()} status={null} /></MemoryRouter>);
-
-    expect(screen.getByText("Private by design")).toBeInTheDocument();
-    expect(screen.getByText("Guardian remains independent")).toBeInTheDocument();
-    expect(screen.getByText("No browser persistence")).toBeInTheDocument();
-    expect(screen.getByText("Release unverified")).toHaveAccessibleName(
-      "Runtime release: Release unverified",
-    );
-  });
-
-  it("identifies the verified preview release before authentication", () => {
+  it("leads with the owner relationship and keeps the reset limitation honest", () => {
     render(
       <MemoryRouter>
-        <LoginPage login={vi.fn()} refreshStatus={vi.fn()} status={verifiedStatus} />
+        <LoginPage login={vi.fn()} refreshStatus={vi.fn()} status={status} />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("v0.2.0 preview")).toHaveAccessibleName(
-      "Runtime release: v0.2.0 preview",
-    );
+    expect(screen.getByRole("heading", { name: "Pick up where you left off." })).toBeVisible();
+    expect(screen.getByText(/understand your history, goals, and changing context/i)).toBeVisible();
+    expect(screen.getByText(/early owner-experience reset/i)).toBeVisible();
+    expect(screen.getByText("Private access verified")).toBeVisible();
+    expect(screen.queryByText(/route behind every response/i)).not.toBeInTheDocument();
   });
 
-  it("submits the owner credential and clears the field", async () => {
-    const login = vi.fn(async () => undefined);
-    render(<MemoryRouter><LoginPage login={login} refreshStatus={vi.fn()} status={null} /></MemoryRouter>);
+  it("submits and clears the local owner credential", async () => {
+    const login = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <LoginPage login={login} refreshStatus={vi.fn()} status={status} />
+      </MemoryRouter>,
+    );
+
     const input = screen.getByLabelText("Owner credential");
     fireEvent.change(input, { target: { value: "a".repeat(32) } });
-    fireEvent.click(screen.getByRole("button", { name: /Open Owner Console/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Continue to Melli/ }));
 
     await waitFor(() => expect(login).toHaveBeenCalledWith("a".repeat(32)));
     expect(input).toHaveValue("");
   });
 
-  it("retries the signed runtime status check before authentication", async () => {
-    const refreshStatus = vi.fn(async () => undefined);
-    render(<MemoryRouter><LoginPage login={vi.fn()} refreshStatus={refreshStatus} status={null} /></MemoryRouter>);
+  it("fails visibly when protection cannot be verified and can retry", async () => {
+    const refreshStatus = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MemoryRouter>
+        <LoginPage login={vi.fn()} refreshStatus={refreshStatus} status={null} />
+      </MemoryRouter>,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Retry signed status check" }));
-
+    expect(screen.getByText("Protection status unavailable")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry protection status" }));
     await waitFor(() => expect(refreshStatus).toHaveBeenCalledOnce());
   });
 });

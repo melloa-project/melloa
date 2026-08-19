@@ -1,170 +1,101 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  CheckCircle2,
-  Clock3,
-  Copy,
+  ArrowLeft,
+  Database,
+  Download,
   KeyRound,
-  Link2,
   LockKeyhole,
-  MessageCircle,
+  LogOut,
+  MonitorSmartphone,
   RefreshCw,
   ShieldCheck,
-  Smartphone,
-  Unlink,
-  UserRound,
+  TriangleAlert,
+  UserRoundX,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
-import type {
-  OwnerSessionInventory,
-  TelegramChannelStatus,
-  TelegramOwnerPairing,
-  TelegramPairingCandidate,
-} from "../api";
+import type { OwnerExportReadinessReport, OwnerSessionInventory } from "../api";
 import { errorMessage, useMelloa } from "../app";
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Modal, SectionHeader } from "../components/ui";
-import { formatInstant, formatRelative, redactNumericIdentifier, shortId, titleCase } from "../lib/format";
-
-type TelegramState = {
-  readonly status: TelegramChannelStatus;
-  readonly pairing: TelegramOwnerPairing | null;
-  readonly candidates: readonly TelegramPairingCandidate[];
-};
+import { useOwnerUnlock } from "../components/layout";
+import { Badge, Button, Card, ErrorState, LoadingState } from "../components/ui";
+import { formatInstant, formatRelative, titleCase } from "../lib/format";
 
 export function SettingsPage() {
-  const { api, principal, status, canMutate, notify } = useMelloa();
+  const {
+    api,
+    principal,
+    status,
+    canWrite,
+    canUseSensitiveControls,
+    logout,
+    notify,
+  } = useMelloa();
+  const openUnlock = useOwnerUnlock();
   const [sessions, setSessions] = useState<OwnerSessionInventory | null>(null);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
-  const [sessionsError, setSessionsError] = useState<string | null>(null);
-  const sessionsLoadRequestRef = useRef(0);
-  const [revokeSessionsOpen, setRevokeSessionsOpen] = useState(false);
-  const [revokingSessions, setRevokingSessions] = useState(false);
-  const [telegram, setTelegram] = useState<TelegramState | null>(null);
+  const [exportReadiness, setExportReadiness] = useState<OwnerExportReadinessReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const telegramLoadRequestRef = useRef(0);
-  const [selectedCandidate, setSelectedCandidate] = useState<TelegramPairingCandidate | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [revoking, setRevoking] = useState(false);
 
-  const loadSessions = useCallback(async () => {
-    const requestId = sessionsLoadRequestRef.current + 1;
-    sessionsLoadRequestRef.current = requestId;
-    setSessionsLoading(true);
-    try {
-      const nextSessions = await api.activeSessions();
-      if (requestId !== sessionsLoadRequestRef.current) {
-        return;
-      }
-      setSessions(nextSessions);
-      setSessionsError(null);
-    } catch (caught) {
-      if (requestId !== sessionsLoadRequestRef.current) {
-        return;
-      }
-      setSessions(null);
-      setSessionsError(errorMessage(caught));
-    } finally {
-      if (requestId === sessionsLoadRequestRef.current) {
-        setSessionsLoading(false);
-      }
-    }
-  }, [api]);
-
-  const loadTelegram = useCallback(async () => {
-    const requestId = telegramLoadRequestRef.current + 1;
-    telegramLoadRequestRef.current = requestId;
+  const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const [status, pairing, candidates] = await Promise.all([
-        api.inspectTelegramStatus(),
-        api.inspectTelegramPairing(),
-        api.listTelegramPairingCandidates(),
-      ]);
-      if (requestId !== telegramLoadRequestRef.current) {
-        return;
-      }
-      setTelegram({ status, pairing, candidates });
-      setError(null);
-    } catch (caught) {
-      if (requestId !== telegramLoadRequestRef.current) {
-        return;
-      }
-      setTelegram(null);
-      setError(errorMessage(caught));
-    } finally {
-      if (requestId === telegramLoadRequestRef.current) {
-        setLoading(false);
-      }
-    }
+    const [sessionResult, exportResult] = await Promise.allSettled([
+      api.activeSessions(),
+      api.exportReadiness(),
+    ]);
+    setSessions(sessionResult.status === "fulfilled" ? sessionResult.value : null);
+    setExportReadiness(exportResult.status === "fulfilled" ? exportResult.value : null);
+    const failure = sessionResult.status === "rejected"
+      ? sessionResult.reason
+      : exportResult.status === "rejected"
+        ? exportResult.reason
+        : null;
+    setError(failure === null ? null : errorMessage(failure));
+    setLoading(false);
   }, [api]);
 
   useEffect(() => {
-    void loadSessions();
-    void loadTelegram();
-  }, [loadSessions, loadTelegram]);
+    void load();
+  }, [load]);
 
-  async function revokeOtherSessions() {
-    if (!canMutate) {
-      notify("Unlock owner changes before signing out other sessions.", "error");
+  async function downloadExport() {
+    if (!canWrite || !canUseSensitiveControls) {
+      openUnlock("Export contains your private history, so Melloa asks for fresh owner confirmation.");
       return;
     }
-    setRevokingSessions(true);
+    setExporting(true);
     try {
-      const result = await api.revokeOtherSessions();
-      setRevokeSessionsOpen(false);
-      await loadSessions();
-      const noun = result.revoked_count === 1 ? "session" : "sessions";
-      notify(`${result.revoked_count} other ${noun} signed out.`, "success");
+      const archive = await api.downloadExportPreview();
+      const url = URL.createObjectURL(archive.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = archive.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      notify("Your export is ready in Downloads.", "success");
     } catch (caught) {
       notify(errorMessage(caught), "error");
     } finally {
-      setRevokingSessions(false);
+      setExporting(false);
     }
   }
 
-  async function confirmPairing(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (selectedCandidate === null) {
-      return;
-    }
-    if (!canMutate) {
-      notify("Unlock owner changes before confirming Telegram pairing.", "error");
-      return;
-    }
-    const input = event.currentTarget.elements.namedItem("confirmation-code");
-    if (!(input instanceof HTMLInputElement)) {
-      return;
-    }
-    const code = input.value;
-    input.value = "";
-    setConfirming(true);
-    try {
-      await api.confirmTelegramPairing(selectedCandidate.candidate_id, code);
-      setSelectedCandidate(null);
-      await loadTelegram();
-      notify("Telegram owner pairing confirmed.", "success");
-    } catch (caught) {
-      notify(errorMessage(caught), "error");
-    } finally {
-      setConfirming(false);
-    }
-  }
-
-  async function revokePairing() {
-    if (telegram?.pairing === null || telegram?.pairing === undefined) {
-      return;
-    }
-    if (!canMutate) {
-      notify("Unlock owner changes before revoking Telegram pairing.", "error");
+  async function signOutOtherSessions() {
+    if (!canWrite || !canUseSensitiveControls) {
+      openUnlock("Confirm it’s you before signing out other browsers.");
       return;
     }
     setRevoking(true);
     try {
-      await api.revokeTelegramPairing(telegram.pairing.pairing_id);
-      setRevokeOpen(false);
-      await loadTelegram();
-      notify("Telegram owner pairing revoked.", "success");
+      const result = await api.revokeOtherSessions();
+      await load();
+      notify(
+        result.revoked_count === 0
+          ? "No other browsers were signed in."
+          : `${result.revoked_count} other ${result.revoked_count === 1 ? "browser" : "browsers"} signed out.`,
+        "success",
+      );
     } catch (caught) {
       notify(errorMessage(caught), "error");
     } finally {
@@ -172,220 +103,109 @@ export function SettingsPage() {
     }
   }
 
-  async function copyAuthorityId(label: string, id: string) {
-    try {
-      if (navigator.clipboard === undefined) {
-        throw new Error("Clipboard API unavailable");
-      }
-      await navigator.clipboard.writeText(id);
-      notify(`${label} ID copied.`, "success");
-    } catch {
-      notify(`${label} ID copy failed.`, "error");
-    }
-  }
-
-  const pollingState = telegram?.status.polling?.state ?? "unavailable";
-  const realTransport = telegram?.status.capabilities?.network === true;
-  const channelTone = pollingState === "healthy" ? "positive" : pollingState === "disabled" ? "neutral" : "warning";
   const otherSessions = sessions?.sessions.filter(
     (session) => session.session_id !== sessions.current_session_id,
   ) ?? [];
+  const includedGroups = exportReadiness?.coverage.filter((item) => item.included).length ?? 0;
+  const totalGroups = exportReadiness?.coverage.length ?? 0;
 
   return (
-    <div className="standard-page settings-page">
-      <SectionHeader
-        eyebrow="Private configuration"
-        title="Settings"
-        description="Review owner access, Guardian status, and explicitly paired secondary channels."
-      />
+    <div className="safety-page">
+      <header className="safety-heading">
+        <Link className="back-link" to="/conversation"><ArrowLeft size={16} /> Back to Melli</Link>
+        <div>
+          <p className="eyebrow">Owner control</p>
+          <h1>Data &amp; safety</h1>
+          <p>The few controls that should remain outside ordinary conversation.</p>
+        </div>
+        <Button aria-label="Refresh data and safety" loading={loading} onClick={() => void load()} size="icon" tone="ghost">
+          <RefreshCw size={17} />
+        </Button>
+      </header>
 
-      <div className="settings-grid">
-        <Card className="settings-card">
-          <div className="settings-card-heading"><span className="settings-icon"><UserRound size={19} /></span><div><h2>Owner session</h2><p>Short-lived application authentication</p></div><Badge tone={canMutate ? "positive" : "warning"}>{canMutate ? "Changes unlocked" : "Read only"}</Badge></div>
-          <dl className="settings-details">
-            <div><dt>Owner</dt><dd><CopyableAuthorityId label="Owner" id={principal.owner_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-            <div><dt>Session</dt><dd><CopyableAuthorityId label="Session" id={principal.session_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-            <div><dt>Method</dt><dd>{titleCase(principal.authentication_method)}</dd></div>
-            <div><dt>Authenticated</dt><dd>{formatInstant(principal.authenticated_at)}</dd></div>
-            <div><dt>Session expires</dt><dd>{formatRelative(principal.expires_at)}</dd></div>
-            <div><dt>Recent auth</dt><dd>{formatRelative(principal.reauthenticated_until)}</dd></div>
-          </dl>
-          {sessionsLoading && sessions === null ? <LoadingState label="Reading active sessions" /> : null}
-          {sessionsError === null ? null : <ErrorState title="Session inventory unavailable" message={sessionsError} />}
-          {sessions === null ? null : (
-            <>
-              <dl className="channel-status-grid" aria-label="Active owner sessions">
-                {sessions.sessions.map((session) => {
-                  const current = session.session_id === sessions.current_session_id;
-                  return (
-                    <div key={session.session_id}>
-                      <dt>{current ? "This browser" : `Other browser · ${shortId(session.session_id)}`}</dt>
-                      <dd>
-                        <CopyableAuthorityId
-                          label={current ? "Current session" : "Other session"}
-                          id={session.session_id}
-                          onCopy={(label, id) => void copyAuthorityId(label, id)}
-                        /> · {titleCase(session.authentication_method)} · signed in {formatInstant(session.authenticated_at)} · expires {formatRelative(session.expires_at)}
-                      </dd>
-                    </div>
-                  );
-                })}
-              </dl>
-              <div className="memory-actions">
-                <Button loading={sessionsLoading} onClick={() => void loadSessions()} size="sm"><RefreshCw size={15} /> Refresh sessions</Button>
-                <Button
-                  disabled={!canMutate || sessionsLoading || otherSessions.length === 0}
-                  onClick={() => setRevokeSessionsOpen(true)}
-                  size="sm"
-                  tone="danger"
-                >
-                  <Unlink size={15} /> Sign out other sessions
-                </Button>
-              </div>
-            </>
-          )}
-          <p className="settings-note"><KeyRound size={15} /> Credentials and mutation proof are not written to browser storage.</p>
+      {loading && sessions === null && exportReadiness === null ? <LoadingState label="Reading owner controls" /> : null}
+      {error === null ? null : <ErrorState message={error} title="Some owner controls are unavailable" />}
+
+      <div className="safety-grid">
+        <Card className="safety-card data-card">
+          <div className="safety-card-heading">
+            <span className="safety-icon"><Database size={19} /></span>
+            <div><h2>Your data</h2><p>Take a copy of the history Melloa currently holds.</p></div>
+          </div>
+          <div className="plain-status">
+            <span><strong>{includedGroups}</strong> of {totalGroups || "?"} current data groups included</span>
+            <Badge tone={exportReadiness?.encrypted === true ? "positive" : "warning"}>
+              {exportReadiness?.encrypted === true ? "Encrypted" : "Not encrypted"}
+            </Badge>
+          </div>
+          {exportReadiness?.encrypted === false ? (
+            <p className="safety-warning"><TriangleAlert size={16} /> The current browser download is a preview ZIP and is not encrypted. Keep it private.</p>
+          ) : null}
+          <Button loading={exporting} onClick={() => void downloadExport()} tone="primary">
+            <Download size={16} /> Download my data
+          </Button>
+          <p className="fine-print">Melloa validates the archive before download. This is a portability copy, not a replacement for encrypted backups.</p>
         </Card>
 
-        <Card className="settings-card">
-          <div className="settings-card-heading"><span className="settings-icon guardian"><ShieldCheck size={19} /></span><div><h2>Guardian boundary</h2><p>Independently controlled authority</p></div><Badge tone={status === null ? "warning" : "positive"}>{status === null ? "Unverified" : titleCase(status.guardian.mode)}</Badge></div>
-          <dl className="settings-details">
-            <div><dt>Signed sequence</dt><dd>{status?.guardian.sequence ?? "Unavailable"}</dd></div>
-            <div><dt>Key ID</dt><dd>{status === null ? "Unavailable" : <CopyableAuthorityId label="Guardian key" id={status.guardian.key_id} onCopy={(label, id) => void copyAuthorityId(label, id)} />}</dd></div>
-            <div><dt>Changed</dt><dd>{formatInstant(status?.guardian.changed_at)}</dd></div>
-            <div><dt>External actions</dt><dd>{status?.external_actions_enabled === true ? "Enabled" : "Bounded"}</dd></div>
-            <div><dt>Public ingress</dt><dd>{status?.public_ingress === false ? "None" : "Unverified"}</dd></div>
-          </dl>
-          <p className="settings-note"><LockKeyhole size={15} /> This console cannot change Guardian mode or absorb its authority.</p>
+        <Card className="safety-card">
+          <div className="safety-card-heading">
+            <span className="safety-icon"><MonitorSmartphone size={19} /></span>
+            <div><h2>Signed-in browsers</h2><p>Review where this owner session is active.</p></div>
+          </div>
+          <div className="session-list">
+            {(sessions?.sessions ?? [principal]).map((session) => {
+              const current = session.session_id === (sessions?.current_session_id ?? principal.session_id);
+              return (
+                <div className="session-row" key={session.session_id}>
+                  <span className="session-dot" />
+                  <div>
+                    <strong>{current ? "This browser" : "Another browser"}</strong>
+                    <small>Signed in {formatInstant(session.authenticated_at)} · expires {formatRelative(session.expires_at)}</small>
+                  </div>
+                  {current ? <Badge tone="positive">Current</Badge> : null}
+                </div>
+              );
+            })}
+          </div>
+          <Button
+            disabled={otherSessions.length === 0}
+            loading={revoking}
+            onClick={() => void signOutOtherSessions()}
+            tone="danger"
+          >
+            <UserRoundX size={16} /> Sign out other browsers
+          </Button>
+          <Button onClick={() => void logout()} tone="ghost"><LogOut size={16} /> Sign out here</Button>
+        </Card>
+
+        <Card className="safety-card protection-card">
+          <div className="safety-card-heading">
+            <span className="safety-icon"><ShieldCheck size={19} /></span>
+            <div><h2>Independent protection</h2><p>Guardian stays outside Melli’s control.</p></div>
+          </div>
+          {status === null ? (
+            <p className="safety-warning"><TriangleAlert size={16} /> Protection status could not be verified. External actions remain unsafe to trust.</p>
+          ) : (
+            <dl className="plain-details">
+              <div><dt>Guardian</dt><dd>{titleCase(status.guardian.mode)}</dd></div>
+              <div><dt>Public access</dt><dd>{status.public_ingress === false ? "Disabled" : "Not verified"}</dd></div>
+              <div><dt>External actions</dt><dd>{status.external_actions_enabled ? "Policy constrained" : "Paused"}</dd></div>
+            </dl>
+          )}
+          <p className="fine-print"><LockKeyhole size={14} /> This interface can read protection status, but cannot change Guardian or obtain its keys.</p>
+        </Card>
+
+        <Card className="safety-card access-card">
+          <div className="safety-card-heading">
+            <span className="safety-icon"><KeyRound size={19} /></span>
+            <div><h2>Sensitive changes</h2><p>Fresh confirmation is reserved for consequential controls.</p></div>
+          </div>
+          <p>Ordinary conversation remains available after the five-minute confirmation window. Exporting private history and signing out other browsers ask again.</p>
+          <Badge tone={canUseSensitiveControls ? "positive" : "neutral"}>
+            {canUseSensitiveControls ? "Recently confirmed" : "Confirm when needed"}
+          </Badge>
         </Card>
       </div>
-
-      <Card className="telegram-card">
-        <div className="card-heading-row">
-          <div className="channel-heading"><span className="telegram-mark"><MessageCircle size={19} /></span><div><h2>Telegram</h2><p>Optional, replaceable secondary conversation adapter</p></div></div>
-          <div className="channel-heading-actions"><Badge tone={channelTone}>{realTransport ? "Bot API" : "Synthetic fixture"} · {titleCase(pollingState)}</Badge><Button onClick={() => void loadTelegram()} size="sm"><RefreshCw size={15} /> Refresh</Button></div>
-        </div>
-
-        {loading && telegram === null ? <LoadingState label="Reading Telegram pairing" /> : null}
-        {error === null ? null : <ErrorState title="Telegram is not configured" message={error} />}
-
-        {telegram === null ? null : (
-          <dl className="channel-status-grid">
-            <div><dt>Transport</dt><dd>{realTransport ? "Real Telegram Bot API" : "Synthetic, no network"}</dd></div>
-            <div><dt>Adapter</dt><dd><CopyableAuthorityId label="Telegram adapter" id={telegram.status.adapter_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-            <div><dt>Polling</dt><dd>{titleCase(telegram.status.polling?.reason_code ?? "not configured")}</dd></div>
-            <div><dt>Replies</dt><dd>{telegram.status.replies === null ? "Not enabled" : `${telegram.status.replies.deliveries_submitted} sent · ${telegram.status.replies.pending_replies} pending`}</dd></div>
-            <div><dt>Delivery</dt><dd>{titleCase(telegram.status.delivery?.status ?? "not configured")}</dd></div>
-            <div><dt>Channel state</dt><dd>{telegram.status.state_persistence === "postgresql" ? "PostgreSQL restart-safe" : "Process-only preview"}</dd></div>
-            <div><dt>Attachments</dt><dd>Rejected before fetch</dd></div>
-            <div><dt>Retry safety</dt><dd>{telegram.status.capabilities?.ambiguous_send_retries === false ? "Ambiguous sends do not retry" : "Synthetic only"}</dd></div>
-          </dl>
-        )}
-
-        {telegram?.pairing === null ? (
-          <div className="telegram-unpaired">
-            <EmptyState
-              icon={Smartphone}
-              title={realTransport ? "No owner account paired" : "Bot API pairing inactive"}
-              description={realTransport
-                ? "Start the Telegram adapter, send /start to the configured bot in a private chat, then confirm the candidate here using the short-lived code returned by the bot."
-                : "Synthetic no-network mode cannot receive /start updates."}
-            />
-            {telegram.candidates.length === 0 ? (
-              <div className="candidate-empty"><Clock3 size={16} /><span>{realTransport ? "No unexpired pairing candidates are waiting." : "Enable Bot API before pairing."}</span></div>
-            ) : (
-              <div className="candidate-list">
-                {telegram.candidates.map((candidate) => (
-                  <article className="candidate-row" key={candidate.candidate_id}>
-                    <span className="candidate-icon"><Smartphone size={17} /></span>
-                    <div>
-                      <strong>Telegram user {redactNumericIdentifier(candidate.telegram_user_id)}</strong>
-                      <span>Chat {redactNumericIdentifier(candidate.telegram_chat_id)} · expires {formatRelative(candidate.expires_at)}</span>
-                      <div className="telegram-authority-copy-list">
-                        <CopyableAuthorityId label="Telegram candidate" id={candidate.candidate_id} onCopy={(label, id) => void copyAuthorityId(label, id)} />
-                      </div>
-                    </div>
-                    <Button disabled={!canMutate} onClick={() => setSelectedCandidate(candidate)} tone="primary"><Link2 size={15} /> Confirm</Button>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {telegram?.pairing !== null && telegram?.pairing !== undefined ? (
-          <div className="paired-channel">
-            <span className="paired-channel-icon"><CheckCircle2 size={21} /></span>
-            <div className="paired-channel-copy"><Badge tone="positive">Paired</Badge><h3>Telegram user {redactNumericIdentifier(telegram.pairing.telegram_user_id)}</h3><p>Chat {redactNumericIdentifier(telegram.pairing.telegram_chat_id)} · confirmed {formatInstant(telegram.pairing.confirmed_at)}</p></div>
-            <dl className="paired-channel-meta">
-              <div><dt>Pairing</dt><dd><CopyableAuthorityId label="Telegram pairing" id={telegram.pairing.pairing_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-              <div><dt>Candidate</dt><dd><CopyableAuthorityId label="Telegram candidate" id={telegram.pairing.candidate_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-              <div><dt>Owner</dt><dd><CopyableAuthorityId label="Telegram owner" id={telegram.pairing.owner_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-              <div><dt>Confirmed by</dt><dd><CopyableAuthorityId label="Telegram confirmed-by owner" id={telegram.pairing.confirmed_by_owner_id} onCopy={(label, id) => void copyAuthorityId(label, id)} /></dd></div>
-            </dl>
-            <Button disabled={!canMutate} onClick={() => setRevokeOpen(true)} tone="danger"><Unlink size={15} /> Revoke pairing</Button>
-          </div>
-        ) : null}
-
-        <div className="channel-boundary"><ShieldCheck size={16} /><span><strong>Channel-neutral by design</strong><small>Telegram messages become canonical conversation records; Telegram does not own Melli, memory, or policy authority.</small></span></div>
-      </Card>
-
-      <Modal
-        description="This browser stays signed in. Every other active session for the current owner credential is revoked together with content-free audit evidence."
-        onClose={() => setRevokeSessionsOpen(false)}
-        open={revokeSessionsOpen}
-        title={`Sign out ${otherSessions.length} other ${otherSessions.length === 1 ? "session" : "sessions"}?`}
-      >
-        <div className="destructive-confirmation danger"><LockKeyhole size={19} /><p>Other browsers lose access immediately. This action requires recent owner authentication and cannot reveal or recover their opaque tokens.</p></div>
-        <div className="modal-actions"><Button onClick={() => setRevokeSessionsOpen(false)}>Cancel</Button><Button disabled={!canMutate} loading={revokingSessions} onClick={() => void revokeOtherSessions()} tone="danger">Sign out other sessions</Button></div>
-      </Modal>
-
-      <Modal
-        description="Enter the short-lived code shown through the Telegram pairing challenge."
-        onClose={() => setSelectedCandidate(null)}
-        open={selectedCandidate !== null}
-        title="Confirm Telegram owner"
-      >
-        <form className="stack-form" onSubmit={(event) => void confirmPairing(event)}>
-          <div className="pairing-target"><Smartphone size={18} /><span><strong>User {selectedCandidate === null ? "Unknown" : redactNumericIdentifier(selectedCandidate.telegram_user_id)}</strong><small>Chat {selectedCandidate === null ? "Unknown" : redactNumericIdentifier(selectedCandidate.telegram_chat_id)}</small></span></div>
-          <label className="field-label" htmlFor="confirmation-code">Confirmation code</label>
-          <input autoCapitalize="none" autoComplete="one-time-code" autoFocus className="text-input code-input" id="confirmation-code" inputMode="text" maxLength={128} minLength={20} name="confirmation-code" pattern="[A-Za-z0-9_-]{20,128}" required spellCheck={false} />
-          <div className="modal-actions"><Button onClick={() => setSelectedCandidate(null)} type="button">Cancel</Button><Button disabled={!canMutate} loading={confirming} tone="primary" type="submit">Confirm pairing</Button></div>
-        </form>
-      </Modal>
-
-      <Modal
-        description="Inbound messages from this Telegram account will stop being accepted after revocation."
-        onClose={() => setRevokeOpen(false)}
-        open={revokeOpen}
-        title="Revoke Telegram pairing?"
-      >
-        <div className="destructive-confirmation danger"><Unlink size={19} /><p>This preserves the audit record but removes the active owner-channel binding.</p></div>
-        <div className="modal-actions"><Button onClick={() => setRevokeOpen(false)}>Cancel</Button><Button disabled={!canMutate} loading={revoking} onClick={() => void revokePairing()} tone="danger">Revoke pairing</Button></div>
-      </Modal>
     </div>
-  );
-}
-
-function CopyableAuthorityId({
-  id,
-  label,
-  onCopy,
-}: {
-  readonly id: string;
-  readonly label: string;
-  readonly onCopy: (label: string, id: string) => void;
-}) {
-  return (
-    <button
-      aria-label={`Copy ${label} ID ${id}`}
-      className="ledger-id-copy"
-      onClick={() => onCopy(label, id)}
-      title={id}
-      type="button"
-    >
-      <code>{shortId(id)}</code>
-      <Copy aria-hidden="true" size={12} />
-    </button>
   );
 }

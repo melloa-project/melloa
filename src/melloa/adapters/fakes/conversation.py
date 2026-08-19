@@ -1,4 +1,4 @@
-"""Thread-safe in-memory canonical conversation store for synthetic M1 runs."""
+"""Thread-safe in-memory conversation store for disposable runs."""
 
 from __future__ import annotations
 

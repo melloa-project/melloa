@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS vector;
-
 CREATE SCHEMA IF NOT EXISTS melloa;
 REVOKE ALL ON SCHEMA melloa FROM PUBLIC;
 
@@ -115,22 +113,6 @@ CREATE TABLE melloa.assertions (
 CREATE INDEX assertions_subject_predicate_idx
     ON melloa.assertions (subject_id, predicate, observed_at DESC);
 
-CREATE TABLE melloa.policy_decisions (
-    decision_id text PRIMARY KEY,
-    request_id text NOT NULL,
-    action_hash text NOT NULL CHECK (action_hash ~ '^sha256:[0-9a-f]{64}$'),
-    effect text NOT NULL CHECK (effect IN ('deny', 'allow', 'require_approval')),
-    policy_version text NOT NULL,
-    reason_codes text[] NOT NULL CHECK (cardinality(reason_codes) > 0),
-    decided_at timestamptz NOT NULL,
-    expires_at timestamptz,
-    document jsonb NOT NULL CHECK (jsonb_typeof(document) = 'object'),
-    CHECK (expires_at IS NULL OR expires_at > decided_at)
-);
-
-CREATE INDEX policy_decisions_request_idx ON melloa.policy_decisions (request_id);
-CREATE INDEX policy_decisions_action_hash_idx ON melloa.policy_decisions (action_hash);
-
 CREATE TABLE melloa.audit_events (
     audit_sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     audit_id text NOT NULL UNIQUE,
@@ -232,29 +214,6 @@ CREATE TABLE melloa.conversation_turns (
     CHECK (completed_at IS NULL OR completed_at >= started_at)
 );
 
-CREATE TABLE melloa.delivery_attempts (
-    delivery_id text PRIMARY KEY,
-    message_id text NOT NULL REFERENCES melloa.conversation_messages(message_id),
-    client_adapter text NOT NULL,
-    destination_ref text NOT NULL,
-    attempt integer NOT NULL CHECK (attempt > 0),
-    state text NOT NULL CHECK (state IN ('pending', 'sent', 'delivered', 'failed', 'expired')),
-    attempted_at timestamptz NOT NULL,
-    document jsonb NOT NULL CHECK (jsonb_typeof(document) = 'object'),
-    UNIQUE (message_id, client_adapter, destination_ref, attempt)
-);
-
-CREATE TABLE melloa.guardian_status_snapshots (
-    guardian_sequence bigint PRIMARY KEY CHECK (guardian_sequence > 0),
-    mode text NOT NULL CHECK (
-        mode IN ('normal', 'no-actions', 'read-only', 'offline', 'stopped', 'recovery')
-    ),
-    receipt_hash text NOT NULL UNIQUE CHECK (receipt_hash ~ '^sha256:[0-9a-f]{64}$'),
-    changed_at timestamptz NOT NULL,
-    verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-    document jsonb NOT NULL CHECK (jsonb_typeof(document) = 'object')
-);
-
 CREATE TABLE melloa.model_runs (
     result_id text PRIMARY KEY,
     request_id text NOT NULL,
@@ -271,17 +230,6 @@ CREATE TABLE melloa.model_runs (
     CHECK (completed_at >= started_at)
 );
 
-CREATE TABLE melloa.executed_actions (
-    action_id text PRIMARY KEY,
-    decision_id text NOT NULL REFERENCES melloa.policy_decisions(decision_id),
-    action_hash text NOT NULL CHECK (action_hash ~ '^sha256:[0-9a-f]{64}$'),
-    capability_id text NOT NULL,
-    operation text NOT NULL,
-    executed_at timestamptz NOT NULL,
-    result_document jsonb NOT NULL CHECK (jsonb_typeof(result_document) = 'object'),
-    UNIQUE (decision_id, action_hash)
-);
-
 DO $triggers$
 DECLARE
     table_name text;
@@ -290,14 +238,10 @@ BEGIN
         'canonical_events',
         'provenance_edges',
         'assertions',
-        'policy_decisions',
         'audit_events',
         'conversation_messages',
         'conversation_turns',
-        'delivery_attempts',
-        'guardian_status_snapshots',
-        'model_runs',
-        'executed_actions'
+        'model_runs'
     ]
     LOOP
         EXECUTE format(
@@ -317,12 +261,11 @@ GRANT SELECT, INSERT ON melloa.owners, melloa.persistent_intelligences, melloa.i
     TO melloa_core;
 GRANT SELECT, INSERT ON melloa.canonical_events, melloa.provenance_edges, melloa.assertions
     TO melloa_core, melloa_worker;
-GRANT SELECT, INSERT ON melloa.policy_decisions, melloa.audit_events, melloa.executed_actions
-    TO melloa_core;
+GRANT SELECT, INSERT ON melloa.audit_events TO melloa_core;
 GRANT SELECT, INSERT, UPDATE ON melloa.conversation_threads TO melloa_core;
-GRANT SELECT, INSERT ON melloa.conversation_messages, melloa.conversation_turns, melloa.delivery_attempts
+GRANT SELECT, INSERT ON melloa.conversation_messages, melloa.conversation_turns
     TO melloa_core;
-GRANT SELECT, INSERT ON melloa.guardian_status_snapshots, melloa.model_runs TO melloa_core;
+GRANT SELECT, INSERT ON melloa.model_runs TO melloa_core;
 GRANT SELECT, INSERT, UPDATE ON melloa.jobs_outbox TO melloa_core, melloa_worker;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA melloa TO melloa_core, melloa_worker;
 

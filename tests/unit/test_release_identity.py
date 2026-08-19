@@ -16,16 +16,12 @@ def test_canonical_release_identity_is_exact() -> None:
         "package_version": "0.2.0",
         "release_display": "v0.2.0 preview",
         "stage": "preview",
-        "milestone": "M1",
-        "architecture_baseline": "v0.2",
     }
     assert CURRENT_RELEASE.runtime_identifier == "melloa-core/0.2.0-preview"
     assert CURRENT_RELEASE.public_metadata() == {
         "version": "0.2.0",
         "display": "v0.2.0 preview",
         "stage": "preview",
-        "milestone": "M1",
-        "architecture_baseline": "v0.2",
     }
     assert melloa.__version__ == CURRENT_RELEASE.package_version
 

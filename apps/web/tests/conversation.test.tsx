@@ -1,918 +1,249 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  ConversationMessage,
-  ConversationProcessingStatus,
-  ConversationReply,
-  ConversationThread,
-  ConversationTurn,
-  ConversationTurnInspection,
-  DeliveryWorkStatus,
-  SystemStatus,
-} from "../src/api";
 import { ConversationPage } from "../src/pages/conversation";
 
 const mocks = vi.hoisted(() => ({
+  context: {} as Record<string, unknown>,
+  unlock: vi.fn(),
   listThreads: vi.fn(),
-  listMessages: vi.fn(),
-  listTurns: vi.fn(),
-  listProcessing: vi.fn(),
-  listDeliveries: vi.fn(),
-  inspectTurn: vi.fn(),
+  createThread: vi.fn(),
+  transcript: vi.fn(),
+  modelRoutes: vi.fn(),
   postMessage: vi.fn(),
   resumeMessage: vi.fn(),
-  resumeDelivery: vi.fn(),
+  inspectTurn: vi.fn(),
   notify: vi.fn(),
-  status: null as SystemStatus | null,
-  canMutate: true,
 }));
 
-vi.mock("../src/app", () => {
-  const context = {
-    api: {
-      listThreads: mocks.listThreads,
-      listMessages: mocks.listMessages,
-      listTurns: mocks.listTurns,
-      listProcessing: mocks.listProcessing,
-      listDeliveries: mocks.listDeliveries,
-      inspectTurn: mocks.inspectTurn,
-      postMessage: mocks.postMessage,
-      resumeMessage: mocks.resumeMessage,
-      resumeDelivery: mocks.resumeDelivery,
-    },
-    principal: { owner_id: "owner_01" },
-    get canMutate() {
-      return mocks.canMutate;
-    },
-    get status() {
-      return mocks.status;
-    },
-    notify: mocks.notify,
-  };
-  return {
-    errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
-    useMelloa: () => context,
-  };
-});
+vi.mock("../src/app", () => ({
+  errorMessage: (error: unknown) => error instanceof Error ? error.message : "Unexpected error",
+  useMelloa: () => mocks.context,
+}));
 
-const thread: ConversationThread = {
-  thread_id: "thread_01",
-  owner_id: "owner_01",
-  intelligence_id: "melli_01",
-  title: "Today with Melli",
+vi.mock("../src/components/layout", () => ({
+  useOwnerUnlock: () => mocks.unlock,
+}));
+
+const owner = {
+  owner_id: "owner_1",
+  session_id: "session_1",
+  authentication_method: "local",
+  authenticated_at: "2026-08-19T12:00:00Z",
+  reauthenticated_until: "2026-08-19T12:05:00Z",
+  expires_at: "2026-08-19T13:00:00Z",
+};
+
+const thread = {
+  thread_id: "thread_1",
+  owner_id: owner.owner_id,
+  intelligence_id: "melli_1",
+  title: "A meaningful decision",
   status: "active",
   sensitivity: "personal",
   retention_policy: "retention.owner-conversation",
-  created_at: "2026-08-16T12:00:00Z",
-  updated_at: "2026-08-16T12:00:02Z",
+  created_at: "2026-08-19T12:00:00Z",
+  updated_at: "2026-08-19T12:00:00Z",
 };
 
-const systemStatus: SystemStatus = {
-  contract_version: "1.0.0",
-  service: "melloa-core",
-  version: "0.2.0",
-  release_display: "v0.2.0 preview",
-  stage: "preview",
-  milestone: "M1",
-  architecture_baseline: "v0.2",
-  generated_at: "2026-08-16T12:00:00Z",
-  public_ingress: false,
-  external_actions_enabled: false,
-  guardian: {
-    mode: "normal",
-    sequence: 7,
-    changed_at: "2026-08-16T11:59:00Z",
-    receipt_hash: "sha256:guardian-receipt",
-    key_id: "guardian.status-v1",
-  },
+const readyRoutes = {
+  routes: [{
+    route_kind: "openai_compatible",
+    health: { state: "healthy" },
+  }],
 };
 
-const otherThread: ConversationThread = {
-  ...thread,
-  thread_id: "thread_02",
-  title: "Follow-up thread",
-  created_at: "2026-08-16T12:30:00Z",
-  updated_at: "2026-08-16T12:30:02Z",
-};
+function message(id: string, author: string, text: string) {
+  return {
+    message_id: id,
+    thread_id: thread.thread_id,
+    author_principal_id: author,
+    source_client: "owner-console",
+    parts: [{ kind: "text", text }],
+    citation_ids: [],
+    delivery_state: "recorded",
+    sensitivity: "personal",
+    created_at: "2026-08-19T12:00:00Z",
+    observed_at: "2026-08-19T12:00:00Z",
+  };
+}
 
-const ownerMessage: ConversationMessage = {
-  message_id: "message_owner_01",
-  thread_id: thread.thread_id,
-  author_principal_id: "owner_01",
-  source_client: "owner-console",
-  parts: [{ kind: "text", text: "What should I focus on?" }],
-  citation_ids: [],
-  delivery_state: "accepted",
-  sensitivity: "personal",
-  created_at: "2026-08-16T12:00:00Z",
-  observed_at: "2026-08-16T12:00:00Z",
-};
-
-const outputMessage: ConversationMessage = {
-  ...ownerMessage,
-  message_id: "message_melli_01",
-  author_principal_id: "melli_01",
-  parts: [{ kind: "text", text: "A grounded response." }],
-  citation_ids: ["citation_01"],
-  created_at: "2026-08-16T12:00:02Z",
-  observed_at: "2026-08-16T12:00:02Z",
-};
-
-const otherOutputMessage: ConversationMessage = {
-  ...outputMessage,
-  message_id: "message_melli_02",
-  thread_id: otherThread.thread_id,
-  parts: [{ kind: "text", text: "Second thread reply." }],
-  citation_ids: [],
-  created_at: "2026-08-16T12:30:02Z",
-  observed_at: "2026-08-16T12:30:02Z",
-};
-
-const turn: ConversationTurn = {
-  turn_id: "turn_01",
-  thread_id: thread.thread_id,
-  triggering_message_ids: [ownerMessage.message_id],
-  evidence_ids: ["citation_01"],
-  model_run_ids: ["result_01"],
-  policy_decision_ids: ["decision_01"],
-  proposed_action_ids: ["proposal_01"],
-  executed_action_ids: ["action_01"],
-  output_message_ids: [outputMessage.message_id],
-  decision_record: {
-    summary: "Responded without proposing an external action.",
-    prompt_version: "conversation-v1",
-    runtime_version: "melloa-core/test",
-    uncertainty: "low",
-  },
-  started_at: "2026-08-16T12:00:01Z",
-  completed_at: "2026-08-16T12:00:02Z",
-};
-
-const processing: ConversationProcessingStatus = {
-  work_id: "work_01",
-  thread_id: thread.thread_id,
-  message_id: ownerMessage.message_id,
-  state: "completed",
-  attempt_count: 1,
-  max_attempts: 3,
-  available_at: "2026-08-16T12:00:00Z",
-  completed_at: "2026-08-16T12:00:02Z",
-  attempts: [],
-  resumptions: [],
-};
-
-const deadProcessing: ConversationProcessingStatus = {
-  ...processing,
-  state: "dead",
-  attempt_count: 3,
-  completed_at: null,
-  last_error_code: "model.route.exhausted",
-  attempts: [
-    {
-      attempt_id: "attempt_dead_01",
-      work_id: processing.work_id,
-      message_id: ownerMessage.message_id,
-      attempt: 3,
-      request_id: "request_dead_000000000000000000000001",
-      outcome: "dead",
-      error_code: "model.route.exhausted",
-      started_at: "2026-08-16T12:00:01Z",
-      completed_at: "2026-08-16T12:00:02Z",
-      retrieval_manifest_id: "retrieval_manifest_dead_000000000001",
-      model_route_attempts: [{ route_id: "model.local.qwen", outcome: "failed", processing_location: "device" }],
-      disclosed_memory_ids: [],
-      external_disclosure: false,
-    },
-  ],
-};
-
-const inspection: ConversationTurnInspection = {
-  turn,
-  retrieval_manifest: {
-    citations: [{ citation_id: "citation_01", assertion_id: "assertion_01", epistemic_status: "owner_confirmed" }],
-  },
-  model_result: {
-    route_id: "model.local.qwen",
-    provider_id: "provider.ollama",
-    model_id: "qwen3:8b",
-    started_at: "2026-08-16T12:00:01Z",
-    completed_at: "2026-08-16T12:00:02Z",
-    external_disclosure: false,
-    input_tokens: 24,
-    output_tokens: 12,
-    cost_gbp: 0,
-    attempts: [{ route_id: "model.local.qwen", outcome: "succeeded", processing_location: "device" }],
-  },
-  output_message: outputMessage,
-};
-
-const completedDelivery: DeliveryWorkStatus = {
-  work_id: "work_delivery_01",
-  thread_id: thread.thread_id,
-  message_id: outputMessage.message_id,
-  requested_by: "melli_01",
-  client_adapter: "client.telegram.synthetic",
-  destination_ref: "telegram:pairing:pairing_000000000000000000000001",
-  action_hash: "sha256:" + "a".repeat(64),
-  current_policy_decision_id: "decision_0000000000000000000000000001",
-  state: "completed",
-  attempt_count: 1,
-  max_attempts: 3,
-  available_at: "2026-08-16T12:00:02Z",
-  completed_at: "2026-08-16T12:00:03Z",
-  attempts: [
-    {
-      attempt_id: "deliveryattempt_000000000000000000000001",
-      work_id: "work_delivery_01",
-      message_id: outputMessage.message_id,
-      attempt: 1,
-      authorization_request_id: "authorization_000000000000000000000001",
-      policy_decision_id: "decision_0000000000000000000000000001",
-      action_hash: "sha256:" + "a".repeat(64),
-      outcome: "succeeded",
-      started_at: "2026-08-16T12:00:02Z",
-      completed_at: "2026-08-16T12:00:03Z",
-      adapter_receipt: {
-        delivery_id: "delivery_000000000000000000000000000001",
-        message_id: outputMessage.message_id,
-        client_adapter: "client.telegram.synthetic",
-        destination_ref: "telegram:pairing:pairing_000000000000000000000001",
-        attempt: 1,
-        state: "delivered",
-        attempted_at: "2026-08-16T12:00:03Z",
-      },
-      execution_receipt: {
-        action_id: "action_000000000000000000000000000001",
-        decision_id: "decision_0000000000000000000000000001",
-        action_hash: "sha256:" + "a".repeat(64),
-        capability_id: "client.telegram.synthetic",
-        operation: "messages.send",
-        delivery_id: "delivery_000000000000000000000000000001",
-        executed_at: "2026-08-16T12:00:03Z",
-      },
-    },
-  ],
-  resumptions: [],
-};
-
-const deadDelivery: DeliveryWorkStatus = {
-  ...completedDelivery,
-  work_id: "work_delivery_dead_01",
-  state: "dead",
-  attempt_count: 3,
-  completed_at: null,
-  last_error_code: "telegram.delivery.outcome_unknown",
-  attempts: [
-    {
-      attempt_id: "deliveryattempt_000000000000000000000002",
-      work_id: "work_delivery_dead_01",
-      message_id: outputMessage.message_id,
-      attempt: 3,
-      authorization_request_id: "authorization_000000000000000000000001",
-      policy_decision_id: "decision_0000000000000000000000000001",
-      action_hash: "sha256:" + "a".repeat(64),
-      outcome: "dead",
-      error_code: "telegram.delivery.outcome_unknown",
-      started_at: "2026-08-16T12:00:02Z",
-      completed_at: "2026-08-16T12:00:03Z",
-      adapter_receipt: null,
-      execution_receipt: null,
-    },
-  ],
-};
+function renderConversation(path = "/conversation/thread_1") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/conversation/:threadId?" element={<ConversationPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
 
 describe("ConversationPage", () => {
   beforeEach(() => {
-    for (const mock of [
+    [
+      mocks.unlock,
       mocks.listThreads,
-      mocks.listMessages,
-      mocks.listTurns,
-      mocks.listProcessing,
-      mocks.listDeliveries,
-      mocks.inspectTurn,
+      mocks.createThread,
+      mocks.transcript,
+      mocks.modelRoutes,
       mocks.postMessage,
       mocks.resumeMessage,
-      mocks.resumeDelivery,
+      mocks.inspectTurn,
       mocks.notify,
-    ]) {
-      mock.mockReset();
-    }
-    mocks.status = systemStatus;
-    mocks.canMutate = true;
+    ].forEach((mock) => mock.mockReset());
+
     mocks.listThreads.mockResolvedValue([thread]);
-    mocks.listMessages.mockResolvedValue([ownerMessage, outputMessage]);
-    mocks.listTurns.mockResolvedValue([turn]);
-    mocks.listProcessing.mockResolvedValue([processing]);
-    mocks.listDeliveries.mockResolvedValue([]);
-    mocks.inspectTurn.mockResolvedValue(inspection);
-    const reply: ConversationReply = { inbound_message: ownerMessage, output_message: outputMessage, turn, processing, duplicate: false };
-    mocks.postMessage.mockResolvedValue(reply);
-    mocks.resumeMessage.mockResolvedValue({ ...deadProcessing, state: "queued", attempt_count: 3 });
-    mocks.resumeDelivery.mockResolvedValue({ ...deadDelivery, state: "queued", attempt_count: 3 });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-      },
+    mocks.transcript.mockResolvedValue({ messages: [], turns: [], processing: [] });
+    mocks.modelRoutes.mockResolvedValue(readyRoutes);
+    mocks.createThread.mockResolvedValue(thread);
+    mocks.postMessage.mockResolvedValue({
+      processing: { state: "completed" },
+      output_message: message("message_2", "melli_1", "A useful answer"),
     });
+    mocks.context = {
+      api: {
+        listThreads: mocks.listThreads,
+        createThread: mocks.createThread,
+        transcript: mocks.transcript,
+        modelRoutes: mocks.modelRoutes,
+        postMessage: mocks.postMessage,
+        resumeMessage: mocks.resumeMessage,
+        inspectTurn: mocks.inspectTurn,
+      },
+      principal: owner,
+      canWrite: true,
+      canUseSensitiveControls: false,
+      notify: mocks.notify,
+    };
   });
 
-  it("supports send and exposes route, cost, disclosure, and provenance", async () => {
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes>
-          <Route path="/conversation/:threadId" element={<ConversationPage />} />
-          <Route path="/memory" element={<MemoryLocation />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
-    expect(screen.getAllByText("Guardian Normal").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Console cannot reconfigure Guardian/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Changes unlocked").length).toBeGreaterThan(0);
-    const response = await screen.findByText("A grounded response.");
-    expect(response.closest("button")).toBeNull();
-    fireEvent.click(response);
-    expect(mocks.inspectTurn).not.toHaveBeenCalled();
-
-    const conversationDetails = screen.getByText("Conversation details").closest("details");
-    expect(conversationDetails).not.toHaveAttribute("open");
-    fireEvent.click(screen.getByText("Conversation details"));
-    expect(conversationDetails).toHaveAttribute("open");
-    expect(screen.getByText(thread.thread_id)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
-
-    expect(await screen.findByRole("heading", { name: "Why this response?" })).toBeInTheDocument();
-    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
-    expect(screen.getByText("No external disclosure")).toBeInTheDocument();
-    expect(screen.getByText("assertion_01")).toBeInTheDocument();
-    expect(screen.getByText("£0.00")).toBeInTheDocument();
-    expect(screen.getByText("Turn ledger")).toBeInTheDocument();
-    expect(screen.getByText("Triggering messages")).toBeInTheDocument();
-    expect(screen.getByText(ownerMessage.message_id)).toBeInTheDocument();
-    expect(screen.getByText("Policy decisions")).toBeInTheDocument();
-    expect(screen.getByText("decision_01")).toBeInTheDocument();
-    expect(screen.getByText("Proposed actions")).toBeInTheDocument();
-    expect(screen.getByText("proposal_01")).toBeInTheDocument();
-    expect(screen.getByText("Executed actions")).toBeInTheDocument();
-    expect(screen.getByText("action_01")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: `Copy Triggering messages ID ${ownerMessage.message_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(ownerMessage.message_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Triggering messages ID copied.", "success");
-
-    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Plan the next step." } });
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
-      thread.thread_id,
-      "Plan the next step.",
-      expect.any(String),
-    ));
-
-    fireEvent.click(screen.getByRole("button", { name: "Inspect memory assertion assertion_01" }));
-    expect(screen.getByText("memory-search=?assertion=assertion_01")).toBeInTheDocument();
-  });
-
-  it("opens the exact provider route contract from turn inspection route controls", async () => {
-    const renderConversation = () => render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes>
-          <Route path="/conversation/:threadId" element={<ConversationPage />} />
-          <Route path="/providers" element={<ProviderLocation />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    const firstRender = renderConversation();
-    await screen.findByText("A grounded response.");
-    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
-    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "Open route contract for model.local.qwen" }));
-
-    expect(screen.getByText("providers-search=?route=model.local.qwen")).toBeInTheDocument();
-    firstRender.unmount();
-
+  it("opens ready for a real job without teaching the fixture or runtime", async () => {
     renderConversation();
-    await screen.findByText("A grounded response.");
-    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
-    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open route contract for route attempt model.local.qwen" }));
-
-    expect(screen.getByText("providers-search=?route=model.local.qwen")).toBeInTheDocument();
-  });
-
-  it("reports when turn ledger id copy is unavailable", async () => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: undefined,
-    });
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    await screen.findByText("A grounded response.");
-    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
-    expect(await screen.findByText("Turn ledger")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: `Copy Turn ID ${turn.turn_id}` }));
-
-    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Turn ID copy failed.", "error"));
-  });
-
-  it("labels Codex CLI token and subscription cost metadata as unreported", async () => {
-    mocks.inspectTurn.mockResolvedValue({
-      ...inspection,
-      model_result: {
-        ...inspection.model_result,
-        route_id: "model.codex.subscription",
-        provider_id: "provider.openai-codex-subscription",
-        model_id: "codex-subscription-model",
-        external_disclosure: true,
-        input_tokens: 0,
-        output_tokens: 0,
-        cost_gbp: 0,
-        attempts: [{ route_id: "model.codex.subscription", outcome: "succeeded", processing_location: "approved_provider" }],
-      },
-    });
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    await screen.findByText("A grounded response.");
-    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
-
-    expect(await screen.findAllByText("codex-subscription-model")).not.toHaveLength(0);
-    expect(screen.getAllByText("Unreported")).toHaveLength(2);
-    expect(screen.getByText(/Subscription fees are not represented as per-call cost/i)).toBeInTheDocument();
-  });
-
-  it("labels deterministic synthetic turn inspection as a fixture", async () => {
-    mocks.inspectTurn.mockResolvedValue({
-      ...inspection,
-      model_result: {
-        ...inspection.model_result,
-        route_id: "model.fake.deterministic",
-        provider_id: "provider.synthetic",
-        model_id: "deterministic-fixture-v1",
-        external_disclosure: false,
-        attempts: [{ route_id: "model.fake.deterministic", outcome: "succeeded", processing_location: "device" }],
-      },
-    });
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    await screen.findByText("A grounded response.");
-    fireEvent.click(screen.getByRole("button", { name: `Why this response? Inspect evidence for message ${outputMessage.message_id}` }));
-
-    expect(await screen.findByText("Fixed no-network tour")).toBeInTheDocument();
-    expect(screen.getByText("deterministic-fixture-v1")).toBeInTheDocument();
-    expect(screen.getByText("Synthetic fixture")).toBeInTheDocument();
-    expect(screen.getByText(/This response came from a deterministic fixture/i)).toBeInTheDocument();
-    expect(screen.getByText("No external disclosure")).toBeInTheDocument();
-  });
-
-  it("labels transcript replies from loaded processing route summaries", async () => {
-    mocks.listProcessing.mockResolvedValue([{
-      ...processing,
-      attempts: [{
-        attempt_id: "attempt_synthetic_01",
-        work_id: processing.work_id,
-        message_id: ownerMessage.message_id,
-        attempt: 1,
-        request_id: "request_synthetic_01",
-        outcome: "succeeded",
-        started_at: "2026-08-16T12:00:01Z",
-        completed_at: "2026-08-16T12:00:02Z",
-        retrieval_manifest_id: null,
-        model_result_summary: {
-          result_id: "result_synthetic_01",
-          request_id: "request_synthetic_01",
-          route_id: "model.fake.deterministic",
-          provider_id: "provider.synthetic",
-          model_id: "deterministic-fixture-v1",
-          input_tokens: 0,
-          output_tokens: 0,
-          cost_gbp: 0,
-          started_at: "2026-08-16T12:00:01Z",
-          completed_at: "2026-08-16T12:00:02Z",
-          external_disclosure: false,
-          attempts: [{ route_id: "model.fake.deterministic", outcome: "succeeded", processing_location: "device" }],
-        },
-        model_route_attempts: [{ route_id: "model.fake.deterministic", outcome: "succeeded", processing_location: "device" }],
-        disclosed_memory_ids: [],
-        external_disclosure: false,
-      }],
-    }]);
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    const response = await screen.findByText("A grounded response.");
-    const row = response.closest("article");
-    expect(row).toBeInstanceOf(HTMLElement);
-    expect(response.closest("button")).toBeNull();
-    expect(within(row as HTMLElement).getByText("Guided tour fixture")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("Fixed fixture · no network")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText(/did not interpret your message or represent Melli thinking/i)).toBeInTheDocument();
-    expect(within(row as HTMLElement).queryByText("Melli", { exact: true })).not.toBeInTheDocument();
-    fireEvent.click(response);
-    expect(mocks.inspectTurn).not.toHaveBeenCalled();
-  });
-
-  it("offers privacy-safe starter prompts without auto-sending", async () => {
-    mocks.listMessages.mockResolvedValue([]);
-    mocks.listTurns.mockResolvedValue([]);
-    mocks.listProcessing.mockResolvedValue([]);
-    mocks.listDeliveries.mockResolvedValue([]);
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: "What would help right now?" })).toBeInTheDocument();
-    expect(screen.getByText("No-network route = guided tour")).toBeInTheDocument();
-    expect(screen.getByText(/fixed response does not interpret your words or represent Melli thinking/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Private owner conversation")).not.toHaveLength(0);
-    expect(screen.getByText(/Guardian remains independent/i)).toBeInTheDocument();
-    expect(screen.getByText(/Route and disclosure stay visible/i)).toBeInTheDocument();
-    expect(screen.getByText("A starter only fills the composer. Edit it, then choose Send; nothing runs before you do.")).toBeInTheDocument();
-    expect(screen.getByText("Bring a real job to Melli")).toBeInTheDocument();
-    expect(screen.getAllByText("Eligible model required")).toHaveLength(4);
-    const starters = screen.getByLabelText("Starter prompts");
-    expect(within(starters).getByRole("button", { name: /Plan my next step.*Eligible model required/i })).toBeInTheDocument();
-    expect(within(starters).getByRole("button", { name: /Think through a decision.*Eligible model required/i })).toBeInTheDocument();
-    expect(within(starters).getByRole("button", { name: /Use what I have shared.*Eligible model required/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Fill a no-network tour message" }));
-    await waitFor(() => expect(screen.getByLabelText("Message Melli")).toHaveValue(
-      "Start the no-network tour. I want to see one fixed response and inspect its route, disclosure, evidence, policy, and recovery controls.",
-    ));
-
-    fireEvent.click(within(starters).getByRole("button", { name: /Use what I have shared/i }));
-
-    await waitFor(() => expect(screen.getByLabelText("Message Melli")).toHaveValue(
-      "Using only what I have shared and the evidence you can cite, help me identify a priority I should revisit. Tell me clearly what you do not know.",
-    ));
+    expect(await screen.findByRole("heading", { name: "What would be useful to think through?" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Help me think through a decision I’m facing." }));
+    expect(screen.getByLabelText("Message Melli")).toHaveValue("Help me think through a decision I’m facing.");
     expect(mocks.postMessage).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
-      thread.thread_id,
-      "Using only what I have shared and the evidence you can cite, help me identify a priority I should revisit. Tell me clearly what you do not know.",
-      expect.any(String),
-    ));
+    expect(screen.queryByText(/no-network tour/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/eligible model required/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/route attempts/i)).not.toBeInTheDocument();
   });
 
-  it("starts from a guided owner job before any conversation exists", async () => {
+  it("keeps ordinary conversation writable after recent confirmation expires", async () => {
+    renderConversation();
+    const composer = await screen.findByLabelText("Message Melli");
+    fireEvent.change(composer, { target: { value: "What should I consider?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
+      thread.thread_id,
+      "What should I consider?",
+      expect.any(String),
+    ));
+    expect(mocks.unlock).not.toHaveBeenCalled();
+  });
+
+  it("asks for owner access when the browser lost its writing proof", async () => {
+    mocks.context = { ...mocks.context, canWrite: false };
+    renderConversation();
+    fireEvent.change(await screen.findByLabelText("Message Melli"), {
+      target: { value: "Continue our conversation" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(mocks.unlock).toHaveBeenCalledWith(expect.stringMatching(/keep talking/i));
+    expect(mocks.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("removes the fixed response from the owner path when no capable model exists", async () => {
+    mocks.modelRoutes.mockResolvedValue({
+      routes: [{ route_kind: "synthetic", health: { state: "healthy" } }],
+    });
+    renderConversation();
+
+    expect(await screen.findByRole("heading", { name: "Melli needs a capable model" })).toBeVisible();
+    expect(screen.getByText(/old fixed tour has been removed/i)).toBeVisible();
+    expect(screen.getByLabelText("Message Melli")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Fill a no-network/i })).not.toBeInTheDocument();
+  });
+
+  it("creates and titles the first conversation from the owner’s first message", async () => {
     mocks.listThreads.mockResolvedValue([]);
-    render(
-      <MemoryRouter initialEntries={["/conversation"]}>
-        <Routes><Route path="/conversation/:threadId?" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
+    const created = { ...thread, title: "Help me choose between two roles" };
+    mocks.createThread.mockResolvedValue(created);
+    renderConversation("/conversation");
 
-    expect(await screen.findByRole("heading", { name: "Talk to Melli. Stay in control." })).toBeInTheDocument();
-    expect(screen.getByText("Guardian Normal")).toBeInTheDocument();
-    expect(screen.getByText(/Console cannot reconfigure Guardian/i)).toBeInTheDocument();
-    expect(screen.getByText("No-network route = guided tour")).toBeInTheDocument();
-    expect(screen.getByText(/Create a private conversation for a real question/i)).toBeInTheDocument();
-    expect(screen.getByText(/Guardian remains independent/i)).toBeInTheDocument();
-    expect(screen.getByText(/Route and disclosure stay visible/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start a private conversation" })).toBeEnabled();
-  });
-
-  it("keeps composer drafts and retry keys scoped to the selected thread", async () => {
-    mocks.listThreads.mockResolvedValue([thread, otherThread]);
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "First thread draft." } });
-
-    fireEvent.click(screen.getByRole("button", { name: /Follow-up thread/i }));
-    expect(await screen.findByRole("heading", { name: otherThread.title })).toBeInTheDocument();
-    expect(screen.getByLabelText("Message Melli")).toHaveValue("");
-
-    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Second thread draft." } });
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledWith(
-      otherThread.thread_id,
-      "Second thread draft.",
-      expect.any(String),
-    ));
-
-    fireEvent.click(screen.getByRole("button", { name: /Today with Melli/i }));
-    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
-    expect(screen.getByLabelText("Message Melli")).toHaveValue("First thread draft.");
-
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(mocks.postMessage).toHaveBeenLastCalledWith(
-      thread.thread_id,
-      "First thread draft.",
-      expect.any(String),
-    ));
-  });
-
-  it("keeps owner input and the canonical submission key after a provider send error", async () => {
-    mocks.postMessage.mockRejectedValueOnce(new Error("provider route unavailable"));
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Message Melli"), { target: { value: "Keep this exact draft." } });
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-
-    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledTimes(1));
-    const firstSubmissionKey = mocks.postMessage.mock.calls[0]?.[2];
-    expect(typeof firstSubmissionKey).toBe("string");
-    expect(screen.getByLabelText("Message Melli")).toHaveValue("Keep this exact draft.");
-    expect(mocks.notify).toHaveBeenCalledWith(
-      "provider route unavailable Retrying will reuse the same canonical submission.",
-      "error",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-
-    await waitFor(() => expect(mocks.postMessage).toHaveBeenCalledTimes(2));
-    expect(mocks.postMessage.mock.calls[1]).toEqual([
-      thread.thread_id,
-      "Keep this exact draft.",
-      firstSubmissionKey,
-    ]);
-  });
-
-  it("explains conversation load failure and retries without changing the thread", async () => {
-    mocks.listMessages.mockRejectedValueOnce(new Error("core unavailable"));
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: "Conversation could not load" })).toBeInTheDocument();
-    expect(screen.getByText(/The conversation was not changed; retry loading or open another thread/i)).toBeInTheDocument();
-    expect(screen.getByLabelText("Message Melli")).toHaveValue("");
-
-    fireEvent.click(screen.getByRole("button", { name: "Retry conversation load" }));
-
-    expect(await screen.findByText("A grounded response.")).toBeInTheDocument();
-    expect(mocks.listMessages).toHaveBeenCalledWith(thread.thread_id);
-    expect(mocks.listMessages).toHaveBeenCalledTimes(2);
-  });
-
-  it("keeps the latest selected conversation when an older thread load resolves last", async () => {
-    const staleMessages = deferred<readonly ConversationMessage[]>();
-    mocks.listThreads.mockResolvedValue([thread, otherThread]);
-    mocks.listMessages.mockImplementation((selectedId: string) => (
-      selectedId === thread.thread_id
-        ? staleMessages.promise
-        : Promise.resolve([otherOutputMessage])
-    ));
-    mocks.listTurns.mockResolvedValue([]);
-    mocks.listProcessing.mockResolvedValue([]);
-    mocks.listDeliveries.mockResolvedValue([]);
-
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Follow-up thread/i }));
-
-    expect(await screen.findByRole("heading", { name: otherThread.title })).toBeInTheDocument();
-    expect(await screen.findByText("Second thread reply.")).toBeInTheDocument();
-
-    await act(async () => {
-      staleMessages.resolve([ownerMessage, outputMessage]);
-      await staleMessages.promise;
+    fireEvent.change(await screen.findByLabelText("Message Melli"), {
+      target: { value: "Help me choose between two roles" },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
 
-    await waitFor(() => {
-      expect(screen.queryByText("A grounded response.")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.createThread).toHaveBeenCalledWith({
+      title: "Help me choose between two roles",
+      sensitivity: "personal",
+      retention_policy: "retention.owner-conversation",
+    }));
+    expect(mocks.postMessage).toHaveBeenCalledWith(
+      created.thread_id,
+      "Help me choose between two roles",
+      expect.any(String),
+    );
+  });
+
+  it("explains only useful context and privacy by default", async () => {
+    const ownerMessage = message("message_1", owner.owner_id, "Use what you know about me");
+    const melliMessage = message("message_2", "melli_1", "Here is what I would prioritize.");
+    const turn = {
+      turn_id: "turn_secret_internal_id",
+      thread_id: thread.thread_id,
+      triggering_message_ids: [ownerMessage.message_id],
+      evidence_ids: [],
+      model_run_ids: ["result_secret_internal_id"],
+      policy_decision_ids: [],
+      proposed_action_ids: [],
+      executed_action_ids: [],
+      output_message_ids: [melliMessage.message_id],
+      decision_record: { summary: "Used relevant owner context and no external tools." },
+      started_at: "2026-08-19T12:00:00Z",
+      completed_at: "2026-08-19T12:00:01Z",
+    };
+    mocks.transcript.mockResolvedValue({
+      messages: [ownerMessage, melliMessage],
+      turns: [turn],
+      processing: [{
+        message_id: ownerMessage.message_id,
+        state: "completed",
+        attempts: [{
+          model_result_summary: {
+            route_id: "model.local",
+            provider_id: "provider.local",
+          },
+        }],
+      }],
     });
-    expect(screen.getByText("Second thread reply.")).toBeInTheDocument();
-  });
+    mocks.inspectTurn.mockResolvedValue({
+      turn,
+      output_message: melliMessage,
+      retrieval_manifest: { citations: [{ assertion_id: "assertion_secret", citation_id: "citation_secret" }] },
+      model_result: {
+        route_id: "model.local",
+        provider_id: "provider.local",
+        model_id: "capable-local-model",
+        external_disclosure: false,
+        started_at: "2026-08-19T12:00:00Z",
+        completed_at: "2026-08-19T12:00:01Z",
+        attempts: [{ processing_location: "device" }],
+      },
+    });
+    renderConversation();
 
-  it("opens the exact turn inspector from a route query", async () => {
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}?turn=${turn.turn_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByRole("heading", { name: "Why this response?" })).toBeInTheDocument();
-    expect(await screen.findAllByText("qwen3:8b")).not.toHaveLength(0);
-    expect(mocks.inspectTurn).toHaveBeenCalledWith(thread.thread_id, turn.turn_id);
-  });
-
-  it("surfaces a route for a conversation missing from the thread list", async () => {
-    const missingThreadId = "thread_missing_00000000000000000001";
-
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${missingThreadId}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationWithLocation />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("Requested conversation is not available")).toBeInTheDocument();
-    expect(screen.getByText(missingThreadId)).toBeInTheDocument();
-    expect(screen.getByText(`conversation-path=/conversation/${missingThreadId}`)).toBeInTheDocument();
-    expect(mocks.listMessages).not.toHaveBeenCalled();
-    expect(mocks.listTurns).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: `Copy requested conversation ID ${missingThreadId}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(missingThreadId));
-    expect(mocks.notify).toHaveBeenCalledWith("Requested conversation ID copied.", "success");
-
-    fireEvent.click(screen.getByRole("button", { name: "Open available conversation" }));
-    await waitFor(() => expect(screen.getByText(`conversation-path=/conversation/${thread.thread_id}`)).toBeInTheDocument());
-    expect(await screen.findByRole("heading", { name: thread.title })).toBeInTheDocument();
-  });
-
-  it("surfaces and clears a route query for a turn missing from the thread", async () => {
-    const missingTurnId = "turn_missing_00000000000000000001";
-
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}?turn=${missingTurnId}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationWithLocation />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("Requested turn is not in this thread")).toBeInTheDocument();
-    expect(screen.getByText(missingTurnId)).toBeInTheDocument();
-    expect(mocks.inspectTurn).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: `Copy requested turn ID ${missingTurnId}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(missingTurnId));
-    expect(mocks.notify).toHaveBeenCalledWith("Requested turn ID copied.", "success");
-
-    fireEvent.click(screen.getByRole("button", { name: "Clear turn link" }));
-    await waitFor(() => expect(screen.queryByText("Requested turn is not in this thread")).not.toBeInTheDocument());
-    expect(screen.getByText("conversation-search=")).toBeInTheDocument();
-  });
-
-  it("copies exact processing recovery ids before bounded reply resumption", async () => {
-    mocks.listProcessing.mockResolvedValue([deadProcessing]);
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    await screen.findByText("What should I focus on?");
-    fireEvent.click(screen.getByRole("button", { name: `View processing details for message ${ownerMessage.message_id}` }));
-
-    expect(await screen.findByRole("heading", { name: "Processing" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: `Copy Processing work ID ${deadProcessing.work_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(deadProcessing.work_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Processing work ID copied.", "success");
-
-    fireEvent.click(screen.getByRole("button", { name: `Copy Processing message ID ${deadProcessing.message_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(deadProcessing.message_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Processing message ID copied.", "success");
-
-    const attempt = deadProcessing.attempts[0];
-    if (attempt === undefined) {
-      throw new Error("deadProcessing fixture must include an attempt");
-    }
-    fireEvent.click(screen.getByRole("button", { name: `Copy Processing attempt ID ${attempt.attempt_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(attempt.attempt_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Processing attempt ID copied.", "success");
-
-    fireEvent.click(screen.getByRole("button", { name: `Copy Model request ID ${attempt.request_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(attempt.request_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Model request ID copied.", "success");
-
-    fireEvent.click(screen.getByRole("button", { name: `Copy Retrieval manifest ID ${attempt.retrieval_manifest_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(attempt.retrieval_manifest_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Retrieval manifest ID copied.", "success");
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy Route attempt 1 ID model.local.qwen" }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("model.local.qwen"));
-    expect(mocks.notify).toHaveBeenCalledWith("Route attempt 1 ID copied.", "success");
-  });
-
-  it("shows outbound delivery authority and resumes dead delivery work", async () => {
-    mocks.listDeliveries.mockResolvedValue([completedDelivery, deadDelivery]);
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    expect(await screen.findByText("Delivered · inspect")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Delivered · inspect"));
-
-    expect(await screen.findByRole("heading", { name: "Delivery" })).toBeInTheDocument();
-    expect(screen.getByText("client.telegram.synthetic")).toBeInTheDocument();
-    expect(screen.getByText("telegram:pairing:pairing_000000000000000000000001")).toBeInTheDocument();
-    expect(screen.getByText(/adapter delivery_.*execution action_/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: `Copy Delivery work ID ${completedDelivery.work_id}` }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(completedDelivery.work_id));
-    expect(mocks.notify).toHaveBeenCalledWith("Delivery work ID copied.", "success");
-    fireEvent.click(screen.getByRole("button", { name: "Copy Adapter receipt ID delivery_000000000000000000000000000001" }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("delivery_000000000000000000000000000001"));
-    fireEvent.click(screen.getByRole("button", { name: "Copy Execution receipt action ID action_000000000000000000000000000001" }));
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("action_000000000000000000000000000001"));
-
-    fireEvent.click(screen.getByText("Delivery failed · inspect"));
-    expect(await screen.findByText("Telegram Delivery Outcome Unknown")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Resume delivery with bounded retries/i }));
-
-    await waitFor(() => expect(mocks.resumeDelivery).toHaveBeenCalledWith(thread.thread_id, deadDelivery.work_id));
-    expect(mocks.notify).toHaveBeenCalledWith("A new bounded delivery retry budget was added.", "success");
-  });
-
-  it("disables dead reply and delivery resume controls without mutation proof", async () => {
-    mocks.canMutate = false;
-    mocks.listProcessing.mockResolvedValue([deadProcessing]);
-    mocks.listDeliveries.mockResolvedValue([deadDelivery]);
-    render(
-      <MemoryRouter initialEntries={[`/conversation/${thread.thread_id}`]}>
-        <Routes><Route path="/conversation/:threadId" element={<ConversationPage />} /></Routes>
-      </MemoryRouter>,
-    );
-
-    const replyResume = await screen.findByRole("button", { name: "Reply failed · resume" });
-    expect(replyResume).toBeDisabled();
-    fireEvent.click(replyResume);
-    expect(mocks.resumeMessage).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: `View processing details for message ${ownerMessage.message_id}` }));
-    expect(await screen.findByRole("heading", { name: "Processing" })).toBeInTheDocument();
-    expect(screen.getByText("Recent owner authentication is required before model work can be resumed.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Resume with bounded retries/i })).toBeDisabled();
-
-    fireEvent.click(screen.getByText("Delivery failed · inspect"));
-    expect(await screen.findByRole("heading", { name: "Delivery" })).toBeInTheDocument();
-    expect(screen.getByText("Recent owner authentication is required before delivery work can be resumed.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Resume delivery with bounded retries/i })).toBeDisabled();
-    expect(mocks.resumeDelivery).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Why this answer?" }));
+    expect(await screen.findByText("Melli used 1 saved memory.")).toBeVisible();
+    expect(screen.getByText("Processed on this device without external disclosure.")).toBeVisible();
+    expect(screen.queryByText("turn_secret_internal_id")).not.toBeInTheDocument();
+    expect(screen.queryByText("assertion_secret")).not.toBeInTheDocument();
+    expect(screen.queryByText(/turn ledger/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/route attempts/i)).not.toBeInTheDocument();
   });
 });
-
-function MemoryLocation() {
-  const location = useLocation();
-  return <div>{`memory-search=${location.search}`}</div>;
-}
-
-function ProviderLocation() {
-  const location = useLocation();
-  return <div>{`providers-search=${location.search}`}</div>;
-}
-
-function ConversationWithLocation() {
-  return (
-    <>
-      <ConversationPage />
-      <ConversationLocation />
-    </>
-  );
-}
-
-function ConversationLocation() {
-  const location = useLocation();
-  return (
-    <>
-      <div>{`conversation-path=${location.pathname}`}</div>
-      <div>{`conversation-search=${location.search}`}</div>
-    </>
-  );
-}
-
-type Deferred<T> = {
-  readonly promise: Promise<T>;
-  readonly reject: (reason?: unknown) => void;
-  readonly resolve: (value: T) => void;
-};
-
-function deferred<T>(): Deferred<T> {
-  let reject!: (reason?: unknown) => void;
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-  return { promise, reject, resolve };
-}

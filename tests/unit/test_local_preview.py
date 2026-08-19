@@ -163,11 +163,13 @@ def test_run_preview_rejects_multiple_routes_and_preflights_before_state(
         local_preview.run_preview(args)
 
 
-def test_preview_contracts_distinguish_fixture_and_on_device_model() -> None:
-    fixture_contract = local_preview.preview_contract(None)
-    assert "no external model calls" in fixture_contract
-    assert "guided output is not Melli" in fixture_contract
-    assert "Fill a no-network tour message" in local_preview.preview_next_action(None)
+def test_preview_contracts_distinguish_no_model_and_on_device_model() -> None:
+    no_model_contract = local_preview.preview_contract(None)
+    assert "no external model calls" in no_model_contract
+    assert "guided output is not Melli" in no_model_contract
+    no_model_action = local_preview.preview_next_action(None)
+    assert "conversation is unavailable" in no_model_action
+    assert "make preview" not in no_model_action
 
     _, config = local_preview.load_preview_model_route(
         local_preview.ROOT / "config/routes/ollama-qwen.example.json"
@@ -176,10 +178,11 @@ def test_preview_contracts_distinguish_fixture_and_on_device_model() -> None:
     assert "owner text and selected memory" in model_contract
     assert "on-device Local Qwen via Ollama" in model_contract
     assert "no external disclosure" in model_contract
-    assert "labelled synthetic fallback remains" in model_contract
+    assert "synthetic fallback" not in model_contract
     model_action = local_preview.preview_next_action(config)
-    assert "Eligible model required" in model_action
-    assert "Fill a no-network tour message" not in model_action
+    assert "start a conversation naturally" in model_action
+    assert "Why this answer?" in model_action
+    assert "fixture" not in model_action
 
 
 def test_make_preview_rejects_unknown_model_selector() -> None:
@@ -592,10 +595,7 @@ def test_run_preview_reports_ready_contract_and_cleans_state(
     output = capsys.readouterr().out
     assert result == 0
     assert "Melloa is ready" in output
-    assert (
-        f"Release:           {CURRENT_RELEASE.release_display} · "
-        f"{CURRENT_RELEASE.milestone} · {CURRENT_RELEASE.architecture_baseline}"
-    ) in output
+    assert f"Release:           {CURRENT_RELEASE.release_display}" in output
     assert "guided output is not Melli" in output
     assert "Disposable preview state removed" in output
     assert not state.exists()

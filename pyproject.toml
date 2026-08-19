@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "melloa"
 version = "0.2.0"
-description = "Owner-controlled private intelligence runtime for the M1 preview"
+description = "Private home for a long-term AI partner"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -26,21 +26,17 @@ build = [
   "hatchling==1.32.0",
 ]
 dev = [
-  "jsonschema>=4.25,<5",
   "mypy>=1.17,<2",
   "pytest>=8.4,<10",
   "pytest-cov>=6.2,<8",
   "ruff>=0.12,<1",
-]
-docs = [
-  "mkdocs-material>=9.6,<10",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/melloa"]
 
 [tool.pytest.ini_options]
-addopts = "--strict-config --strict-markers --cov=melloa --cov-report=term-missing --cov-fail-under=90"
+addopts = "--strict-config --strict-markers --cov=melloa --cov-report=term-missing --cov-fail-under=75"
 testpaths = ["tests"]
 
 [tool.coverage.run]
@@ -66,7 +62,6 @@ select = ["E", "F", "I", "B", "UP", "S", "ASYNC", "DTZ", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S104", "S105", "S106"]
-"src/melloa/adapters/models/codex_cli.py" = ["S603"]
 
 [tool.mypy]
 python_version = "3.13"

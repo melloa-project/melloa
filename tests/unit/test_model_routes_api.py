@@ -75,10 +75,10 @@ def test_authenticated_owner_can_inspect_configured_model_routes(fixed_time) -> 
     )
     client = TestClient(app, base_url="https://testserver")
 
-    assert client.get("/api/v1/providers/routes").status_code == 401
+    assert client.get("/api/v1/model/status").status_code == 401
     login = client.post("/api/v1/auth/session", json={"credential": _BOOTSTRAP_TOKEN})
     assert login.status_code == 200
-    response = client.get("/api/v1/providers/routes")
+    response = client.get("/api/v1/model/status")
     assert response.status_code == 200
     document = response.json()
     assert document["owner_id"] == owner_id
@@ -115,4 +115,4 @@ def test_model_route_report_is_explicitly_unavailable_when_not_configured(fixed_
         client.post("/api/v1/auth/session", json={"credential": _BOOTSTRAP_TOKEN}).status_code
         == 200
     )
-    assert client.get("/api/v1/providers/routes").status_code == 503
+    assert client.get("/api/v1/model/status").status_code == 503

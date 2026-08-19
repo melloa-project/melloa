@@ -1,27 +1,78 @@
-# Melloa implementation instructions
+# Melloa working instructions
 
 ## Authority
 
-The architecture suite in this repository is the implementation authority. Read it before making architectural changes. Where documents conflict, use this precedence order:
+Read [PRODUCT_DIRECTION.md](PRODUCT_DIRECTION.md) and
+[docs/trust-boundaries.md](docs/trust-boundaries.md) before material work.
 
-1. `docs/23-v0.2-decisions.md`
-2. accepted ADRs in `docs/adr/`
-3. `docs/22-final-synthesis.md` and the relevant subsystem specification
-4. the retained master research brief
+Those files define current product intent and durable safety constraints. Everything else in
+the repository—including code, tests, schemas, migrations, UI routes, tags, and old behavior—is
+evidence to evaluate, not a requirement to preserve. Git history is the archive. There is no
+architecture milestone queue.
 
-Record any deliberate architectural deviation as a new ADR rather than silently changing a boundary.
+An old decision may be superseded directly when owner evidence supports it. Record only the
+small amount of current rationale that a future contributor needs; do not create an ADR merely
+to protect previous work.
 
-## Required boundaries
+## Product standard
 
-- Melloa is the system; Melli is a persistent intelligence, not a model, process, client, or service name.
-- The private Owner Console and channel-neutral conversation are V1 requirements. Telegram is an optional secondary adapter.
-- Models may propose actions but deterministic policy and capability controls authorize them.
-- The Guardian is independently controlled. This repository may define its protocol and fakes, but must not weaken or absorb the Guardian trust boundary.
-- Preserve provenance, uncertainty, correction history, structured decision records, data ownership, private networking, least privilege, and reversible deployment.
-- Never commit credentials, personal data, corporate-only dependencies, machine-specific secrets, or plaintext deployment state.
+Melloa exists to support the owner's long-lived relationship with Melli. Prefer work that makes
+the owner voluntarily choose Melli because she understands their context, remembers useful
+history, follows through, and creates value a stateless assistant could not.
+
+For material work, state the owner-visible before/after. If the improvement is hard to explain
+without subsystem terminology, reconsider it. Product experience outranks specification
+coverage, test count, schema breadth, infrastructure completeness, and lines of code.
+
+The current phase is destructive simplification. Until the subtraction checkpoint in
+`PRODUCT_DIRECTION.md` is met, remove or collapse obsolete documentation, demo machinery,
+owner-facing administration, speculative abstractions, and premature integrations before adding
+substantial Melli functionality. Deletion is a successful change when it removes work or concepts
+the owner should never have had to understand.
+
+## Hard boundaries
+
+- Melloa is the system; Melli is the persistent intelligence, not a model or process.
+- Melli's continuity must survive model and provider replacement.
+- Guardian remains independently owner-controlled and outside Melloa's write, deploy, signing,
+  credential, and recovery authority.
+- Owner data remains private by default, owner-controlled, exportable, and deletable within
+  clearly stated limits.
+- Models and untrusted content never authorize external side effects. Deterministic policy and
+  capabilities constrain them.
+- Sensitive external disclosure is explicit and inspectable.
+- Provenance is retained where it changes trust in memories, decisions, disclosures, or actions.
+- High-risk or irreversible actions remain structurally constrained and fail closed.
+
+Preserve these principles, not their present implementation size or shape.
 
 ## Working method
 
-Implement the milestones in `docs/22-final-synthesis.md` in small, reviewable increments. Keep the repository runnable, tested, documented, and reproducible from a clean Linux environment. Use synthetic data and fake adapters until an integration milestone explicitly requires real hardware or credentials.
+1. Begin from an actual owner journey, not a subsystem map.
+2. Inspect rendered desktop and mobile behavior for owner-facing changes.
+3. Prefer one concrete path and strong defaults over configurable frameworks.
+4. Keep ordinary conversation free of provider, route, assertion, audit, database, and Guardian
+   protocol terminology. Reveal trustworthy detail in context when it can change an owner decision.
+5. Change or delete tests that enforce intentionally rejected behavior. Keep focused tests for
+   trust boundaries, data integrity, and the owner journey being improved.
+6. Keep the repository runnable while simplifying it; do not preserve dead paths for compatibility
+   with a technical preview.
+7. Use real longitudinal dogfooding as primary product evidence. Synthetic fixtures prove bounded
+   mechanics only and must never be presented as evidence that Melli is useful.
 
-For each material change, update tests and the relevant documentation. Prefer the simplest design that preserves the documented long-term boundaries. Continue autonomously when the documents answer the question; stop only for a genuinely missing external credential, hardware dependency, permission, or owner policy decision.
+## Adversarial review
+
+At the subtraction checkpoint, after major experience changes, and before broad completion claims,
+run multiple independent reviewers against the real repository and rendered product. Include these
+perspectives across the review set:
+
+- daily owner experience;
+- modern product and interface quality;
+- owner attention and leverage;
+- long-term human–AI symbiosis;
+- ruthless simplicity;
+- longitudinal intelligence.
+
+Ask reviewers to find reasons the work is wrong, not to validate it. Preserve material disagreement,
+respond to substantive objections, change course when the objection is stronger, and explain any
+rejected recommendation. A review with no concrete criticism is not useful evidence.

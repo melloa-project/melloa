@@ -18,14 +18,9 @@ import {
 } from "./api";
 import { AppLayout } from "./components/layout";
 import { LoadingState } from "./components/ui";
-import { ActivityPage } from "./pages/activity";
 import { ConversationPage } from "./pages/conversation";
 import { LoginPage } from "./pages/login";
-import { MemoryPage } from "./pages/memory";
-import { OperationsPage } from "./pages/operations";
-import { ProvidersPage } from "./pages/providers";
 import { SettingsPage } from "./pages/settings";
-import { TimelinePage } from "./pages/timeline";
 
 type Notice = {
   readonly id: number;
@@ -37,7 +32,8 @@ type MelloaContextValue = {
   readonly api: MelloaApi;
   readonly principal: AuthenticatedOwner;
   readonly status: SystemStatus | null;
-  readonly canMutate: boolean;
+  readonly canWrite: boolean;
+  readonly canUseSensitiveControls: boolean;
   readonly notices: readonly Notice[];
   readonly login: (credential: string) => Promise<void>;
   readonly logout: () => Promise<void>;
@@ -121,7 +117,7 @@ export function App() {
     if (principal === null) {
       return;
     }
-    const timer = window.setInterval(() => void refreshStatus(), 15_000);
+    const timer = window.setInterval(() => void refreshStatus(), 60_000);
     return () => window.clearInterval(timer);
   }, [principal, refreshStatus]);
 
@@ -130,7 +126,7 @@ export function App() {
       return;
     }
     setNowMs(Date.now());
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, [principal]);
 
@@ -157,7 +153,8 @@ export function App() {
       api,
       principal,
       status,
-      canMutate: canUseMutationProof(principal, api.hasMutationProof, nowMs),
+      canWrite: api.hasMutationProof,
+      canUseSensitiveControls: canUseMutationProof(principal, api.hasMutationProof, nowMs),
       notices,
       login,
       logout,
@@ -187,11 +184,6 @@ export function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/conversation/:threadId?" element={<ConversationPage />} />
-            <Route path="/timeline" element={<TimelinePage />} />
-            <Route path="/activity" element={<ActivityPage />} />
-            <Route path="/memory" element={<MemoryPage />} />
-            <Route path="/providers" element={<ProvidersPage />} />
-            <Route path="/operations" element={<OperationsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate replace to="/conversation" />} />
           </Route>

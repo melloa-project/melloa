@@ -51,8 +51,6 @@ class DeterministicModelRouter:
         *,
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
-        if not bindings:
-            raise ValueError("at least one model route is required")
         route_ids = tuple(binding.route.route_id for binding in bindings)
         if len(set(route_ids)) != len(route_ids):
             raise ValueError("model route IDs must be unique")

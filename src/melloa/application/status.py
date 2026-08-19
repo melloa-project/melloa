@@ -9,10 +9,8 @@ from melloa.domain.guardian import GuardianMode
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.release import (
     CURRENT_RELEASE,
-    ArchitectureBaseline,
     PackageVersion,
     ReleaseDisplay,
-    ReleaseMilestone,
     ReleaseStage,
 )
 
@@ -31,18 +29,23 @@ class SystemStatus(ContractModel):
     version: PackageVersion = CURRENT_RELEASE.package_version
     release_display: ReleaseDisplay = CURRENT_RELEASE.release_display
     stage: ReleaseStage = CURRENT_RELEASE.stage
-    milestone: ReleaseMilestone = CURRENT_RELEASE.milestone
-    architecture_baseline: ArchitectureBaseline = CURRENT_RELEASE.architecture_baseline
     generated_at: AwareDatetime
     guardian: GuardianSummary
-    public_ingress: Literal[False] = False
+    access_scope: Literal["loopback", "private-network", "unverified"]
+    public_ingress: bool | None
     external_actions_enabled: bool
 
 
-def read_system_status(reader: GuardianStatusReader) -> SystemStatus:
+def read_system_status(
+    reader: GuardianStatusReader,
+    *,
+    access_scope: Literal["loopback", "private-network", "unverified"] = "unverified",
+) -> SystemStatus:
     status = reader.read_status()
     return SystemStatus(
         generated_at=utc_now(),
+        access_scope=access_scope,
+        public_ingress=False if access_scope == "loopback" else None,
         guardian=GuardianSummary(
             mode=status.payload.mode,
             sequence=status.payload.sequence,
