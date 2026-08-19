@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from threading import RLock
 from typing import TypeVar
 
-from melloa.domain.base import RecordId, canonical_json_bytes, new_record_id
+from melloa.domain.base import RecordId, new_record_id
 from melloa.domain.conversation import (
     ConversationMessage,
     ConversationProcessingAttempt,
@@ -28,7 +28,6 @@ from melloa.ports.conversation import (
     CompletedConversationTurn,
     ConversationConflictError,
     ConversationNotFoundError,
-    ConversationRetentionInventory,
     InboundAppendResult,
 )
 
@@ -84,51 +83,6 @@ class InMemoryConversationStore:
         with self._lock:
             threads = (thread for thread in self._threads.values() if thread.owner_id == owner_id)
             return tuple(sorted(threads, key=lambda thread: (thread.updated_at, thread.thread_id)))
-
-    def retention_inventory(self, owner_id: RecordId) -> ConversationRetentionInventory:
-        with self._lock:
-            thread_ids = frozenset(
-                thread.thread_id
-                for thread in self._threads.values()
-                if thread.owner_id == owner_id
-            )
-            records = (
-                *(thread for thread in self._threads.values() if thread.thread_id in thread_ids),
-                *(
-                    message
-                    for message in self._messages.values()
-                    if message.thread_id in thread_ids
-                ),
-                *(turn for turn in self._turns.values() if turn.thread_id in thread_ids),
-                *(
-                    record.work
-                    for record in self._reply_work.values()
-                    if record.work.thread_id in thread_ids
-                ),
-            )
-            retained_times = (
-                *(
-                    thread.created_at
-                    for thread in self._threads.values()
-                    if thread.thread_id in thread_ids
-                ),
-                *(
-                    message.created_at
-                    for message in self._messages.values()
-                    if message.thread_id in thread_ids
-                ),
-                *(turn.started_at for turn in self._turns.values() if turn.thread_id in thread_ids),
-                *(
-                    record.work.created_at
-                    for record in self._reply_work.values()
-                    if record.work.thread_id in thread_ids
-                ),
-            )
-            return ConversationRetentionInventory(
-                retained_objects=len(records),
-                retained_bytes=sum(len(canonical_json_bytes(record)) for record in records),
-                oldest_retained_at=min(retained_times) if retained_times else None,
-            )
 
     def get_inbound_by_idempotency_key(
         self,

@@ -134,7 +134,6 @@ def seed(args: argparse.Namespace) -> None:
                 json={
                     "title": _FIXTURE_TITLE,
                     "sensitivity": "highly_sensitive",
-                    "retention_policy": "retention.owner-conversation",
                 },
             )
             if thread.status_code != 201:

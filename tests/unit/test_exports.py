@@ -61,7 +61,6 @@ def test_authenticated_owner_downloads_small_provider_independent_archive(fixed_
             json={
                 "title": "A private plan",
                 "sensitivity": "personal",
-                "retention_policy": "retention.owner-conversation",
             },
         )
         assert created.status_code == 201

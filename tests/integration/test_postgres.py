@@ -85,7 +85,6 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
                 json={
                     "title": "Durable owner context",
                     "sensitivity": "personal",
-                    "retention_policy": "retention.owner-conversation",
                 },
             )
             assert created.status_code == 201

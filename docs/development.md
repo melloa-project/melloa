@@ -27,7 +27,7 @@ values in `.env`, command arguments, fixtures, or logs.
 
 ```bash
 make bootstrap       # install locked Python and web dependencies
-make check           # generated contracts, lint, types, unit tests, and web build/tests
+make check           # migration manifest, lint, types, unit tests, and web build/tests
 make integration     # PostgreSQL integration; requires Docker
 make recovery        # encrypted clean-restore exercise; requires Docker
 make preview         # current disposable baseline; requires sibling Guardian checkout

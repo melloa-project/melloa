@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   listThreads: vi.fn(),
   createThread: vi.fn(),
   transcript: vi.fn(),
-  modelRoutes: vi.fn(),
+  conversationAvailability: vi.fn(),
   postMessage: vi.fn(),
   resumeMessage: vi.fn(),
   inspectTurn: vi.fn(),
@@ -42,7 +42,6 @@ const thread = {
   title: "A meaningful decision",
   status: "active",
   sensitivity: "personal",
-  retention_policy: "retention.owner-conversation",
   created_at: "2026-08-19T12:00:00Z",
   updated_at: "2026-08-19T12:00:00Z",
 };
@@ -55,12 +54,7 @@ const secondThread = {
   updated_at: "2026-08-19T12:05:00Z",
 };
 
-const readyRoutes = {
-  routes: [{
-    route_kind: "openai_compatible",
-    health: { state: "healthy" },
-  }],
-};
+const readyAvailability = { available: true };
 
 function message(id: string, author: string, text: string, threadId = thread.thread_id) {
   return {
@@ -70,7 +64,6 @@ function message(id: string, author: string, text: string, threadId = thread.thr
     source_client: "owner-console",
     parts: [{ kind: "text", text }],
     citation_ids: [],
-    delivery_state: "recorded",
     sensitivity: "personal",
     created_at: "2026-08-19T12:00:00Z",
     observed_at: "2026-08-19T12:00:00Z",
@@ -115,7 +108,7 @@ describe("ConversationPage", () => {
       mocks.listThreads,
       mocks.createThread,
       mocks.transcript,
-      mocks.modelRoutes,
+      mocks.conversationAvailability,
       mocks.postMessage,
       mocks.resumeMessage,
       mocks.inspectTurn,
@@ -124,7 +117,7 @@ describe("ConversationPage", () => {
 
     mocks.listThreads.mockResolvedValue([thread]);
     mocks.transcript.mockResolvedValue({ messages: [], turns: [], processing: [] });
-    mocks.modelRoutes.mockResolvedValue(readyRoutes);
+    mocks.conversationAvailability.mockResolvedValue(readyAvailability);
     mocks.createThread.mockResolvedValue(thread);
     mocks.postMessage.mockResolvedValue(replyFor("What should I consider?"));
     mocks.context = {
@@ -132,7 +125,7 @@ describe("ConversationPage", () => {
         listThreads: mocks.listThreads,
         createThread: mocks.createThread,
         transcript: mocks.transcript,
-        modelRoutes: mocks.modelRoutes,
+        conversationAvailability: mocks.conversationAvailability,
         postMessage: mocks.postMessage,
         resumeMessage: mocks.resumeMessage,
         inspectTurn: mocks.inspectTurn,
@@ -183,9 +176,7 @@ describe("ConversationPage", () => {
   });
 
   it("removes the fixed response from the owner path when no capable model exists", async () => {
-    mocks.modelRoutes.mockResolvedValue({
-      routes: [{ route_kind: "synthetic", health: { state: "healthy" } }],
-    });
+    mocks.conversationAvailability.mockResolvedValue({ available: false });
     renderConversation();
 
     expect(await screen.findByRole("heading", { name: "Melli isn’t connected yet" })).toBeVisible();
@@ -449,9 +440,6 @@ describe("ConversationPage", () => {
       triggering_message_ids: [ownerMessage.message_id],
       evidence_ids: [],
       model_run_ids: ["result_inspection"],
-      policy_decision_ids: [],
-      proposed_action_ids: [],
-      executed_action_ids: [],
       output_message_ids: [melliMessage.message_id],
       decision_record: { summary: "Late inspection summary" },
       started_at: "2026-08-19T12:00:00Z",
@@ -462,13 +450,12 @@ describe("ConversationPage", () => {
       output_message: melliMessage,
       retrieval_manifest: { citations: [] },
       model_result: {
-        route_id: "model.local",
         provider_id: "provider.local",
         model_id: "capable-local-model",
+        processing_location: "device",
         external_disclosure: false,
         started_at: "2026-08-19T12:00:00Z",
         completed_at: "2026-08-19T12:00:01Z",
-        attempts: [{ processing_location: "device" }],
       },
     };
     mocks.listThreads.mockResolvedValue([thread, secondThread]);
@@ -551,7 +538,6 @@ describe("ConversationPage", () => {
     await waitFor(() => expect(mocks.createThread).toHaveBeenCalledWith({
       title: "Help me choose between two roles",
       sensitivity: "personal",
-      retention_policy: "retention.owner-conversation",
     }));
     expect(mocks.postMessage).toHaveBeenCalledWith(
       created.thread_id,
@@ -572,9 +558,6 @@ describe("ConversationPage", () => {
       triggering_message_ids: [ownerMessage.message_id],
       evidence_ids: ["assertion_secret"],
       model_run_ids: ["result_secret_internal_id"],
-      policy_decision_ids: [],
-      proposed_action_ids: [],
-      executed_action_ids: [],
       output_message_ids: [melliMessage.message_id],
       decision_record: { summary: "Used relevant owner context and no external tools." },
       started_at: "2026-08-19T12:00:00Z",
@@ -588,7 +571,6 @@ describe("ConversationPage", () => {
         state: "completed",
         attempts: [{
           model_result_summary: {
-            route_id: "model.local",
             provider_id: "provider.local",
           },
         }],
@@ -599,13 +581,12 @@ describe("ConversationPage", () => {
       output_message: melliMessage,
       retrieval_manifest: { citations: [{ assertion_id: "assertion_secret", citation_id: "citation_secret" }] },
       model_result: {
-        route_id: "model.local",
         provider_id: "provider.local",
         model_id: "capable-local-model",
+        processing_location: "device",
         external_disclosure: false,
         started_at: "2026-08-19T12:00:00Z",
         completed_at: "2026-08-19T12:00:01Z",
-        attempts: [{ processing_location: "device" }],
       },
     });
     renderConversation();

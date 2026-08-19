@@ -17,7 +17,7 @@ import uvicorn
 from psycopg.conninfo import conninfo_to_dict
 
 from melloa.adapters.guardian.file import FileGuardianStatusReader, GuardianVerificationError
-from melloa.adapters.models.openai_compatible import load_openai_compatible_route_config
+from melloa.adapters.models.openai_compatible import load_openai_compatible_model_config
 from melloa.adapters.postgres.migrations import (
     apply_migrations,
     discover_migrations,
@@ -144,8 +144,8 @@ def serve(args: argparse.Namespace) -> int:
         try:
             model_config = (
                 None
-                if args.model_route_config is None
-                else load_openai_compatible_route_config(args.model_route_config)
+                if args.model_config is None
+                else load_openai_compatible_model_config(args.model_config)
             )
             connection = None
             if args.database_dsn_file is not None:
@@ -242,7 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(os.environ.get("MELLOA_OWNER_CREDENTIAL_FILE", "")),
         required="MELLOA_OWNER_CREDENTIAL_FILE" not in os.environ,
     )
-    serve_parser.add_argument("--model-route-config", type=Path)
+    serve_parser.add_argument("--model-config", type=Path)
     database_path = os.environ.get("MELLOA_DATABASE_DSN_FILE")
     serve_parser.add_argument(
         "--database-dsn-file",

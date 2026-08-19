@@ -8,7 +8,8 @@ underlying model changes.
 
 Melloa is in an owner-experience reset. The existing `v0.2.0` preview proves private conversation,
 model disclosure, owner-data controls, and an independent Guardian boundary, but it is not yet a
-compelling daily-use partner. Its no-network response is a labelled fixture, not Melli thinking.
+compelling daily-use partner. Without an explicitly configured model, conversation is unavailable;
+the preview no longer substitutes a fixture response for Melli thinking.
 
 The active work is subtractive: collapse the operations-console experience, remove speculative
 architecture and preview machinery, and make conversation with Melli the unmistakable product.
@@ -33,7 +34,7 @@ The command builds the independently controlled Guardian, starts both services o
 a disposable owner credential, and removes its temporary state on `Ctrl-C`. Follow
 [the short baseline guide](docs/getting-started.md) for the honest limits of this path.
 
-To exercise the reviewed on-device model route rather than the fixed tour response:
+To exercise the one configured on-device model:
 
 ```bash
 ollama pull qwen3:4b-instruct-2507-q4_K_M

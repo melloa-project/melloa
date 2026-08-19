@@ -25,10 +25,9 @@ from melloa.application.exports import (
     OwnerExportReadinessReport,
     OwnerExportService,
 )
-from melloa.application.routing import OwnerModelRouteService
 from melloa.application.status import SystemStatus, read_system_status
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import QualifiedName, RecordId
+from melloa.domain.base import RecordId
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import (
     ConversationMessage,
@@ -38,7 +37,7 @@ from melloa.domain.conversation import (
     ConversationTurn,
     ConversationTurnInspection,
 )
-from melloa.domain.models import OwnerModelRouteReport
+from melloa.domain.models import ModelGatewayHealth, ModelHealthState
 from melloa.ports.auth import (
     AuthenticationError,
     CsrfValidationError,
@@ -81,13 +80,17 @@ class _CreateThreadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=256)
     sensitivity: Sensitivity
-    retention_policy: QualifiedName
 
 
 class _PostOwnerMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(min_length=1, max_length=100_000)
     idempotency_key: str = Field(min_length=1, max_length=256)
+
+
+class _ConversationAvailabilityResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    available: bool
 
 
 class ConversationTranscript(BaseModel):
@@ -118,13 +121,6 @@ def _conversation(request: Request) -> ConversationService:
     if value is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Conversation is unavailable.")
     return cast(ConversationService, value)
-
-
-def _model_routes(request: Request) -> OwnerModelRouteService:
-    value = getattr(request.app.state, "model_route_service", None)
-    if value is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model status is unavailable.")
-    return cast(OwnerModelRouteService, value)
 
 
 def _exports(request: Request) -> OwnerExportService:
@@ -174,9 +170,9 @@ def create_app(
     guardian_reader: GuardianStatusReader,
     owner_sessions: OwnerSessionManager | None = None,
     conversation_service: ConversationService | None = None,
-    model_route_service: OwnerModelRouteService | None = None,
     export_service: OwnerExportService | None = None,
     *,
+    model_health: Callable[[], ModelGatewayHealth] | None = None,
     secure_session_cookie: bool = True,
     run_conversation_worker: bool = False,
     conversation_worker_interval: float = 1.0,
@@ -214,7 +210,6 @@ def create_app(
     )
     app.state.owner_sessions = owner_sessions
     app.state.conversation_service = conversation_service
-    app.state.model_route_service = model_route_service
     app.state.export_service = export_service
 
     @app.middleware("http")
@@ -410,12 +405,22 @@ def create_app(
             samesite="strict",
         )
 
-    @app.get("/api/v1/model/status", response_model=OwnerModelRouteReport)
-    async def model_status(
-        request: Request,
-        principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
-    ) -> OwnerModelRouteReport:
-        return _model_routes(request).report(principal)
+    @app.get(
+        "/api/v1/conversations/availability",
+        response_model=_ConversationAvailabilityResponse,
+    )
+    def conversation_availability(
+        _principal: Annotated[AuthenticatedOwner, Depends(_authenticated_owner)],
+    ) -> _ConversationAvailabilityResponse:
+        if model_health is None:
+            return _ConversationAvailabilityResponse(available=False)
+        try:
+            health = model_health()
+        except Exception:
+            return _ConversationAvailabilityResponse(available=False)
+        return _ConversationAvailabilityResponse(
+            available=health.state is ModelHealthState.HEALTHY
+        )
 
     @app.get("/api/v1/conversations", response_model=tuple[ConversationThread, ...])
     async def list_conversations(
@@ -438,7 +443,6 @@ def create_app(
             principal,
             title=payload.title,
             sensitivity=payload.sensitivity,
-            retention_policy=payload.retention_policy,
         )
 
     @app.get(

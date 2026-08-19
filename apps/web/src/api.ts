@@ -25,15 +25,13 @@ export type ConversationThread = {
   readonly title: string;
   readonly status: string;
   readonly sensitivity: string;
-  readonly retention_policy: string;
   readonly created_at: string;
   readonly updated_at: string;
 };
 
 export type MessagePart = {
   readonly kind: string;
-  readonly text?: string | null;
-  readonly attachment_id?: string | null;
+  readonly text: string;
 };
 
 export type ConversationMessage = {
@@ -45,7 +43,6 @@ export type ConversationMessage = {
   readonly reply_to_message_id?: string | null;
   readonly corrects_message_id?: string | null;
   readonly citation_ids: readonly string[];
-  readonly delivery_state: string;
   readonly sensitivity: string;
   readonly created_at: string;
   readonly observed_at: string;
@@ -58,9 +55,6 @@ export type ConversationTurn = {
   readonly retrieval_manifest_id?: string | null;
   readonly evidence_ids: readonly string[];
   readonly model_run_ids: readonly string[];
-  readonly policy_decision_ids: readonly string[];
-  readonly proposed_action_ids: readonly string[];
-  readonly executed_action_ids: readonly string[];
   readonly output_message_ids: readonly string[];
   readonly decision_record: JsonObject;
   readonly started_at: string;
@@ -98,15 +92,8 @@ export type ConversationTurnInspection = {
   readonly output_message: ConversationMessage;
 };
 
-export type ModelRouteStatus = {
-  readonly route_kind: "synthetic" | "openai_compatible" | "cli_agent" | "acp_agent";
-  readonly health: {
-    readonly state: "healthy" | "degraded" | "unavailable" | "unknown";
-  };
-};
-
-export type OwnerModelRouteReport = {
-  readonly routes: readonly ModelRouteStatus[];
+export type ConversationAvailability = {
+  readonly available: boolean;
 };
 
 export type SystemStatus = {
@@ -242,8 +229,8 @@ export class MelloaApi {
     };
   }
 
-  async modelRoutes(): Promise<OwnerModelRouteReport> {
-    return this.#request<OwnerModelRouteReport>("/api/v1/model/status");
+  async conversationAvailability(): Promise<ConversationAvailability> {
+    return this.#request<ConversationAvailability>("/api/v1/conversations/availability");
   }
 
   async listThreads(): Promise<readonly ConversationThread[]> {
@@ -253,7 +240,6 @@ export class MelloaApi {
   async createThread(input: {
     readonly title: string;
     readonly sensitivity: string;
-    readonly retention_policy: string;
   }): Promise<ConversationThread> {
     return this.#request<ConversationThread>("/api/v1/conversations", {
       method: "POST",

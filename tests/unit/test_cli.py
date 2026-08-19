@@ -108,7 +108,7 @@ def test_serve_builds_one_runtime_without_printing_owner_secret(
         guardian_status=tmp_path / "guardian-status.json",
         guardian_public_key=tmp_path / "guardian-public.pem",
         owner_credential_file=credential,
-        model_route_config=None,
+        model_config=None,
         database_dsn_file=None,
         host="127.0.0.1",
         port=8080,

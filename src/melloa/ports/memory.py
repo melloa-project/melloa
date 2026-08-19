@@ -66,14 +66,6 @@ class AssertionContentDeletionStoreResult:
     created: bool
 
 
-@dataclass(frozen=True)
-class AssertionContentRetentionInventory:
-    retained_objects: int
-    retained_bytes: int
-    deletion_receipts: int
-    oldest_retained_at: datetime | None
-
-
 class MemoryRepository(Protocol):
     def get_assertion(self, assertion_id: RecordId) -> Assertion:
         """Return the immutable assertion document."""
@@ -107,13 +99,6 @@ class MemoryRepository(Protocol):
         assertion_id: RecordId,
     ) -> tuple[AssertionStateChange, ...]:
         """Return append-only state history in version order."""
-
-    def assertion_content_retention_inventory(
-        self,
-        owner_id: RecordId,
-    ) -> AssertionContentRetentionInventory:
-        """Return aggregate owner-scoped assertion content retention counts."""
-
 
 class MemoryStore(MemoryRepository, Protocol):
     def delete_assertion_content(

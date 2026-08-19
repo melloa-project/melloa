@@ -25,13 +25,12 @@ The launcher builds Guardian independently, creates temporary credentials, start
 interface on loopback, and prints the exact URL and owner credential. Keep the terminal open and use
 the web URL on port `8787`; port `8000` is the private core API.
 
-The default response is deliberately labelled as a fixed no-network fixture. It does not interpret
-the message and must not be evaluated as Melli. Its only remaining purpose is deterministic testing
-of the bounded conversation path while the preview is simplified.
+Without a model configuration, the interface is available for inspecting the owner boundary and
+data controls, but conversation is unavailable. The preview does not manufacture a fallback answer.
 
 Press `Ctrl-C` to stop both services and remove the disposable state.
 
-## Talk through the on-device model route
+## Talk through the on-device model
 
 To exercise real model behavior in this baseline:
 
@@ -41,15 +40,15 @@ make preview PREVIEW_MODEL=ollama
 ```
 
 The launcher requires that exact local model and fails with a corrective message if Ollama is
-unavailable. Owner text and selected context go to the model on this device; the configured route
-does not disclose them to an external provider. The fallback remains visibly labelled as a fixture.
+unavailable. Owner text and selected context go only to this configured model on the device; they
+are not disclosed to an external provider.
 
-This route is a technical baseline, not a recommended quality ceiling or the target daily-use path.
+This model is a technical baseline, not a recommended quality ceiling or the target daily-use path.
 
 ## Current limitations
 
 - all state is removed when the disposable preview stops;
-- the default path contains no useful intelligence;
+- conversation is unavailable until an explicit model configuration passes preflight;
 - the interface exposes too much provider, audit, operations, and memory-record detail;
 - continuity, autonomous memory formation, goals, reflection, outcome learning, and calibrated
   initiative are not yet compelling owner experiences;

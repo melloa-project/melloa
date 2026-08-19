@@ -17,7 +17,6 @@ from melloa.domain.base import (
 )
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.events import Confidence
-from melloa.domain.retention import BackupExpiryDisclosure
 
 
 class AssertionStatus(StrEnum):
@@ -33,6 +32,28 @@ class AssertionStatus(StrEnum):
 class AssertionContentState(StrEnum):
     RETAINED = "retained"
     DELETED = "deleted"
+
+
+class BackupExpiryState(StrEnum):
+    CONFIGURED = "configured"
+    NOT_CONFIGURED = "not-configured"
+    UNKNOWN = "unknown"
+
+
+class BackupExpiryDisclosure(ContractModel):
+    state: BackupExpiryState
+    status_reason: QualifiedName
+    maximum_retention_seconds: Annotated[int, Field(ge=1)] | None = None
+    latest_snapshot_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def validate_backup(self) -> BackupExpiryDisclosure:
+        if self.state is BackupExpiryState.CONFIGURED:
+            if self.maximum_retention_seconds is None:
+                raise ValueError("configured backup expiry requires a maximum retention")
+        elif self.maximum_retention_seconds is not None or self.latest_snapshot_at is not None:
+            raise ValueError("unconfigured or unknown backup expiry cannot claim a horizon")
+        return self
 
 
 class ProvenanceRelation(StrEnum):

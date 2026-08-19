@@ -32,7 +32,6 @@ class EventSource(ContractModel):
 class EventProducer(ContractModel):
     component: QualifiedName
     version: SemanticVersion
-    model_route: QualifiedName | None = None
     model_id: str | None = Field(default=None, min_length=1, max_length=256)
     prompt_version: str | None = Field(default=None, min_length=1, max_length=128)
     configuration_version: str | None = Field(default=None, min_length=1, max_length=128)

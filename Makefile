@@ -7,13 +7,13 @@ PREVIEW_STATE_ARG := $(if $(strip $(PREVIEW_STATE_DIR)),--state-dir "$(PREVIEW_S
 PREVIEW_MODEL ?=
 PREVIEW_MODEL_ARG :=
 ifeq ($(strip $(PREVIEW_MODEL)),ollama)
-PREVIEW_MODEL_ARG := --model-route-config "$(CURDIR)/config/routes/ollama-qwen.example.json"
+PREVIEW_MODEL_ARG := --model-config "$(CURDIR)/config/model/ollama.example.json"
 endif
 
 ifneq ($(filter preview,$(MAKECMDGOALS)),)
 ifneq ($(strip $(PREVIEW_MODEL)),)
 ifneq ($(strip $(PREVIEW_MODEL)),ollama)
-$(error Unknown PREVIEW_MODEL '$(PREVIEW_MODEL)'. Supported value: ollama; leave it empty for the fixture-only preview)
+$(error Unknown PREVIEW_MODEL '$(PREVIEW_MODEL)'. Supported value: ollama; leave it empty for a preview without conversation)
 endif
 endif
 endif

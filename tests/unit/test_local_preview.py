@@ -14,7 +14,7 @@ from urllib.error import URLError
 import pytest
 
 from melloa.apps import local_preview
-from melloa.domain.models import ModelRouteHealthState
+from melloa.domain.models import ModelHealthState
 from melloa.release import CURRENT_RELEASE
 
 
@@ -66,27 +66,26 @@ def test_core_receives_only_guardian_read_paths(tmp_path: Path) -> None:
     assert "transition" not in command
 
 
-def test_core_receives_one_model_route_config_without_guardian_mutation_argv(
+def test_core_receives_one_model_config_without_guardian_mutation_argv(
     tmp_path: Path,
 ) -> None:
     paths = local_preview._paths(tmp_path)
-    route_path = tmp_path / "ollama-route.json"
+    model_path = tmp_path / "ollama-model.json"
 
-    command = local_preview.core_command(paths, 8123, route_path)
+    command = local_preview.core_command(paths, 8123, model_path)
 
-    assert command[-2:] == ("--model-route-config", str(route_path))
+    assert command[-2:] == ("--model-config", str(model_path))
     assert str(paths.guardian_private_key) not in command
     assert "transition" not in command
 
 
-def test_model_preflight_requires_device_route_and_exact_model(
+def test_model_preflight_requires_device_model_and_exact_model(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    route_path = tmp_path / "route.json"
-    route_path.write_text(
+    model_path = tmp_path / "model.json"
+    model_path.write_text(
         """{
-          "route_id": "model.local.ollama-qwen",
           "display_name": "Local Qwen via Ollama",
           "provider_id": "provider.ollama-local",
           "model_id": "qwen3:4b-instruct-2507-q4_K_M",
@@ -95,8 +94,8 @@ def test_model_preflight_requires_device_route_and_exact_model(
         }""",
         encoding="utf-8",
     )
-    resolved, config = local_preview.load_preview_model_route(route_path)
-    assert resolved == route_path.resolve()
+    resolved, config = local_preview.load_preview_model(model_path)
+    assert resolved == model_path.resolve()
 
     class MissingModelGateway:
         def __init__(self, supplied_config) -> None:
@@ -104,33 +103,33 @@ def test_model_preflight_requires_device_route_and_exact_model(
 
         def health(self):
             return SimpleNamespace(
-                state=ModelRouteHealthState.UNAVAILABLE,
+                state=ModelHealthState.UNAVAILABLE,
                 reason_code="model.configured_model_unavailable",
             )
 
     monkeypatch.setattr(local_preview, "OpenAICompatibleModelGateway", MissingModelGateway)
     with pytest.raises(local_preview.PreviewError) as failure:
-        local_preview.preflight_model_route(config)
+        local_preview.preflight_model(config)
     message = str(failure.value)
     assert "ollama serve" in message
     assert "ollama pull qwen3:4b-instruct-2507-q4_K_M" in message
     assert "response" not in message
 
-    private_route = config.model_dump(mode="json")
-    private_route["processing_location"] = "private_network"
-    route_path.write_text(json.dumps(private_route), encoding="utf-8")
-    with pytest.raises(local_preview.PreviewError, match="only a DEVICE"):
-        local_preview.load_preview_model_route(route_path)
+    private_model = config.model_dump(mode="json")
+    private_model["processing_location"] = "private_network"
+    model_path.write_text(json.dumps(private_model), encoding="utf-8")
+    with pytest.raises(local_preview.PreviewError, match="only an on-device"):
+        local_preview.load_preview_model(model_path)
 
 
-def test_run_preview_rejects_multiple_routes_and_preflights_before_state(
+def test_run_preview_rejects_multiple_models_and_preflights_before_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     args = argparse.Namespace(
         guardian_root=tmp_path / "guardian",
         state_dir=tmp_path / "state",
-        model_route_config=[tmp_path / "one.json", tmp_path / "two.json"],
+        model_config=[tmp_path / "one.json", tmp_path / "two.json"],
         core_port=8000,
         web_port=8787,
         startup_timeout=1.0,
@@ -138,19 +137,19 @@ def test_run_preview_rejects_multiple_routes_and_preflights_before_state(
     with pytest.raises(local_preview.PreviewError, match="at most one"):
         local_preview.run_preview(args)
 
-    _, config = local_preview.load_preview_model_route(
-        local_preview.ROOT / "config/routes/ollama-qwen.example.json"
+    _, config = local_preview.load_preview_model(
+        local_preview.ROOT / "config/model/ollama.example.json"
     )
     assert config.model_id == "qwen3:4b-instruct-2507-q4_K_M"
-    args.model_route_config = [tmp_path / "route.json"]
+    args.model_config = [tmp_path / "model.json"]
     monkeypatch.setattr(
         local_preview,
-        "load_preview_model_route",
+        "load_preview_model",
         lambda path: (path, config),
     )
     monkeypatch.setattr(
         local_preview,
-        "preflight_model_route",
+        "preflight_model",
         lambda _config: (_ for _ in ()).throw(local_preview.PreviewError("not ready")),
     )
     monkeypatch.setattr(
@@ -166,13 +165,13 @@ def test_run_preview_rejects_multiple_routes_and_preflights_before_state(
 def test_preview_contracts_distinguish_no_model_and_on_device_model() -> None:
     no_model_contract = local_preview.preview_contract(None)
     assert "no external model calls" in no_model_contract
-    assert "guided output is not Melli" in no_model_contract
+    assert "conversation unavailable" in no_model_contract
     no_model_action = local_preview.preview_next_action(None)
     assert "conversation is unavailable" in no_model_action
     assert "make preview" not in no_model_action
 
-    _, config = local_preview.load_preview_model_route(
-        local_preview.ROOT / "config/routes/ollama-qwen.example.json"
+    _, config = local_preview.load_preview_model(
+        local_preview.ROOT / "config/model/ollama.example.json"
     )
     model_contract = local_preview.preview_contract(config)
     assert "owner text and selected memory" in model_contract
@@ -585,7 +584,7 @@ def test_run_preview_reports_ready_contract_and_cleans_state(
         argparse.Namespace(
             guardian_root=guardian_root,
             state_dir=state,
-            model_route_config=[],
+            model_config=[],
             core_port=18000,
             web_port=18787,
             startup_timeout=1.0,
@@ -596,7 +595,7 @@ def test_run_preview_reports_ready_contract_and_cleans_state(
     assert result == 0
     assert "Melloa is ready" in output
     assert f"Release:           {CURRENT_RELEASE.release_display}" in output
-    assert "guided output is not Melli" in output
+    assert "conversation unavailable" in output
     assert "Disposable preview state removed" in output
     assert not state.exists()
     assert [item[0] for item in started] == ["Melloa core", "Owner Console"]
@@ -619,7 +618,7 @@ def test_run_preview_has_corrective_prerequisite_errors(
     args = argparse.Namespace(
         guardian_root=guardian_root,
         state_dir=None,
-        model_route_config=[],
+        model_config=[],
         core_port=8000,
         web_port=8787,
         startup_timeout=1.0,

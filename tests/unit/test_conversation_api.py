@@ -19,7 +19,7 @@ from melloa.domain.base import JsonObject
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import ConversationThread
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
-from melloa.domain.models import ModelRouteRequest
+from melloa.domain.models import ModelRequest
 from tests.conftest import record_id
 
 _BOOTSTRAP_TOKEN = "owner-conversation-test-credential-0001"
@@ -57,7 +57,8 @@ def _client(
     owner_number: int = 1,
     guardian_mode: GuardianMode = GuardianMode.NORMAL,
     seed_thread: bool = False,
-    model_response: JsonObject | Callable[[ModelRouteRequest], JsonObject] | None = None,
+    expose_model_health: bool = True,
+    model_response: JsonObject | Callable[[ModelRequest], JsonObject] | None = None,
 ) -> TestClient:
     owner_id = record_id("owner", 1)
     ids = _ids()
@@ -70,21 +71,21 @@ def _client(
                 intelligence_id=record_id("intelligence", 1),
                 title="Private owner thread",
                 sensitivity=Sensitivity.PERSONAL,
-                retention_policy="retention.owner-conversation",
                 created_at=fixed_time,
                 updated_at=fixed_time,
             )
         )
     guardian = _guardian(fixed_time, guardian_mode)
+    model = FakeModelGateway(
+        {"text": "I have the context."} if model_response is None else model_response,
+        clock=lambda: fixed_time,
+        id_factory=ids,
+    )
     service = ConversationService(
         owner_id=owner_id,
         intelligence_id=record_id("intelligence", 1),
         store=store,
-        model_gateway=FakeModelGateway(
-            {"text": "I have the context."} if model_response is None else model_response,
-            clock=lambda: fixed_time,
-            id_factory=ids,
-        ),
+        model_gateway=model,
         retriever=PolicyConstrainedRetriever(
             InMemoryMemoryRepository(),
             clock=lambda: fixed_time,
@@ -100,7 +101,12 @@ def _client(
         clock=lambda: fixed_time,
     )
     return TestClient(
-        create_app(guardian, sessions, service),
+        create_app(
+            guardian,
+            sessions,
+            service,
+            model_health=model.health if expose_model_health else None,
+        ),
         base_url="https://testserver",
     )
 
@@ -114,6 +120,23 @@ def _login(client: TestClient) -> dict[str, str]:
     return {"X-Melloa-CSRF": response.json()["csrf_token"]}
 
 
+def test_conversation_availability_is_owner_only_and_reflects_model_health(
+    fixed_time,
+) -> None:
+    with _client(fixed_time) as available_client:
+        assert available_client.get("/api/v1/conversations/availability").status_code == 401
+        _login(available_client)
+        assert available_client.get("/api/v1/conversations/availability").json() == {
+            "available": True
+        }
+
+    with _client(fixed_time, expose_model_health=False) as unavailable_client:
+        _login(unavailable_client)
+        assert unavailable_client.get("/api/v1/conversations/availability").json() == {
+            "available": False
+        }
+
+
 def test_owner_conversation_round_trip_uses_one_transcript_read(fixed_time) -> None:
     client = _client(fixed_time)
     assert client.get("/api/v1/conversations").status_code == 401
@@ -124,7 +147,6 @@ def test_owner_conversation_round_trip_uses_one_transcript_read(fixed_time) -> N
             json={
                 "title": "Context that should persist",
                 "sensitivity": "personal",
-                "retention_policy": "retention.owner-conversation",
             },
         ).status_code
         == 403
@@ -135,7 +157,6 @@ def test_owner_conversation_round_trip_uses_one_transcript_read(fixed_time) -> N
         json={
             "title": "Context that should persist",
             "sensitivity": "personal",
-            "retention_policy": "retention.owner-conversation",
         },
     )
     assert created.status_code == 201
@@ -187,7 +208,6 @@ def test_guardian_stop_blocks_readiness_and_conversation_writes(fixed_time) -> N
         json={
             "title": "Blocked while stopped",
             "sensitivity": "personal",
-            "retention_policy": "retention.owner-conversation",
         },
     )
     assert created.status_code == 503
@@ -198,7 +218,7 @@ def test_blocked_model_invocation_does_not_block_core_liveness(fixed_time) -> No
     model_started = Event()
     release_model = Event()
 
-    def blocking_response(_request: ModelRouteRequest) -> JsonObject:
+    def blocking_response(_request: ModelRequest) -> JsonObject:
         model_started.set()
         release_model.wait(timeout=5)
         return {"text": "The blocked model completed."}
@@ -211,7 +231,6 @@ def test_blocked_model_invocation_does_not_block_core_liveness(fixed_time) -> No
             json={
                 "title": "Responsiveness check",
                 "sensitivity": "personal",
-                "retention_policy": "retention.owner-conversation",
             },
         )
         assert created.status_code == 201

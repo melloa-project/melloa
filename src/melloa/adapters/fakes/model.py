@@ -8,9 +8,9 @@ from datetime import datetime
 from melloa.domain.base import JsonObject, new_record_id, utc_now
 from melloa.domain.models import (
     ModelGatewayHealth,
+    ModelHealthState,
+    ModelRequest,
     ModelResult,
-    ModelRouteHealthState,
-    ModelRouteRequest,
     ProcessingLocation,
 )
 
@@ -18,25 +18,29 @@ from melloa.domain.models import (
 class FakeModelGateway:
     def __init__(
         self,
-        response: JsonObject | Callable[[ModelRouteRequest], JsonObject],
+        response: JsonObject | Callable[[ModelRequest], JsonObject],
         *,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
-        route_id: str = "model.fake.deterministic",
         provider_id: str = "provider.synthetic",
         model_id: str = "deterministic-fixture-v1",
         external_disclosure: bool = False,
+        processing_location: ProcessingLocation | None = None,
     ) -> None:
         self._response = response
         self._clock = clock
         self._id_factory = id_factory
-        self._route_id = route_id
         self._provider_id = provider_id
         self._model_id = model_id
         self._external_disclosure = external_disclosure
-        self.requests: list[ModelRouteRequest] = []
+        self._processing_location = processing_location or (
+            ProcessingLocation.APPROVED_PROVIDER
+            if external_disclosure
+            else ProcessingLocation.DEVICE
+        )
+        self.requests: list[ModelRequest] = []
 
-    def invoke(self, request: ModelRouteRequest) -> ModelResult:
+    def invoke(self, request: ModelRequest) -> ModelResult:
         if ProcessingLocation.DEVICE not in request.allowed_processing_locations:
             raise ValueError("the deterministic fake requires device processing eligibility")
         self.requests.append(request)
@@ -45,9 +49,9 @@ class FakeModelGateway:
         return ModelResult(
             result_id=self._id_factory("model_result"),
             request_id=request.request_id,
-            route_id=self._route_id,
             provider_id=self._provider_id,
             model_id=self._model_id,
+            processing_location=self._processing_location,
             output=output,
             input_tokens=0,
             output_tokens=0,
@@ -59,7 +63,7 @@ class FakeModelGateway:
 
     def health(self) -> ModelGatewayHealth:
         return ModelGatewayHealth(
-            state=ModelRouteHealthState.HEALTHY,
+            state=ModelHealthState.HEALTHY,
             checked_at=self._clock(),
             latency_ms=0,
             reason_code="model.synthetic_ready",

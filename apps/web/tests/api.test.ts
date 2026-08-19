@@ -34,7 +34,6 @@ describe("MelloaApi", () => {
     await api.createThread({
       title: "Private conversation",
       sensitivity: "personal",
-      retention_policy: "retention.owner-conversation",
     });
 
     expect(api.hasMutationProof).toBe(true);
@@ -100,15 +99,15 @@ describe("MelloaApi", () => {
     const requested: string[] = [];
     const api = new MelloaApi(async (input) => {
       requested.push(String(input));
-      return jsonResponse({ routes: [], coverage: [], sessions: [] });
+      return jsonResponse({ available: false, coverage: [], sessions: [] });
     });
 
-    await api.modelRoutes();
+    await api.conversationAvailability();
     await api.exportReadiness();
     await api.listThreads();
 
     expect(requested).toEqual([
-      "/api/v1/model/status",
+      "/api/v1/conversations/availability",
       "/api/v1/data-export",
       "/api/v1/conversations",
     ]);

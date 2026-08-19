@@ -1,4 +1,4 @@
-"""OpenAI-compatible local/private model route with bounded, redacted behavior."""
+"""One bounded OpenAI-compatible conversation model."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from pathlib import Path
 from time import monotonic
-from typing import Annotated, Literal
+from typing import Annotated
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -19,12 +19,12 @@ from melloa.domain.base import JsonObject, QualifiedName, new_record_id, utc_now
 from melloa.domain.classification import Sensitivity
 from melloa.domain.models import (
     ModelGatewayHealth,
+    ModelHealthState,
+    ModelRequest,
     ModelResult,
-    ModelRouteHealthState,
-    ModelRouteRequest,
     ProcessingLocation,
-    RegisteredModelRoute,
 )
+from melloa.ports.model import ModelInvocationError
 
 _MAX_CONFIG_BYTES = 65_536
 _MAX_RESPONSE_BYTES = 2_000_000
@@ -41,33 +41,26 @@ Never invent a citation ID. If no supplied memory is useful, return an empty cit
 array."""
 
 
-class OpenAICompatibleRouteConfig(BaseModel):
+class OpenAICompatibleModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    contract_version: Literal["1.0.0"] = "1.0.0"
-    route_id: QualifiedName
     display_name: str = Field(min_length=1, max_length=128)
     provider_id: QualifiedName
     model_id: str = Field(min_length=1, max_length=256)
     base_url: str = Field(min_length=1, max_length=2_048)
     processing_location: ProcessingLocation = ProcessingLocation.DEVICE
     allowed_sensitivities: frozenset[Sensitivity] = frozenset(Sensitivity)
-    provider_retention_policies: frozenset[QualifiedName] = frozenset(
-        {"retention.no-training"}
-    )
     max_input_tokens: Annotated[int, Field(gt=0, le=1_000_000)] = 16_384
     max_output_tokens: Annotated[int, Field(gt=0, le=1_000_000)] = 2_048
     estimated_max_cost_gbp: Annotated[float, Field(ge=0.0)] = 0.0
     input_cost_gbp_per_million_tokens: Annotated[float, Field(ge=0.0)] = 0.0
     output_cost_gbp_per_million_tokens: Annotated[float, Field(ge=0.0)] = 0.0
-    reliability: Annotated[float, Field(ge=0.0, le=1.0)] = 0.95
-    priority: Annotated[int, Field(ge=0)] = 0
     timeout_ms: Annotated[int, Field(gt=0, le=3_600_000)] = 30_000
     health_timeout_ms: Annotated[int, Field(gt=0, le=60_000)] = 2_000
     authorization_token_file: Path | None = None
 
     @model_validator(mode="after")
-    def validate_endpoint(self) -> OpenAICompatibleRouteConfig:
+    def validate_endpoint(self) -> OpenAICompatibleModelConfig:
         parts = urlsplit(self.base_url)
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise ValueError("model base URL must use HTTP or HTTPS with a host")
@@ -75,50 +68,31 @@ class OpenAICompatibleRouteConfig(BaseModel):
             raise ValueError("model base URL cannot contain credentials, query, or fragment")
         if self.processing_location is ProcessingLocation.APPROVED_PROVIDER:
             if parts.scheme != "https":
-                raise ValueError("approved-provider routes require HTTPS")
+                raise ValueError("approved external models require HTTPS")
         elif not _is_private_endpoint(parts.hostname):
-            raise ValueError("local/private routes require localhost or a private literal IP")
+            raise ValueError("local/private models require localhost or a private literal IP")
         if self.processing_location is ProcessingLocation.DEVICE and parts.hostname not in {
             "localhost",
             "127.0.0.1",
             "::1",
         }:
-            raise ValueError("device routes must use a loopback model endpoint")
+            raise ValueError("on-device models must use a loopback endpoint")
         return self
 
-    def registered_route(self) -> RegisteredModelRoute:
-        return RegisteredModelRoute(
-            route_id=self.route_id,
-            provider_id=self.provider_id,
-            model_id=self.model_id,
-            processing_location=self.processing_location,
-            supported_modalities=frozenset({"text"}),
-            quality_profiles=frozenset({"quality.conversation"}),
-            allowed_sensitivities=self.allowed_sensitivities,
-            provider_retention_policies=self.provider_retention_policies,
-            max_input_tokens=self.max_input_tokens,
-            max_output_tokens=self.max_output_tokens,
-            estimated_max_cost_gbp=self.estimated_max_cost_gbp,
-            reliability=self.reliability,
-            priority=self.priority,
-            external_disclosure=self.processing_location
-            is ProcessingLocation.APPROVED_PROVIDER,
-        )
 
-
-def load_openai_compatible_route_config(path: Path) -> OpenAICompatibleRouteConfig:
+def load_openai_compatible_model_config(path: Path) -> OpenAICompatibleModelConfig:
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode):
-        raise ValueError("model route config must be a regular file")
+        raise ValueError("model config must be a regular file")
     if metadata.st_size > _MAX_CONFIG_BYTES:
-        raise ValueError("model route config is too large")
-    return OpenAICompatibleRouteConfig.model_validate_json(path.read_bytes())
+        raise ValueError("model config is too large")
+    return OpenAICompatibleModelConfig.model_validate_json(path.read_bytes())
 
 
 class OpenAICompatibleModelGateway:
     def __init__(
         self,
-        config: OpenAICompatibleRouteConfig,
+        config: OpenAICompatibleModelConfig,
         *,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
@@ -129,33 +103,46 @@ class OpenAICompatibleModelGateway:
         self._id_factory = id_factory
         self._transport = transport
 
-    def invoke(self, request: ModelRouteRequest) -> ModelResult:
+    def invoke(self, request: ModelRequest) -> ModelResult:
         started_at = self._clock()
+        self._validate_request(request)
         timeout_seconds = min(
             self.config.timeout_ms,
             request.latency_deadline_ms,
         ) / 1_000
-        response = self._request(
-            "POST",
-            "chat/completions",
-            timeout_seconds=timeout_seconds,
-            payload=self._request_payload(request),
-        )
-        document = self._response_document(response)
-        output = _conversation_output(document)
-        usage = document.get("usage")
-        input_tokens = _usage_count(usage, "prompt_tokens", "input_tokens")
-        output_tokens = _usage_count(usage, "completion_tokens", "output_tokens")
-        cost_gbp = (
-            input_tokens * self.config.input_cost_gbp_per_million_tokens
-            + output_tokens * self.config.output_cost_gbp_per_million_tokens
-        ) / 1_000_000
+        try:
+            response = self._request(
+                "POST",
+                "chat/completions",
+                timeout_seconds=timeout_seconds,
+                payload=self._request_payload(request),
+            )
+            document = self._response_document(response)
+            output = _conversation_output(document)
+            usage = document.get("usage")
+            input_tokens = _usage_count(usage, "prompt_tokens", "input_tokens")
+            output_tokens = _usage_count(usage, "completion_tokens", "output_tokens")
+            cost_gbp = (
+                input_tokens * self.config.input_cost_gbp_per_million_tokens
+                + output_tokens * self.config.output_cost_gbp_per_million_tokens
+            ) / 1_000_000
+            if input_tokens > request.max_input_tokens:
+                raise ValueError("model exceeded the input-token ceiling")
+            if output_tokens > request.max_output_tokens:
+                raise ValueError("model exceeded the output-token ceiling")
+            if cost_gbp > request.cost_ceiling_gbp:
+                raise ValueError("model exceeded the cost ceiling")
+        except Exception as error:
+            raise ModelInvocationError(
+                external_disclosure=self.config.processing_location
+                is ProcessingLocation.APPROVED_PROVIDER
+            ) from error
         return ModelResult(
             result_id=self._id_factory("model_result"),
             request_id=request.request_id,
-            route_id=self.config.route_id,
             provider_id=self.config.provider_id,
             model_id=self.config.model_id,
+            processing_location=self.config.processing_location,
             output=output,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
@@ -165,6 +152,18 @@ class OpenAICompatibleModelGateway:
             external_disclosure=self.config.processing_location
             is ProcessingLocation.APPROVED_PROVIDER,
         )
+
+    def _validate_request(self, request: ModelRequest) -> None:
+        if self.config.processing_location not in request.allowed_processing_locations:
+            raise ValueError("model location is not allowed for this message")
+        if request.sensitivity not in self.config.allowed_sensitivities:
+            raise ValueError("model is not approved for this message sensitivity")
+        if request.max_input_tokens > self.config.max_input_tokens:
+            raise ValueError("requested input ceiling exceeds the configured model")
+        if request.max_output_tokens > self.config.max_output_tokens:
+            raise ValueError("requested output ceiling exceeds the configured model")
+        if self.config.estimated_max_cost_gbp > request.cost_ceiling_gbp:
+            raise ValueError("configured model cost exceeds the conversation ceiling")
 
     def health(self) -> ModelGatewayHealth:
         checked_at = self._clock()
@@ -178,7 +177,7 @@ class OpenAICompatibleModelGateway:
             document = self._response_document(response)
         except Exception:
             return ModelGatewayHealth(
-                state=ModelRouteHealthState.UNAVAILABLE,
+                state=ModelHealthState.UNAVAILABLE,
                 checked_at=checked_at,
                 latency_ms=max(0, round((monotonic() - started) * 1_000)),
                 reason_code="model.endpoint_unavailable",
@@ -195,26 +194,26 @@ class OpenAICompatibleModelGateway:
             )
         ):
             return ModelGatewayHealth(
-                state=ModelRouteHealthState.UNAVAILABLE,
+                state=ModelHealthState.UNAVAILABLE,
                 checked_at=checked_at,
                 latency_ms=max(0, round((monotonic() - started) * 1_000)),
                 reason_code="model.models_response_invalid",
             )
         if not any(model["id"] == self.config.model_id for model in models):
             return ModelGatewayHealth(
-                state=ModelRouteHealthState.UNAVAILABLE,
+                state=ModelHealthState.UNAVAILABLE,
                 checked_at=checked_at,
                 latency_ms=max(0, round((monotonic() - started) * 1_000)),
                 reason_code="model.configured_model_unavailable",
             )
         return ModelGatewayHealth(
-            state=ModelRouteHealthState.HEALTHY,
+            state=ModelHealthState.HEALTHY,
             checked_at=checked_at,
             latency_ms=max(0, round((monotonic() - started) * 1_000)),
             reason_code="model.endpoint_ready",
         )
 
-    def _request_payload(self, request: ModelRouteRequest) -> JsonObject:
+    def _request_payload(self, request: ModelRequest) -> JsonObject:
         owner_text = request.input.get("text")
         citations = request.input.get("memory_citations")
         if not isinstance(owner_text, str) or not isinstance(citations, list):
@@ -345,7 +344,7 @@ def _is_private_endpoint(host: str) -> bool:
     return False
 
 
-def normalized_base_url(config: OpenAICompatibleRouteConfig) -> str:
+def normalized_base_url(config: OpenAICompatibleModelConfig) -> str:
     """Return the endpoint without credentials, query, or fragment for diagnostics tests."""
 
     parts = urlsplit(config.base_url)

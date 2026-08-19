@@ -188,12 +188,8 @@ export function ConversationPage() {
   const checkModel = useCallback(async () => {
     setModelAvailability("checking");
     try {
-      const report = await api.modelRoutes();
-      const ready = report.routes.some((route) => (
-        route.route_kind !== "synthetic"
-        && (route.health.state === "healthy" || route.health.state === "degraded")
-      ));
-      setModelAvailability(ready ? "ready" : "unavailable");
+      const availability = await api.conversationAvailability();
+      setModelAvailability(availability.available ? "ready" : "unavailable");
     } catch {
       setModelAvailability("unavailable");
     }
@@ -366,7 +362,6 @@ export function ConversationPage() {
       const created = await api.createThread({
         title,
         sensitivity: "personal",
-        retention_policy: "retention.owner-conversation",
       });
       await loadThreads();
       if (
@@ -886,7 +881,6 @@ function optimisticOwnerMessage(
     source_client: "owner-console",
     parts: [{ kind: "text", text }],
     citation_ids: [],
-    delivery_state: "recorded",
     sensitivity: "personal",
     created_at: now,
     observed_at: now,

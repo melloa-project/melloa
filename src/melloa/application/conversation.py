@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 
 from pydantic import ValidationError
 
-from melloa.application.routing import ModelRoutingError
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import (
     QualifiedName,
@@ -35,7 +34,6 @@ from melloa.domain.conversation import (
     ConversationThread,
     ConversationTurn,
     ConversationTurnInspection,
-    DeliveryState,
     MessageKind,
     MessagePart,
     processing_model_result,
@@ -43,9 +41,8 @@ from melloa.domain.conversation import (
 from melloa.domain.guardian import GuardianMode
 from melloa.domain.models import (
     ConversationModelOutput,
+    ModelRequest,
     ModelResult,
-    ModelRouteAttempt,
-    ModelRouteRequest,
     ProcessingLocation,
 )
 from melloa.domain.retrieval import RetrievalManifest
@@ -58,7 +55,7 @@ from melloa.ports.conversation import (
 )
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import MemoryRetriever
-from melloa.ports.model import ModelGateway
+from melloa.ports.model import ModelGateway, ModelInvocationError
 from melloa.release import CURRENT_RELEASE
 
 
@@ -84,28 +81,20 @@ class ConversationReply:
 
 
 @dataclass(frozen=True)
-class ConversationRoutePolicy:
-    minimum_quality_profile: QualifiedName = "quality.conversation-synthetic"
+class ConversationModelLimits:
     latency_deadline_ms: int = 30_000
     max_input_tokens: int = 4_096
     max_output_tokens: int = 1_024
     cost_ceiling_gbp: float = 0.0
-    provider_retention_policy: QualifiedName = "retention.no-training"
-    minimum_reliability: float = 0.0
-    fallback_route_ids: tuple[QualifiedName, ...] = ()
     prompt_version: str = "conversation-response-v1"
 
     def __post_init__(self) -> None:
         if not 1 <= self.latency_deadline_ms <= 3_600_000:
-            raise ValueError("conversation route deadline must be between 1 ms and 1 hour")
+            raise ValueError("conversation model deadline must be between 1 ms and 1 hour")
         if self.max_input_tokens <= 0 or self.max_output_tokens <= 0:
-            raise ValueError("conversation route token ceilings must be positive")
+            raise ValueError("conversation model token ceilings must be positive")
         if self.cost_ceiling_gbp < 0:
-            raise ValueError("conversation route cost ceiling cannot be negative")
-        if not 0.0 <= self.minimum_reliability <= 1.0:
-            raise ValueError("conversation route reliability must be between zero and one")
-        if len(set(self.fallback_route_ids)) != len(self.fallback_route_ids):
-            raise ValueError("conversation fallback route IDs must be unique")
+            raise ValueError("conversation model cost ceiling cannot be negative")
 
 
 class ConversationService:
@@ -115,13 +104,13 @@ class ConversationService:
         owner_id: RecordId,
         intelligence_id: RecordId,
         store: ConversationStore,
-        model_gateway: ModelGateway,
+        model_gateway: ModelGateway | None,
         retriever: MemoryRetriever,
         guardian_reader: GuardianStatusReader,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
         runtime_version: str = CURRENT_RELEASE.runtime_identifier,
-        route_policy: ConversationRoutePolicy | None = None,
+        model_limits: ConversationModelLimits | None = None,
         max_processing_attempts: int = 3,
         processing_lease: timedelta = timedelta(seconds=45),
         retry_base: timedelta = timedelta(seconds=1),
@@ -142,7 +131,7 @@ class ConversationService:
         self._clock = clock
         self._id_factory = id_factory
         self._runtime_version = runtime_version
-        self._route_policy = route_policy or ConversationRoutePolicy()
+        self._model_limits = model_limits or ConversationModelLimits()
         self._max_processing_attempts = max_processing_attempts
         self._processing_lease = processing_lease
         self._retry_base = retry_base
@@ -154,7 +143,6 @@ class ConversationService:
         *,
         title: str,
         sensitivity: Sensitivity,
-        retention_policy: QualifiedName,
     ) -> ConversationThread:
         self._require_owner(principal)
         self._require_write_mode()
@@ -165,7 +153,6 @@ class ConversationService:
             intelligence_id=self._intelligence_id,
             title=title,
             sensitivity=sensitivity,
-            retention_policy=retention_policy,
             created_at=now,
             updated_at=now,
         )
@@ -237,7 +224,6 @@ class ConversationService:
             author_principal_id=principal.owner_id,
             source_client="client.owner-console",
             parts=(MessagePart(kind=MessageKind.TEXT, text=text),),
-            delivery_state=DeliveryState.DELIVERED,
             sensitivity=thread.sensitivity,
             created_at=now,
             observed_at=now,
@@ -399,6 +385,12 @@ class ConversationService:
                 started_at=attempt_started_at,
                 error_code="guardian.conversation_write_blocked",
             )
+        if self._model_gateway is None:
+            return self._record_processing_failure(
+                claim,
+                started_at=attempt_started_at,
+                error_code="model.not_configured",
+            )
 
         allowed_sensitivities = sensitivity_scope(thread.sensitivity)
         try:
@@ -421,30 +413,30 @@ class ConversationService:
                 error_code="retrieval.failed",
             )
 
-        route_sensitivity = most_restrictive_sensitivity(
+        message_sensitivity = most_restrictive_sensitivity(
             (
                 thread.sensitivity,
                 *(citation.sensitivity for citation in retrieval_manifest.citations),
             )
         )
-        route_request = self._route_request(
+        model_request = self._model_request(
             thread,
             inbound,
             text,
             guardian_mode,
-            route_sensitivity,
+            message_sensitivity,
             retrieval_manifest,
         )
         try:
-            result = self._model_gateway.invoke(route_request)
-        except ModelRoutingError as error:
+            result = self._model_gateway.invoke(model_request)
+        except ModelInvocationError as error:
             return self._record_processing_failure(
                 claim,
                 started_at=attempt_started_at,
-                error_code=error.reason_code,
+                error_code="model.gateway_failed",
                 retrieval_manifest=retrieval_manifest,
-                model_route_attempts=error.attempts,
-                request_id=route_request.request_id,
+                request_id=model_request.request_id,
+                external_disclosure=error.external_disclosure,
             )
         except Exception:
             return self._record_processing_failure(
@@ -452,7 +444,7 @@ class ConversationService:
                 started_at=attempt_started_at,
                 error_code="model.gateway_failed",
                 retrieval_manifest=retrieval_manifest,
-                request_id=route_request.request_id,
+                request_id=model_request.request_id,
             )
 
         try:
@@ -467,7 +459,7 @@ class ConversationService:
                 error_code="model.disclosure_invalid",
                 retrieval_manifest=retrieval_manifest,
                 model_result=result,
-                request_id=route_request.request_id,
+                request_id=model_request.request_id,
             )
         try:
             output = ConversationModelOutput.model_validate_json(
@@ -480,7 +472,7 @@ class ConversationService:
                 error_code="model.invalid_output",
                 retrieval_manifest=disclosed_manifest,
                 model_result=result,
-                request_id=route_request.request_id,
+                request_id=model_request.request_id,
             )
         citations_by_id = {
             citation.citation_id: citation for citation in disclosed_manifest.citations
@@ -492,7 +484,7 @@ class ConversationService:
                 error_code="model.invalid_citations",
                 retrieval_manifest=disclosed_manifest,
                 model_result=result,
-                request_id=route_request.request_id,
+                request_id=model_request.request_id,
             )
         evidence_ids = tuple(
             citations_by_id[citation_id].assertion_id for citation_id in output.citation_ids
@@ -510,8 +502,7 @@ class ConversationService:
             parts=(MessagePart(kind=MessageKind.TEXT, text=output.text),),
             reply_to_message_id=inbound.message_id,
             citation_ids=output.citation_ids,
-            delivery_state=DeliveryState.DELIVERED,
-            sensitivity=route_sensitivity,
+            sensitivity=message_sensitivity,
             created_at=completed_at,
             observed_at=completed_at,
         )
@@ -528,9 +519,7 @@ class ConversationService:
                 "assumptions": [],
                 "uncertainty": "Model output remains untrusted until schema validation.",
                 "alternatives": ["Persist the owner message without a generated reply."],
-                "selected_plan": (
-                    "Invoke an eligible provider-neutral route and persist the result."
-                ),
+                "selected_plan": "Invoke the configured conversation model and persist the result.",
                 "limitations": (
                     []
                     if disclosed_manifest.citations
@@ -544,10 +533,9 @@ class ConversationService:
                 "evidence_ids": list(evidence_ids),
                 "model_id": result.model_id,
                 "provider_id": result.provider_id,
-                "route_id": result.route_id,
-                "prompt_version": route_request.prompt_version,
+                "prompt_version": model_request.prompt_version,
                 "runtime_version": self._runtime_version,
-                "route_sensitivity": route_request.sensitivity.value,
+                "message_sensitivity": model_request.sensitivity.value,
                 "cost_gbp": result.cost_gbp,
                 "external_disclosure": result.external_disclosure,
             },
@@ -567,23 +555,23 @@ class ConversationService:
             outcome=ConversationProcessingOutcome.SUCCEEDED,
             retrieval_manifest=disclosed_manifest,
             model_result=result,
-            request_id=route_request.request_id,
+            request_id=model_request.request_id,
         )
         return self._store.complete_reply_work(claim, completed, attempt)
 
-    def _route_request(
+    def _model_request(
         self,
         thread: ConversationThread,
         message: ConversationMessage,
         text: str,
         guardian_mode: GuardianMode,
-        route_sensitivity: Sensitivity,
+        message_sensitivity: Sensitivity,
         retrieval_manifest: RetrievalManifest,
-    ) -> ModelRouteRequest:
+    ) -> ModelRequest:
         locations = frozenset({ProcessingLocation.DEVICE})
         if (
             guardian_mode is GuardianMode.NORMAL
-            and route_sensitivity is not Sensitivity.DEVICE_ONLY
+            and message_sensitivity is not Sensitivity.DEVICE_ONLY
         ):
             locations = frozenset(
                 {
@@ -592,22 +580,15 @@ class ConversationService:
                     ProcessingLocation.APPROVED_PROVIDER,
                 }
             )
-        return ModelRouteRequest(
+        return ModelRequest(
             request_id=self._id_factory("request"),
-            task_type="conversation.owner-reply",
-            required_modalities=("text",),
-            minimum_quality_profile=self._route_policy.minimum_quality_profile,
-            sensitivity=route_sensitivity,
+            sensitivity=message_sensitivity,
             allowed_processing_locations=locations,
-            latency_deadline_ms=self._route_policy.latency_deadline_ms,
-            max_input_tokens=self._route_policy.max_input_tokens,
-            max_output_tokens=self._route_policy.max_output_tokens,
-            cost_ceiling_gbp=self._route_policy.cost_ceiling_gbp,
-            provider_retention_policy=self._route_policy.provider_retention_policy,
-            minimum_reliability=self._route_policy.minimum_reliability,
-            fallback_route_ids=self._route_policy.fallback_route_ids,
-            output_schema_id="schema.conversation-response.v1",
-            prompt_version=self._route_policy.prompt_version,
+            latency_deadline_ms=self._model_limits.latency_deadline_ms,
+            max_input_tokens=self._model_limits.max_input_tokens,
+            max_output_tokens=self._model_limits.max_output_tokens,
+            cost_ceiling_gbp=self._model_limits.cost_ceiling_gbp,
+            prompt_version=self._model_limits.prompt_version,
             input={
                 "thread_id": thread.thread_id,
                 "message_id": message.message_id,
@@ -660,24 +641,23 @@ class ConversationService:
         error_code: QualifiedName,
         retrieval_manifest: RetrievalManifest | None = None,
         model_result: ModelResult | None = None,
-        model_route_attempts: tuple[ModelRouteAttempt, ...] = (),
         request_id: RecordId | None = None,
+        external_disclosure: bool | None = None,
     ) -> ConversationProcessingStatus:
         completed_at = max(self._clock(), started_at)
         if model_result is not None:
             request_id = model_result.request_id
-            model_route_attempts = model_result.attempts
-        external_disclosure = (
+        disclosed = (
             model_result.external_disclosure
             if model_result is not None
-            else any(attempt.external_disclosure for attempt in model_route_attempts)
+            else bool(external_disclosure)
         )
         persisted_manifest = retrieval_manifest
         if retrieval_manifest is not None:
             try:
                 persisted_manifest = self._manifest_with_disclosure(
                     retrieval_manifest,
-                    external_disclosure,
+                    disclosed,
                 )
             except InvalidModelOutputError:
                 error_code = "model.disclosure_invalid"
@@ -699,9 +679,8 @@ class ConversationService:
             retry_at=retry_at,
             retrieval_manifest=persisted_manifest,
             model_result=model_result,
-            model_route_attempts=model_route_attempts,
             request_id=request_id,
-            external_disclosure=external_disclosure,
+            external_disclosure=disclosed,
         )
         return self._store.record_reply_failure(
             claim,
@@ -719,7 +698,6 @@ class ConversationService:
         outcome: ConversationProcessingOutcome,
         retrieval_manifest: RetrievalManifest | None = None,
         model_result: ModelResult | None = None,
-        model_route_attempts: tuple[ModelRouteAttempt, ...] = (),
         request_id: RecordId | None = None,
         error_code: QualifiedName | None = None,
         retry_at: datetime | None = None,
@@ -727,11 +705,10 @@ class ConversationService:
     ) -> ConversationProcessingAttempt:
         if model_result is not None:
             request_id = model_result.request_id
-            model_route_attempts = model_result.attempts
         disclosed = (
             model_result.external_disclosure
             if model_result is not None
-            else any(attempt.external_disclosure for attempt in model_route_attempts)
+            else bool(external_disclosure)
         )
         if external_disclosure is not None and external_disclosure != disclosed:
             raise ConversationConflictError("processing disclosure metadata conflicts")
@@ -757,7 +734,6 @@ class ConversationService:
             model_result_summary=(
                 None if model_result is None else processing_model_result(model_result)
             ),
-            model_route_attempts=model_route_attempts,
             disclosed_memory_ids=disclosed_memory_ids,
             external_disclosure=disclosed,
         )
@@ -772,26 +748,9 @@ class ConversationService:
 
     @staticmethod
     def _message_text(message: ConversationMessage) -> str:
-        text_parts = tuple(part for part in message.parts if part.kind is MessageKind.TEXT)
-        attachment_count = sum(
-            part.kind is MessageKind.ATTACHMENT for part in message.parts
-        )
-        if len(text_parts) > 1 or len(text_parts) + attachment_count != len(message.parts):
-            raise ConversationConflictError(
-                "owner reply work requires text and quarantined attachment parts only"
-            )
-        if text_parts:
-            text = text_parts[0].text
-            if text is None:
-                raise ConversationConflictError("canonical text part has no text")
-            return text
-        if attachment_count:
-            noun = "attachment" if attachment_count == 1 else "attachments"
-            return (
-                f"Owner sent {attachment_count} quarantined {noun}. "
-                "Attachment content remains unavailable to the conversation model."
-            )
-        raise ConversationConflictError("owner reply work has no usable canonical content")
+        if len(message.parts) != 1 or message.parts[0].kind is not MessageKind.TEXT:
+            raise ConversationConflictError("owner reply work requires one text part")
+        return message.parts[0].text
 
     def _require_same_submission(self, inbound: ConversationMessage, text: str) -> None:
         if self._message_text(inbound) != text:

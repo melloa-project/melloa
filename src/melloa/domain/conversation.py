@@ -13,10 +13,9 @@ from melloa.domain.base import (
     JsonObject,
     QualifiedName,
     RecordId,
-    Sha256Digest,
 )
 from melloa.domain.classification import Sensitivity
-from melloa.domain.models import ModelResult, ModelRouteAttempt
+from melloa.domain.models import ModelResult, ProcessingLocation
 from melloa.domain.retrieval import RetrievalManifest
 
 
@@ -28,16 +27,6 @@ class ThreadStatus(StrEnum):
 
 class MessageKind(StrEnum):
     TEXT = "text"
-    ATTACHMENT = "attachment"
-    SYSTEM_NOTICE = "system_notice"
-
-
-class DeliveryState(StrEnum):
-    PENDING = "pending"
-    SENT = "sent"
-    DELIVERED = "delivered"
-    FAILED = "failed"
-    EXPIRED = "expired"
 
 
 class ConversationProcessingState(StrEnum):
@@ -62,7 +51,6 @@ class ConversationThread(ContractModel):
     title: str = Field(min_length=1, max_length=256)
     status: ThreadStatus = ThreadStatus.ACTIVE
     sensitivity: Sensitivity
-    retention_policy: QualifiedName
     created_at: AwareDatetime
     updated_at: AwareDatetime
 
@@ -75,19 +63,7 @@ class ConversationThread(ContractModel):
 
 class MessagePart(ContractModel):
     kind: MessageKind
-    text: str | None = Field(default=None, min_length=1, max_length=100_000)
-    attachment_id: RecordId | None = None
-    media_type: str | None = Field(default=None, max_length=255)
-    content_hash: Sha256Digest | None = None
-
-    @model_validator(mode="after")
-    def validate_part(self) -> MessagePart:
-        if self.kind is MessageKind.TEXT and self.text is None:
-            raise ValueError("text parts require text")
-        if self.kind is MessageKind.ATTACHMENT:
-            if self.attachment_id is None or self.media_type is None or self.content_hash is None:
-                raise ValueError("attachment parts require ID, media type, and content hash")
-        return self
+    text: str = Field(min_length=1, max_length=100_000)
 
 
 class ConversationMessage(ContractModel):
@@ -100,7 +76,6 @@ class ConversationMessage(ContractModel):
     reply_to_message_id: RecordId | None = None
     corrects_message_id: RecordId | None = None
     citation_ids: tuple[RecordId, ...] = ()
-    delivery_state: DeliveryState
     sensitivity: Sensitivity
     created_at: AwareDatetime
     observed_at: AwareDatetime
@@ -114,9 +89,6 @@ class ConversationTurn(ContractModel):
     retrieval_manifest_id: RecordId | None = None
     evidence_ids: tuple[RecordId, ...] = ()
     model_run_ids: tuple[RecordId, ...] = ()
-    policy_decision_ids: tuple[RecordId, ...] = ()
-    proposed_action_ids: tuple[RecordId, ...] = ()
-    executed_action_ids: tuple[RecordId, ...] = ()
     output_message_ids: tuple[RecordId, ...] = ()
     decision_record: JsonObject
     started_at: AwareDatetime
@@ -134,25 +106,20 @@ class ConversationTurnInspection(ContractModel):
 class ConversationProcessingModelResult(ContractModel):
     result_id: RecordId
     request_id: RecordId
-    route_id: QualifiedName
     provider_id: QualifiedName
     model_id: str = Field(min_length=1, max_length=256)
+    processing_location: ProcessingLocation
     input_tokens: Annotated[int, Field(ge=0)]
     output_tokens: Annotated[int, Field(ge=0)]
     cost_gbp: Annotated[float, Field(ge=0.0)]
     started_at: AwareDatetime
     completed_at: AwareDatetime
     external_disclosure: bool
-    attempts: tuple[ModelRouteAttempt, ...] = ()
 
     @model_validator(mode="after")
     def validate_result(self) -> ConversationProcessingModelResult:
         if self.completed_at < self.started_at:
             raise ValueError("processing result cannot complete before it starts")
-        if self.attempts and self.external_disclosure != any(
-            attempt.external_disclosure for attempt in self.attempts
-        ):
-            raise ValueError("processing result disclosure must include every route attempt")
         return self
 
 
@@ -169,7 +136,6 @@ class ConversationProcessingAttempt(ContractModel):
     retry_at: AwareDatetime | None = None
     retrieval_manifest_id: RecordId | None = None
     model_result_summary: ConversationProcessingModelResult | None = None
-    model_route_attempts: tuple[ModelRouteAttempt, ...] = ()
     disclosed_memory_ids: tuple[RecordId, ...] = ()
     external_disclosure: bool = False
 
@@ -182,15 +148,12 @@ class ConversationProcessingAttempt(ContractModel):
         if self.model_result_summary is not None:
             if self.request_id != self.model_result_summary.request_id:
                 raise ValueError("processing request does not match its model result")
-            if self.model_route_attempts != self.model_result_summary.attempts:
-                raise ValueError("processing route attempts do not match the model result")
-        expected_disclosure = (
-            self.model_result_summary.external_disclosure
-            if self.model_result_summary is not None
-            else any(attempt.external_disclosure for attempt in self.model_route_attempts)
-        )
-        if self.external_disclosure != expected_disclosure:
-            raise ValueError("processing disclosure does not match model route attempts")
+        if (
+            self.model_result_summary is not None
+            and self.external_disclosure
+            != self.model_result_summary.external_disclosure
+        ):
+            raise ValueError("processing disclosure does not match the model result")
         if self.external_disclosure and self.retrieval_manifest_id is None:
             raise ValueError("external processing requires a retrieval manifest")
         if not self.external_disclosure and self.disclosed_memory_ids:
@@ -324,26 +287,13 @@ def processing_model_result(result: ModelResult) -> ConversationProcessingModelR
     return ConversationProcessingModelResult(
         result_id=result.result_id,
         request_id=result.request_id,
-        route_id=result.route_id,
         provider_id=result.provider_id,
         model_id=result.model_id,
+        processing_location=result.processing_location,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
         cost_gbp=result.cost_gbp,
         started_at=result.started_at,
         completed_at=result.completed_at,
         external_disclosure=result.external_disclosure,
-        attempts=result.attempts,
     )
-
-
-class DeliveryAttempt(ContractModel):
-    contract_version: Literal["1.0.0"] = "1.0.0"
-    delivery_id: RecordId
-    message_id: RecordId
-    client_adapter: QualifiedName
-    destination_ref: str = Field(min_length=1, max_length=512)
-    attempt: Annotated[int, Field(ge=1)]
-    state: DeliveryState
-    attempted_at: AwareDatetime
-    adapter_metadata: JsonObject = Field(default_factory=dict)

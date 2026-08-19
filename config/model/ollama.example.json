@@ -1,6 +1,4 @@
 {
-  "contract_version": "1.0.0",
-  "route_id": "model.local.ollama-qwen",
   "display_name": "Local Qwen via Ollama",
   "provider_id": "provider.ollama-local",
   "model_id": "qwen3:4b-instruct-2507-q4_K_M",
@@ -14,14 +12,11 @@
     "highly_sensitive",
     "device_only"
   ],
-  "provider_retention_policies": ["retention.no-training"],
   "max_input_tokens": 16384,
   "max_output_tokens": 2048,
   "estimated_max_cost_gbp": 0.0,
   "input_cost_gbp_per_million_tokens": 0.0,
   "output_cost_gbp_per_million_tokens": 0.0,
-  "reliability": 0.95,
-  "priority": 0,
   "timeout_ms": 60000,
   "health_timeout_ms": 2000
 }

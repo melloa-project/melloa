@@ -20,7 +20,6 @@ from melloa.domain.memory import (
 from melloa.ports.memory import (
     AssertionContentDeletionStoreResult,
     AssertionContentDeletionWrite,
-    AssertionContentRetentionInventory,
     AssertionCorrectionWrite,
     AssertionStateTransitionWrite,
     MemoryConflictError,
@@ -152,35 +151,6 @@ class InMemoryMemoryRepository:
             if changes is None:
                 raise MemoryNotFoundError(f"assertion state history not found: {assertion_id}")
             return tuple(changes)
-
-    def assertion_content_retention_inventory(
-        self,
-        owner_id: RecordId,
-    ) -> AssertionContentRetentionInventory:
-        with self._lock:
-            retained_assertion_ids = tuple(
-                assertion_id
-                for assertion_id, metadata in self._metadata.items()
-                if metadata.subject_id == owner_id and assertion_id in self._contents
-            )
-            retained_bytes = sum(
-                len(canonical_json_bytes(self._contents[assertion_id]))
-                for assertion_id in retained_assertion_ids
-            )
-            retained_times = tuple(
-                self._metadata[assertion_id].observed_at
-                for assertion_id in retained_assertion_ids
-            )
-            return AssertionContentRetentionInventory(
-                retained_objects=len(retained_assertion_ids),
-                retained_bytes=retained_bytes,
-                deletion_receipts=sum(
-                    1
-                    for tombstone in self._content_deletions.values()
-                    if tombstone.owner_id == owner_id
-                ),
-                oldest_retained_at=min(retained_times) if retained_times else None,
-            )
 
     def apply_correction(
         self,

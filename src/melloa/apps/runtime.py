@@ -18,31 +18,24 @@ from melloa.adapters.fakes.conversation import InMemoryConversationStore
 from melloa.adapters.fakes.memory import InMemoryMemoryRepository
 from melloa.adapters.fakes.store import InMemoryEventAuditStore
 from melloa.adapters.models.openai_compatible import (
+    OpenAICompatibleModelConfig,
     OpenAICompatibleModelGateway,
-    OpenAICompatibleRouteConfig,
 )
 from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
 from melloa.adapters.postgres.store import PostgresEventAuditStore
-from melloa.application.conversation import ConversationRoutePolicy, ConversationService
+from melloa.application.conversation import ConversationModelLimits, ConversationService
 from melloa.application.exports import OwnerExportService
 from melloa.application.retrieval import PolicyConstrainedRetriever
-from melloa.application.routing import (
-    DeterministicModelRouter,
-    ModelRouteBinding,
-    OwnerModelRouteService,
-)
 from melloa.apps.core import AccessScope, create_app
 from melloa.domain.base import (
-    QualifiedName,
     RecordId,
     canonical_json_bytes,
     new_record_id,
     utc_now,
 )
 from melloa.domain.identity import NameHistoryEntry, OwnerIdentity, PersistentIntelligenceIdentity
-from melloa.domain.models import ModelRouteKind
 from melloa.ports.auth import OwnerSessionManager
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.guardian import GuardianStatusReader
@@ -64,7 +57,7 @@ class MelloaRuntime:
     memory_store: MemoryStore
     owner_sessions: OwnerSessionManager
     event_audit_store: EventAuditStore
-    model_route_ids: tuple[QualifiedName, ...]
+    model_id: str | None
     persistence: str
 
 
@@ -89,7 +82,7 @@ class _LockedPort:
 def build_runtime(
     guardian_reader: GuardianStatusReader,
     bootstrap_token: str,
-    model_config: OpenAICompatibleRouteConfig | None = None,
+    model_config: OpenAICompatibleModelConfig | None = None,
     *,
     database_connection: psycopg.Connection[tuple[Any, ...]] | None = None,
     clock: Callable[[], datetime] = utc_now,
@@ -142,40 +135,29 @@ def build_runtime(
         )
         persistence = "postgresql"
 
-    bindings: tuple[ModelRouteBinding, ...] = ()
-    if model_config is not None:
-        bindings = (
-            ModelRouteBinding(
-                route=model_config.registered_route(),
-                backend=OpenAICompatibleModelGateway(
-                    model_config,
-                    clock=clock,
-                    id_factory=id_factory,
-                ),
-                display_name=model_config.display_name,
-                route_kind=ModelRouteKind.OPENAI_COMPATIBLE,
-                timeout_ms=model_config.timeout_ms,
-            ),
+    model_gateway = (
+        None
+        if model_config is None
+        else OpenAICompatibleModelGateway(
+            model_config,
+            clock=clock,
+            id_factory=id_factory,
         )
-    router = DeterministicModelRouter(bindings, clock=clock)
-    route_policy = ConversationRoutePolicy(
-        minimum_quality_profile="quality.conversation",
+    )
+    model_limits = ConversationModelLimits(
         latency_deadline_ms=30_000 if model_config is None else model_config.timeout_ms,
         max_input_tokens=4_096 if model_config is None else model_config.max_input_tokens,
         max_output_tokens=1_024 if model_config is None else model_config.max_output_tokens,
         cost_ceiling_gbp=(
             0.0 if model_config is None else model_config.estimated_max_cost_gbp
         ),
-        provider_retention_policy="retention.no-training",
-        minimum_reliability=0.0,
-        fallback_route_ids=() if model_config is None else (model_config.route_id,),
         prompt_version="conversation-response-v1",
     )
     conversation = ConversationService(
         owner_id=OWNER_ID,
         intelligence_id=MELLI_ID,
         store=conversation_store,
-        model_gateway=router,
+        model_gateway=model_gateway,
         retriever=PolicyConstrainedRetriever(
             memory_store,
             clock=clock,
@@ -185,9 +167,8 @@ def build_runtime(
         clock=clock,
         id_factory=id_factory,
         runtime_version=CURRENT_RELEASE.runtime_identifier,
-        route_policy=route_policy,
+        model_limits=model_limits,
     )
-    model_routes = OwnerModelRouteService(owner_id=OWNER_ID, router=router, clock=clock)
     exports = OwnerExportService(
         owner_id=OWNER_ID,
         conversation=conversation,
@@ -200,8 +181,8 @@ def build_runtime(
             guardian_reader,
             sessions,
             conversation,
-            model_routes,
             exports,
+            model_health=None if model_gateway is None else model_gateway.health,
             secure_session_cookie=secure_session_cookie,
             run_conversation_worker=True,
             access_scope=access_scope,
@@ -213,7 +194,7 @@ def build_runtime(
         memory_store=memory_store,
         owner_sessions=sessions,
         event_audit_store=event_audit_store,
-        model_route_ids=tuple(binding.route.route_id for binding in bindings),
+        model_id=None if model_config is None else model_config.model_id,
         persistence=persistence,
     )
 

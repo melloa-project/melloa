@@ -184,7 +184,6 @@ CREATE TABLE melloa.conversation_threads (
     title text NOT NULL,
     status text NOT NULL CHECK (status IN ('active', 'archived', 'closed')),
     sensitivity text NOT NULL,
-    retention_policy text NOT NULL,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     document jsonb NOT NULL CHECK (jsonb_typeof(document) = 'object'),
@@ -217,7 +216,6 @@ CREATE TABLE melloa.conversation_turns (
 CREATE TABLE melloa.model_runs (
     result_id text PRIMARY KEY,
     request_id text NOT NULL,
-    route_id text NOT NULL,
     provider_id text NOT NULL,
     model_id text NOT NULL,
     input_tokens bigint NOT NULL CHECK (input_tokens >= 0),

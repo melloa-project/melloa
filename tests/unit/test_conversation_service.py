@@ -15,23 +15,21 @@ from melloa.application.conversation import (
     ConversationUnavailableError,
 )
 from melloa.application.retrieval import PolicyConstrainedRetriever
-from melloa.application.routing import DeterministicModelRouter, ModelRouteBinding
 from melloa.domain.auth import AuthenticatedOwner
-from melloa.domain.base import sha256_digest
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.conversation import (
     ConversationMessage,
     ConversationProcessingOutcome,
     ConversationProcessingState,
     ConversationReplyWork,
-    DeliveryState,
     MessageKind,
     MessagePart,
 )
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
-from melloa.domain.models import ProcessingLocation, RegisteredModelRoute
+from melloa.domain.models import ProcessingLocation
 from melloa.ports.conversation import ConversationConflictError
+from melloa.ports.model import ModelInvocationError
 from melloa.release import CURRENT_RELEASE
 from tests.conftest import record_id
 
@@ -112,7 +110,6 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
         owner,
         title="Synthetic planning",
         sensitivity=Sensitivity.PERSONAL,
-        retention_policy="retention.owner-conversation",
     )
 
     reply = service.post_owner_message(
@@ -168,68 +165,6 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert inspection.model_result.result_id == reply.turn.model_run_ids[0]
 
 
-def test_attachment_only_reply_uses_safe_summary_without_model_byte_disclosure(
-    fixed_time,
-) -> None:
-    service, store, model = service_fixture(fixed_time)
-    owner = principal(fixed_time)
-    thread = service.create_thread(
-        owner,
-        title="Quarantined attachment",
-        sensitivity=Sensitivity.PERSONAL,
-        retention_policy="retention.owner-conversation",
-    )
-    raw_content = b"private-synthetic-attachment-content-never-disclose"
-    content_hash = sha256_digest(raw_content)
-    blob_id = record_id("quarantine", 41)
-    inbound = ConversationMessage(
-        message_id=record_id("message", 41),
-        thread_id=thread.thread_id,
-        author_principal_id=owner.owner_id,
-        source_client="client.telegram.synthetic",
-        parts=(
-            MessagePart(
-                kind=MessageKind.ATTACHMENT,
-                attachment_id=blob_id,
-                media_type="text/plain",
-                content_hash=content_hash,
-            ),
-        ),
-        delivery_state=DeliveryState.DELIVERED,
-        sensitivity=thread.sensitivity,
-        created_at=fixed_time,
-        observed_at=fixed_time,
-    )
-    store.append_inbound(
-        inbound,
-        "telegram:attachment-only:41",
-        ConversationReplyWork(
-            work_id=record_id("work", 41),
-            thread_id=thread.thread_id,
-            message_id=inbound.message_id,
-            created_at=inbound.created_at,
-        ),
-        max_attempts=3,
-    )
-
-    processed = service.process_ready()
-
-    assert len(processed) == 1
-    assert processed[0].state is ConversationProcessingState.COMPLETED
-    assert len(model.requests) == 1
-    request = model.requests[0]
-    assert request.required_modalities == ("text",)
-    assert request.input["text"] == (
-        "Owner sent 1 quarantined attachment. "
-        "Attachment content remains unavailable to the conversation model."
-    )
-    serialized_request = request.model_dump_json()
-    assert blob_id not in serialized_request
-    assert content_hash not in serialized_request
-    assert raw_content.decode() not in serialized_request
-    assert "text/plain" not in serialized_request
-
-
 def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
     service, _store, model = service_fixture(fixed_time)
     owner = principal(fixed_time)
@@ -237,7 +172,6 @@ def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
         owner,
         title="Synthetic",
         sensitivity=Sensitivity.INTERNAL,
-        retention_policy="retention.synthetic",
     )
     first = service.post_owner_message(
         owner,
@@ -295,7 +229,6 @@ def test_accepted_message_retries_after_backoff_and_completes(fixed_time) -> Non
         owner,
         title="Retry",
         sensitivity=Sensitivity.INTERNAL,
-        retention_policy="retention.synthetic",
     )
 
     accepted = service.post_owner_message(
@@ -364,7 +297,6 @@ def test_owner_can_resume_dead_accepted_message_with_new_bounded_budget(fixed_ti
         owner,
         title="Dead letter",
         sensitivity=Sensitivity.INTERNAL,
-        retention_policy="retention.synthetic",
     )
     accepted = service.post_owner_message(
         owner,
@@ -400,7 +332,6 @@ def test_expired_processing_lease_is_visible_and_reclaimable(fixed_time) -> None
         owner,
         title="Lease recovery",
         sensitivity=Sensitivity.INTERNAL,
-        retention_policy="retention.synthetic",
     )
     inbound = ConversationMessage(
         message_id=record_id("message", 50),
@@ -408,7 +339,6 @@ def test_expired_processing_lease_is_visible_and_reclaimable(fixed_time) -> None
         author_principal_id=owner.owner_id,
         source_client="client.owner-console",
         parts=(MessagePart(kind=MessageKind.TEXT, text="Recover my lease"),),
-        delivery_state=DeliveryState.DELIVERED,
         sensitivity=thread.sensitivity,
         created_at=fixed_time,
         observed_at=fixed_time,
@@ -450,7 +380,6 @@ def test_guardian_read_only_and_owner_scope_fail_closed(fixed_time) -> None:
             principal(fixed_time),
             title="Denied",
             sensitivity=Sensitivity.INTERNAL,
-            retention_policy="retention.synthetic",
         )
     assert store.list_threads(record_id("owner", 1)) == ()
 
@@ -466,7 +395,6 @@ def test_invalid_or_uncited_model_output_is_not_persisted_as_reply(fixed_time) -
         owner,
         title="Synthetic",
         sensitivity=Sensitivity.INTERNAL,
-        retention_policy="retention.synthetic",
     )
     invalid = service.post_owner_message(
         owner,
@@ -488,7 +416,6 @@ def test_invalid_or_uncited_model_output_is_not_persisted_as_reply(fixed_time) -
         owner,
         title="Synthetic 2",
         sensitivity=Sensitivity.INTERNAL,
-        retention_policy="retention.synthetic",
     )
     uncited = service.post_owner_message(
         owner,
@@ -532,7 +459,6 @@ def test_cited_retrieval_flows_through_model_message_and_turn(fixed_time) -> Non
         owner,
         title="Cited planning",
         sensitivity=Sensitivity.PERSONAL,
-        retention_policy="retention.owner-conversation",
     )
 
     reply = service.post_owner_message(
@@ -589,7 +515,6 @@ def test_device_only_retrieval_cannot_be_marked_externally_disclosed(fixed_time)
         owner,
         title="Device only",
         sensitivity=Sensitivity.DEVICE_ONLY,
-        retention_policy="retention.device-only",
     )
 
     rejected = service.post_owner_message(
@@ -610,7 +535,7 @@ def test_device_only_retrieval_cannot_be_marked_externally_disclosed(fixed_time)
     assert rejected.processing.attempts[0].disclosed_memory_ids == (memory.assertion_id,)
 
 
-def test_failed_external_provider_route_records_disclosed_memory(fixed_time) -> None:
+def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
     memory = Assertion(
         assertion_id=record_id("assertion", 2),
         subject_id=record_id("owner", 1),
@@ -625,51 +550,25 @@ def test_failed_external_provider_route_records_disclosed_memory(fixed_time) -> 
     )
 
     def fail_provider(_request):
-        raise TimeoutError("synthetic external provider outage")
+        raise ModelInvocationError(external_disclosure=True)
 
     backend = FakeModelGateway(
         fail_provider,
         clock=lambda: fixed_time,
         external_disclosure=True,
-        route_id="model.synthetic-external",
         provider_id="provider.synthetic-external",
-    )
-    router = DeterministicModelRouter(
-        (
-            ModelRouteBinding(
-                route=RegisteredModelRoute(
-                    route_id="model.synthetic-external",
-                    provider_id="provider.synthetic-external",
-                    model_id="synthetic-external-v1",
-                    processing_location=ProcessingLocation.APPROVED_PROVIDER,
-                    supported_modalities=frozenset({"text"}),
-                    quality_profiles=frozenset({"quality.conversation-synthetic"}),
-                    allowed_sensitivities=frozenset({Sensitivity.PERSONAL}),
-                    provider_retention_policies=frozenset({"retention.no-training"}),
-                    max_input_tokens=4_096,
-                    max_output_tokens=1_024,
-                    estimated_max_cost_gbp=0.0,
-                    reliability=1.0,
-                    priority=0,
-                    external_disclosure=True,
-                ),
-                backend=backend,
-            ),
-        ),
-        clock=lambda: fixed_time,
     )
     service, store, _model = service_fixture(
         fixed_time,
         mode=GuardianMode.NORMAL,
         assertions=(memory,),
-        model_gateway=router,
+        model_gateway=backend,
     )
     owner = principal(fixed_time)
     thread = service.create_thread(
         owner,
         title="External outage",
         sensitivity=Sensitivity.PERSONAL,
-        retention_policy="retention.owner-conversation",
     )
     accepted = service.post_owner_message(
         owner,
@@ -679,10 +578,9 @@ def test_failed_external_provider_route_records_disclosed_memory(fixed_time) -> 
     )
 
     attempt = accepted.processing.attempts[0]
-    assert accepted.processing.last_error_code == "model.all_eligible_routes_failed"
+    assert accepted.processing.last_error_code == "model.gateway_failed"
     assert attempt.external_disclosure is True
     assert attempt.model_result_summary is None
-    assert attempt.model_route_attempts[0].provider_id == "provider.synthetic-external"
     assert attempt.disclosed_memory_ids == (memory.assertion_id,)
     assert attempt.retrieval_manifest_id is not None
     assert store.get_retrieval_manifest(attempt.retrieval_manifest_id).external_disclosure is True

@@ -38,7 +38,6 @@ from melloa.ports.conversation import (
     CompletedConversationTurn,
     ConversationConflictError,
     ConversationNotFoundError,
-    ConversationRetentionInventory,
     InboundAppendResult,
 )
 
@@ -75,10 +74,10 @@ class PostgresConversationStore:
                 """
                 INSERT INTO melloa.conversation_threads (
                     thread_id, owner_id, intelligence_id, title, status, sensitivity,
-                    retention_policy, created_at, updated_at, document
+                    created_at, updated_at, document
                 ) VALUES (
                     %(thread_id)s, %(owner_id)s, %(intelligence_id)s, %(title)s,
-                    %(status)s, %(sensitivity)s, %(retention_policy)s, %(created_at)s,
+                    %(status)s, %(sensitivity)s, %(created_at)s,
                     %(updated_at)s, %(document)s
                 )
                 ON CONFLICT (thread_id) DO NOTHING
@@ -91,7 +90,6 @@ class PostgresConversationStore:
                     "title": thread.title,
                     "status": thread.status.value,
                     "sensitivity": thread.sensitivity.value,
-                    "retention_policy": thread.retention_policy,
                     "created_at": thread.created_at,
                     "updated_at": thread.updated_at,
                     "document": Jsonb(document),
@@ -126,52 +124,6 @@ class PostgresConversationStore:
             (owner_id,),
         ).fetchall()
         return tuple(self._parse_contract(ConversationThread, row[0]) for row in rows)
-
-    def retention_inventory(self, owner_id: RecordId) -> ConversationRetentionInventory:
-        row = self._connection.execute(
-            """
-            WITH owner_threads AS (
-                SELECT thread_id, created_at, document
-                  FROM melloa.conversation_threads
-                 WHERE owner_id = %s
-            ),
-            retained AS (
-                SELECT created_at, document FROM owner_threads
-                UNION ALL
-                SELECT message.created_at, message.document
-                  FROM melloa.conversation_messages AS message
-                  JOIN owner_threads AS thread
-                    ON thread.thread_id = message.thread_id
-                UNION ALL
-                SELECT turn.started_at, turn.document
-                  FROM melloa.conversation_turns AS turn
-                  JOIN owner_threads AS thread
-                    ON thread.thread_id = turn.thread_id
-                UNION ALL
-                SELECT work.created_at, work.payload
-                  FROM melloa.jobs_outbox AS work
-                  JOIN owner_threads AS thread
-                    ON thread.thread_id = work.payload->>'thread_id'
-                 WHERE work.work_type = %s
-            )
-            SELECT count(*),
-                   COALESCE(sum(octet_length(document::text)), 0),
-                   min(created_at)
-              FROM retained
-            """,
-            (owner_id, _REPLY_WORK_TYPE),
-        ).fetchone()
-        if row is None:
-            return ConversationRetentionInventory(
-                retained_objects=0,
-                retained_bytes=0,
-                oldest_retained_at=None,
-            )
-        return ConversationRetentionInventory(
-            retained_objects=int(row[0]),
-            retained_bytes=int(row[1]),
-            oldest_retained_at=row[2],
-        )
 
     def get_inbound_by_idempotency_key(
         self,
@@ -680,11 +632,11 @@ class PostgresConversationStore:
         inserted = self._connection.execute(
             """
             INSERT INTO melloa.model_runs (
-                result_id, request_id, route_id, provider_id, model_id,
+                result_id, request_id, provider_id, model_id,
                 input_tokens, output_tokens, cost_gbp, external_disclosure,
                 started_at, completed_at, document
             ) VALUES (
-                %(result_id)s, %(request_id)s, %(route_id)s, %(provider_id)s,
+                %(result_id)s, %(request_id)s, %(provider_id)s,
                 %(model_id)s, %(input_tokens)s, %(output_tokens)s, %(cost_gbp)s,
                 %(external_disclosure)s, %(started_at)s, %(completed_at)s,
                 %(document)s
@@ -695,7 +647,6 @@ class PostgresConversationStore:
             {
                 "result_id": result.result_id,
                 "request_id": result.request_id,
-                "route_id": result.route_id,
                 "provider_id": result.provider_id,
                 "model_id": result.model_id,
                 "input_tokens": result.input_tokens,
@@ -799,16 +750,11 @@ class PostgresConversationStore:
             "disclosed_evidence_ids": list(disclosed_evidence_ids),
             "output_citation_ids": list(completed.output_message.citation_ids),
             "output_evidence_ids": list(completed.turn.evidence_ids),
-            "result_route": {
-                "route_id": result.route_id,
+            "model": {
                 "provider_id": result.provider_id,
                 "model_id": result.model_id,
+                "processing_location": result.processing_location.value,
             },
-            "external_attempts": [
-                attempt.model_dump(mode="json")
-                for attempt in result.attempts
-                if attempt.external_disclosure
-            ],
         }
         inserted = self._connection.execute(
             """
@@ -858,16 +804,11 @@ class PostgresConversationStore:
             "output_citation_ids": [],
             "output_evidence_ids": [],
             "processing_outcome": "rejected_before_turn_completion",
-            "result_route": {
-                "route_id": result.route_id,
+            "model": {
                 "provider_id": result.provider_id,
                 "model_id": result.model_id,
+                "processing_location": result.processing_location.value,
             },
-            "external_attempts": [
-                attempt.model_dump(mode="json")
-                for attempt in result.attempts
-                if attempt.external_disclosure
-            ],
         }
         inserted = self._connection.execute(
             """
