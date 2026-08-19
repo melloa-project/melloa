@@ -923,6 +923,15 @@ dd {
   margin-top: 8px;
 }
 
+.deletion-limit {
+  padding: 11px 12px;
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--amber-soft);
+  border-radius: 10px;
+}
+
 .answer-explanation {
   display: flex;
   flex-direction: column;

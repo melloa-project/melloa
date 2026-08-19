@@ -10,6 +10,7 @@ from typing import TypeVar
 
 from melloa.domain.base import RecordId, new_record_id
 from melloa.domain.conversation import (
+    ConversationDeletionReceipt,
     ConversationMessage,
     ConversationProcessingAttempt,
     ConversationProcessingOutcome,
@@ -63,9 +64,14 @@ class InMemoryConversationStore:
         self._completed_by_trigger: dict[RecordId, CompletedConversationTurn] = {}
         self._reply_work: dict[RecordId, _ReplyWorkRecord] = {}
         self._work_by_message: dict[RecordId, RecordId] = {}
+        self._deletions: dict[RecordId, ConversationDeletionReceipt] = {}
 
     def create_thread(self, thread: ConversationThread) -> None:
         with self._lock:
+            if thread.thread_id in self._deletions:
+                raise ConversationConflictError(
+                    f"thread ID was previously deleted: {thread.thread_id}"
+                )
             existing = self._threads.get(thread.thread_id)
             if existing is None:
                 self._threads[thread.thread_id] = thread
@@ -83,6 +89,75 @@ class InMemoryConversationStore:
         with self._lock:
             threads = (thread for thread in self._threads.values() if thread.owner_id == owner_id)
             return tuple(sorted(threads, key=lambda thread: (thread.updated_at, thread.thread_id)))
+
+    def delete_thread(
+        self,
+        deletion: ConversationDeletionReceipt,
+    ) -> ConversationDeletionReceipt:
+        with self._lock:
+            existing = self._deletions.get(deletion.thread_id)
+            if existing is not None:
+                if existing.owner_id != deletion.owner_id:
+                    raise ConversationNotFoundError(
+                        f"thread not found: {deletion.thread_id}"
+                    )
+                return existing
+            thread = self._threads.get(deletion.thread_id)
+            if thread is None or thread.owner_id != deletion.owner_id:
+                raise ConversationNotFoundError(f"thread not found: {deletion.thread_id}")
+
+            message_ids = {
+                message.message_id
+                for message in self._messages.values()
+                if message.thread_id == deletion.thread_id
+            }
+            turns = tuple(
+                turn
+                for turn in self._turns.values()
+                if turn.thread_id == deletion.thread_id
+            )
+            model_result_ids = {
+                result_id for turn in turns for result_id in turn.model_run_ids
+            }
+            manifest_ids = {
+                turn.retrieval_manifest_id
+                for turn in turns
+                if turn.retrieval_manifest_id is not None
+            }
+            for work_id, record in tuple(self._reply_work.items()):
+                if record.work.thread_id != deletion.thread_id:
+                    continue
+                for attempt in record.work.attempts:
+                    if attempt.retrieval_manifest_id is not None:
+                        manifest_ids.add(attempt.retrieval_manifest_id)
+                    if attempt.model_result_summary is not None:
+                        model_result_ids.add(attempt.model_result_summary.result_id)
+                self._reply_work[work_id] = replace(
+                    record,
+                    state=ConversationProcessingState.CANCELLED,
+                    available_at=deletion.deleted_at,
+                    updated_at=deletion.deleted_at,
+                    lease_owner=None,
+                    lease_expires_at=None,
+                )
+
+            self._inbound_idempotency = {
+                key: message_id
+                for key, message_id in self._inbound_idempotency.items()
+                if key[0] != deletion.thread_id
+            }
+            for message_id in message_ids:
+                self._messages.pop(message_id, None)
+                self._completed_by_trigger.pop(message_id, None)
+            for turn in turns:
+                self._turns.pop(turn.turn_id, None)
+            for result_id in model_result_ids:
+                self._model_results.pop(result_id, None)
+            for manifest_id in manifest_ids:
+                self._retrieval_manifests.pop(manifest_id, None)
+            del self._threads[deletion.thread_id]
+            self._deletions[deletion.thread_id] = deletion
+            return deletion
 
     def get_inbound_by_idempotency_key(
         self,

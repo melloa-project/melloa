@@ -196,6 +196,36 @@ def test_foreign_owner_cannot_discover_a_thread(fixed_time) -> None:
     )
 
 
+def test_recently_confirmed_owner_can_delete_active_conversation_data(fixed_time) -> None:
+    client = _client(
+        fixed_time,
+        guardian_mode=GuardianMode.STOPPED,
+        seed_thread=True,
+    )
+    thread_id = record_id("thread", 42)
+
+    assert client.delete(f"/api/v1/conversations/{thread_id}").status_code == 401
+    headers = _login(client)
+    assert (
+        client.delete(f"/api/v1/conversations/{thread_id}").status_code == 403
+    )
+
+    deleted = client.delete(
+        f"/api/v1/conversations/{thread_id}",
+        headers=headers,
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["thread_id"] == thread_id
+    assert deleted.json()["active_data_deleted"] is True
+    assert deleted.json()["backup_expiry_state"] == "unknown"
+    assert client.get("/api/v1/conversations").json() == []
+    assert client.get(f"/api/v1/conversations/{thread_id}/transcript").status_code == 404
+    assert (
+        client.delete(f"/api/v1/conversations/{thread_id}", headers=headers).status_code
+        == 404
+    )
+
+
 def test_guardian_stop_blocks_readiness_and_conversation_writes(fixed_time) -> None:
     client = _client(fixed_time, guardian_mode=GuardianMode.STOPPED)
     headers = _login(client)

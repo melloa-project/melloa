@@ -8,6 +8,7 @@
     "0006_m1_assertion_content_boundary.sql": "sha256:f9891c35a5c51728853522b39ab2aaa140eb9208cb11bb11f469304578f20afb",
     "0008_m1_assertion_content_deletion.sql": "sha256:279139d51a43a2fd553d467640f8a4eeef49b820ed07663837957854cef51fa7",
     "0009_m1_owner_sessions.sql": "sha256:be220e027758f090d43ca174641913274f2c42e55bdc4444a2f1c46f0fdf4d9a",
-    "0010_m1_owner_session_retention_cleanup.sql": "sha256:cfd3a48c57378693b0c4d2a39362f1318c08cec404f12b0224188c137e56492d"
+    "0010_m1_owner_session_retention_cleanup.sql": "sha256:cfd3a48c57378693b0c4d2a39362f1318c08cec404f12b0224188c137e56492d",
+    "0011_owner_conversation_deletion.sql": "sha256:6b2e3170eead9dd83924794dbcb1e44b37a8325113b42e64978db1cb46dbeac8"
   }
 }

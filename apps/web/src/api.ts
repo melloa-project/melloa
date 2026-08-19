@@ -29,6 +29,15 @@ export type ConversationThread = {
   readonly updated_at: string;
 };
 
+export type ConversationDeletionReceipt = {
+  readonly deletion_id: string;
+  readonly thread_id: string;
+  readonly owner_id: string;
+  readonly deleted_at: string;
+  readonly active_data_deleted: true;
+  readonly backup_expiry_state: "unknown";
+};
+
 export type MessagePart = {
   readonly kind: string;
   readonly text: string;
@@ -246,6 +255,13 @@ export class MelloaApi {
       body: input,
       csrf: true,
     });
+  }
+
+  async deleteThread(threadId: string): Promise<ConversationDeletionReceipt> {
+    return this.#request<ConversationDeletionReceipt>(
+      `/api/v1/conversations/${encodeURIComponent(threadId)}`,
+      { method: "DELETE", csrf: true },
+    );
   }
 
   async transcript(threadId: string): Promise<ConversationTranscript> {

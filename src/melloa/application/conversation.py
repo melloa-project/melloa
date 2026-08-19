@@ -24,6 +24,7 @@ from melloa.domain.classification import (
     sensitivity_scope,
 )
 from melloa.domain.conversation import (
+    ConversationDeletionReceipt,
     ConversationMessage,
     ConversationProcessingAttempt,
     ConversationProcessingOutcome,
@@ -162,6 +163,21 @@ class ConversationService:
     def list_threads(self, principal: AuthenticatedOwner) -> tuple[ConversationThread, ...]:
         self._require_owner(principal)
         return self._store.list_threads(principal.owner_id)
+
+    def delete_thread(
+        self,
+        principal: AuthenticatedOwner,
+        thread_id: RecordId,
+    ) -> ConversationDeletionReceipt:
+        thread = self._store.get_thread(thread_id)
+        self._require_thread_owner(principal, thread)
+        deletion = ConversationDeletionReceipt(
+            deletion_id=self._id_factory("conversation_deletion"),
+            thread_id=thread.thread_id,
+            owner_id=principal.owner_id,
+            deleted_at=self._clock(),
+        )
+        return self._store.delete_thread(deletion)
 
     def list_messages(
         self,

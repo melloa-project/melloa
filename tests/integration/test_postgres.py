@@ -151,12 +151,56 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
             )
             assert archive.status_code == 200
 
+            deleted = second_client.delete(
+                f"/api/v1/conversations/{thread_id}",
+                headers={"X-Melloa-CSRF": csrf},
+            )
+            assert deleted.status_code == 200
+            assert deleted.json()["active_data_deleted"] is True
+            assert (
+                second_client.get(
+                    f"/api/v1/conversations/{thread_id}/transcript"
+                ).status_code
+                == 404
+            )
+            archive_after_deletion = second_client.post(
+                "/api/v1/data-export/archive",
+                headers={"X-Melloa-CSRF": csrf},
+            )
+            assert archive_after_deletion.status_code == 200
+
         memories = PostgresMemoryRepository(second_connection).list_assertions(OWNER_ID)
         assert memories == (assertion,)
         audit_count = second_connection.execute(
             "SELECT count(*) FROM melloa.audit_events"
         ).fetchone()
         assert audit_count is not None and audit_count[0] >= 1
+        active_conversation_count = second_connection.execute(
+            "SELECT count(*) FROM melloa.conversation_threads WHERE thread_id = %s",
+            (thread_id,),
+        ).fetchone()
+        assert active_conversation_count == (0,)
+        active_message_count = second_connection.execute(
+            "SELECT count(*) FROM melloa.conversation_messages WHERE thread_id = %s",
+            (thread_id,),
+        ).fetchone()
+        assert active_message_count == (0,)
+        deletion_count = second_connection.execute(
+            "SELECT count(*) FROM melloa.conversation_deletions WHERE thread_id = %s",
+            (thread_id,),
+        ).fetchone()
+        assert deletion_count == (1,)
+        cancelled_work_count = second_connection.execute(
+            """
+            SELECT count(*)
+              FROM melloa.jobs_outbox
+             WHERE work_type = 'conversation.owner_reply'
+               AND payload ->> 'thread_id' = %s
+               AND state = 'cancelled'
+            """,
+            (thread_id,),
+        ).fetchone()
+        assert cancelled_work_count == (1,)
 
     with zipfile.ZipFile(io.BytesIO(archive.content)) as exported:
         conversations = json.loads(exported.read("conversations.json"))
@@ -165,3 +209,6 @@ def test_owner_history_session_memory_and_export_survive_restart() -> None:
     assert memories_document["memories"][0]["value"] == {
         "statement": "Use durable context."
     }
+    with zipfile.ZipFile(io.BytesIO(archive_after_deletion.content)) as exported:
+        conversations_after_deletion = json.loads(exported.read("conversations.json"))
+    assert conversations_after_deletion["conversations"] == []

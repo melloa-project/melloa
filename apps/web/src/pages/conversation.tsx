@@ -20,6 +20,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -75,7 +76,7 @@ type OptimisticSend = {
 const newConversationKey = "new-conversation";
 
 export function ConversationPage() {
-  const { api, principal, canWrite, notify } = useMelloa();
+  const { api, principal, canWrite, canUseSensitiveControls, notify } = useMelloa();
   const openUnlock = useOwnerUnlock();
   const navigate = useNavigate();
   const { threadId } = useParams();
@@ -91,6 +92,7 @@ export function ConversationPage() {
   const conversationInFlightRefs = useRef(new Map<string, number>());
   const createRequestRef = useRef(0);
   const inspectionRequestRef = useRef(0);
+  const deletedThreadIdsRef = useRef(new Set<string>());
   const [threads, setThreads] = useState<readonly ConversationThread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -105,6 +107,8 @@ export function ConversationPage() {
   const [threadPanelOpen, setThreadPanelOpen] = useState(false);
   const [inspection, setInspection] = useState<ConversationTurnInspection | null>(null);
   const [inspectionLoading, setInspectionLoading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   currentThreadIdRef.current = threadId;
   const viewKey = threadId ?? newConversationKey;
@@ -348,6 +352,7 @@ export function ConversationPage() {
     inspectionRequestRef.current += 1;
     setInspection(null);
     setInspectionLoading(false);
+    setDeleteOpen(false);
   }, [threadId]);
 
   async function createConversation(title = "New conversation", originKey = viewKey) {
@@ -430,6 +435,9 @@ export function ConversationPage() {
         },
       }));
       const reply = await api.postMessage(targetThreadId, text, idempotencyKey);
+      if (deletedThreadIdsRef.current.has(targetThreadId)) {
+        return;
+      }
       invalidateConversationRequest(targetThreadId);
       applyConversationReply(targetThreadId, reply, updateConversation);
       setOptimisticSends((current) => withoutKey(current, targetThreadId));
@@ -472,6 +480,9 @@ export function ConversationPage() {
     setResumingMessageIds((current) => new Set(current).add(recoveryKey));
     try {
       const reply = await api.resumeMessage(sourceThreadId, status.message_id);
+      if (deletedThreadIdsRef.current.has(sourceThreadId)) {
+        return;
+      }
       invalidateConversationRequest(sourceThreadId);
       applyConversationReply(sourceThreadId, reply, updateConversation);
     } catch (caught) {
@@ -513,6 +524,52 @@ export function ConversationPage() {
     inspectionRequestRef.current += 1;
     setInspection(null);
     setInspectionLoading(false);
+  }
+
+  function requestConversationDeletion() {
+    if (selectedThread === null) {
+      return;
+    }
+    if (!canWrite || !canUseSensitiveControls) {
+      openUnlock("Confirm it’s you before permanently deleting this conversation.");
+      return;
+    }
+    setDeleteOpen(true);
+  }
+
+  async function deleteConversation() {
+    if (selectedThread === null) {
+      return;
+    }
+    const deletedThread = selectedThread;
+    setDeleting(true);
+    try {
+      await api.deleteThread(deletedThread.thread_id);
+      deletedThreadIdsRef.current.add(deletedThread.thread_id);
+      invalidateConversationRequest(deletedThread.thread_id);
+      inspectionRequestRef.current += 1;
+      currentThreadIdRef.current = undefined;
+      setThreads((current) => current.filter(
+        (thread) => thread.thread_id !== deletedThread.thread_id,
+      ));
+      setConversationViews((current) => withoutKey(current, deletedThread.thread_id));
+      setOptimisticSends((current) => withoutKey(current, deletedThread.thread_id));
+      setDrafts((current) => withoutKey(current, deletedThread.thread_id));
+      setSendFailures((current) => withoutKey(current, deletedThread.thread_id));
+      setSendingThreadIds((current) => withoutSetValue(current, deletedThread.thread_id));
+      setDeleteOpen(false);
+      setThreadPanelOpen(false);
+      navigate("/conversation", { replace: true });
+      await loadThreads();
+      notify(
+        "Conversation deleted from active data. Backup expiry is not verified.",
+        "success",
+      );
+    } catch (caught) {
+      notify(errorMessage(caught), "error");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const unavailable = modelAvailability === "unavailable";
@@ -600,6 +657,17 @@ export function ConversationPage() {
             <p>{hasPendingWork || sending ? "Melli is thinking…" : "Private owner conversation"}</p>
           </div>
           {hasPendingWork || sending ? <Badge tone="info"><Clock3 className="spin-slow" size={13} /> Thinking</Badge> : null}
+          {selectedThread === null ? null : (
+            <Button
+              aria-label="Delete conversation"
+              onClick={requestConversationDeletion}
+              size="icon"
+              title="Delete conversation"
+              tone="ghost"
+            >
+              <Trash2 aria-hidden="true" size={17} />
+            </Button>
+          )}
         </header>
 
         <div
@@ -765,6 +833,33 @@ export function ConversationPage() {
       >
         {inspectionLoading ? <LoadingState label="Reading answer context" /> : null}
         {inspection === null ? null : <AnswerExplanation inspection={inspection} />}
+      </Modal>
+
+      <Modal
+        description="This removes the conversation from Melloa’s active data and cannot be undone."
+        onClose={() => {
+          if (!deleting) {
+            setDeleteOpen(false);
+          }
+        }}
+        open={deleteOpen}
+        title="Delete this conversation?"
+      >
+        <div className="stack-form">
+          <p>Messages, answers, and model output in this conversation will be removed now.</p>
+          <p className="deletion-limit">
+            Encrypted backups may retain an older copy until their separately configured expiry.
+            This Melloa instance cannot verify that schedule.
+          </p>
+          <div className="modal-actions">
+            <Button disabled={deleting} onClick={() => setDeleteOpen(false)} tone="ghost">
+              Keep conversation
+            </Button>
+            <Button loading={deleting} onClick={() => void deleteConversation()} tone="danger">
+              <Trash2 aria-hidden="true" size={16} /> Delete conversation
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

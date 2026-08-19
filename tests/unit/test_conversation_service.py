@@ -28,7 +28,7 @@ from melloa.domain.conversation import (
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
 from melloa.domain.models import ProcessingLocation
-from melloa.ports.conversation import ConversationConflictError
+from melloa.ports.conversation import ConversationConflictError, ConversationNotFoundError
 from melloa.ports.model import ModelInvocationError
 from melloa.release import CURRENT_RELEASE
 from tests.conftest import record_id
@@ -386,6 +386,49 @@ def test_guardian_read_only_and_owner_scope_fail_closed(fixed_time) -> None:
     service, _store, _model = service_fixture(fixed_time)
     with pytest.raises(ConversationOwnershipError):
         service.list_threads(principal(fixed_time, owner_number=2))
+
+
+def test_owner_deletion_removes_active_conversation_content(fixed_time) -> None:
+    service, store, _model = service_fixture(fixed_time)
+    owner = principal(fixed_time)
+    thread = service.create_thread(
+        owner,
+        title="Delete this private history",
+        sensitivity=Sensitivity.PERSONAL,
+    )
+    reply = service.post_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        text="A private detail that should be deleted.",
+        idempotency_key="delete-private-history",
+    )
+    assert reply.output_message is not None
+    assert reply.turn is not None
+    assert reply.turn.retrieval_manifest_id is not None
+
+    with pytest.raises(ConversationOwnershipError):
+        service.delete_thread(principal(fixed_time, owner_number=2), thread.thread_id)
+
+    receipt = service.delete_thread(owner, thread.thread_id)
+
+    assert receipt.thread_id == thread.thread_id
+    assert receipt.owner_id == owner.owner_id
+    assert receipt.active_data_deleted is True
+    assert receipt.backup_expiry_state == "unknown"
+    assert service.list_threads(owner) == ()
+    with pytest.raises(ConversationNotFoundError):
+        store.get_thread(thread.thread_id)
+    with pytest.raises(ConversationNotFoundError):
+        store.get_message(reply.inbound_message.message_id)
+    with pytest.raises(ConversationNotFoundError):
+        store.get_message(reply.output_message.message_id)
+    with pytest.raises(ConversationNotFoundError):
+        store.get_retrieval_manifest(reply.turn.retrieval_manifest_id)
+    assert store.completed_turn_for_trigger(reply.inbound_message.message_id) is None
+    assert (
+        store.reply_processing(reply.inbound_message.message_id).state
+        is ConversationProcessingState.CANCELLED
+    )
 
 
 def test_invalid_or_uncited_model_output_is_not_persisted_as_reply(fixed_time) -> None:

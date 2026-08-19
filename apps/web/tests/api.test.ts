@@ -56,6 +56,31 @@ describe("MelloaApi", () => {
     expect(called).toBe(false);
   });
 
+  it("deletes one encoded conversation with browser proof", async () => {
+    const calls: Array<{ readonly input: string; readonly init?: RequestInit }> = [];
+    const api = new MelloaApi(async (input, init) => {
+      calls.push({ input: String(input), init });
+      return calls.length === 1
+        ? jsonResponse({ principal, csrf_token: "csrf-proof" })
+        : jsonResponse({
+          deletion_id: "deletion_1",
+          thread_id: "thread/private",
+          owner_id: principal.owner_id,
+          deleted_at: "2026-08-19T12:00:00Z",
+          active_data_deleted: true,
+          backup_expiry_state: "unknown",
+        });
+    });
+
+    await api.login("owner-credential");
+    const receipt = await api.deleteThread("thread/private");
+
+    expect(receipt.active_data_deleted).toBe(true);
+    expect(calls[1]?.input).toBe("/api/v1/conversations/thread%2Fprivate");
+    expect(calls[1]?.init?.method).toBe("DELETE");
+    expect(new Headers(calls[1]?.init?.headers).get("X-Melloa-CSRF")).toBe("csrf-proof");
+  });
+
   it("does not erase ordinary writing proof when only fresh confirmation expired", async () => {
     let requests = 0;
     const api = new MelloaApi(async () => {

@@ -61,6 +61,16 @@ class ConversationThread(ContractModel):
         return self
 
 
+class ConversationDeletionReceipt(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    deletion_id: RecordId
+    thread_id: RecordId
+    owner_id: RecordId
+    deleted_at: AwareDatetime
+    active_data_deleted: Literal[True] = True
+    backup_expiry_state: Literal["unknown"] = "unknown"
+
+
 class MessagePart(ContractModel):
     kind: MessageKind
     text: str = Field(min_length=1, max_length=100_000)

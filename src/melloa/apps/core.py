@@ -30,6 +30,7 @@ from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import (
+    ConversationDeletionReceipt,
     ConversationMessage,
     ConversationProcessingState,
     ConversationProcessingStatus,
@@ -444,6 +445,20 @@ def create_app(
             title=payload.title,
             sensitivity=payload.sensitivity,
         )
+
+    @app.delete(
+        "/api/v1/conversations/{thread_id}",
+        response_model=ConversationDeletionReceipt,
+    )
+    async def delete_conversation(
+        request: Request,
+        thread_id: RecordId,
+        principal: Annotated[
+            AuthenticatedOwner,
+            Depends(_authenticated_owner_sensitive_mutation),
+        ],
+    ) -> ConversationDeletionReceipt:
+        return _conversation(request).delete_thread(principal, thread_id)
 
     @app.get(
         "/api/v1/conversations/{thread_id}/transcript",

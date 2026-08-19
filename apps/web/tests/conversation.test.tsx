@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   unlock: vi.fn(),
   listThreads: vi.fn(),
   createThread: vi.fn(),
+  deleteThread: vi.fn(),
   transcript: vi.fn(),
   conversationAvailability: vi.fn(),
   postMessage: vi.fn(),
@@ -107,6 +108,7 @@ describe("ConversationPage", () => {
       mocks.unlock,
       mocks.listThreads,
       mocks.createThread,
+      mocks.deleteThread,
       mocks.transcript,
       mocks.conversationAvailability,
       mocks.postMessage,
@@ -119,11 +121,20 @@ describe("ConversationPage", () => {
     mocks.transcript.mockResolvedValue({ messages: [], turns: [], processing: [] });
     mocks.conversationAvailability.mockResolvedValue(readyAvailability);
     mocks.createThread.mockResolvedValue(thread);
+    mocks.deleteThread.mockResolvedValue({
+      deletion_id: "deletion_1",
+      thread_id: thread.thread_id,
+      owner_id: owner.owner_id,
+      deleted_at: "2026-08-19T12:00:00Z",
+      active_data_deleted: true,
+      backup_expiry_state: "unknown",
+    });
     mocks.postMessage.mockResolvedValue(replyFor("What should I consider?"));
     mocks.context = {
       api: {
         listThreads: mocks.listThreads,
         createThread: mocks.createThread,
+        deleteThread: mocks.deleteThread,
         transcript: mocks.transcript,
         conversationAvailability: mocks.conversationAvailability,
         postMessage: mocks.postMessage,
@@ -173,6 +184,33 @@ describe("ConversationPage", () => {
 
     expect(mocks.unlock).toHaveBeenCalledWith(expect.stringMatching(/keep talking/i));
     expect(mocks.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("requires fresh confirmation and explains conversation deletion limits", async () => {
+    const firstRender = renderConversation();
+    fireEvent.click(await screen.findByRole("button", { name: "Delete conversation" }));
+
+    expect(mocks.unlock).toHaveBeenCalledWith(expect.stringMatching(/permanently deleting/i));
+    expect(screen.queryByRole("dialog", { name: "Delete this conversation?" })).not.toBeInTheDocument();
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
+    firstRender.unmount();
+
+    mocks.context = { ...mocks.context, canUseSensitiveControls: true };
+    mocks.listThreads
+      .mockResolvedValueOnce([thread])
+      .mockResolvedValueOnce([]);
+    renderConversation();
+    fireEvent.click(await screen.findByRole("button", { name: "Delete conversation" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Delete this conversation?" });
+    expect(dialog).toHaveTextContent(/backups may retain an older copy/i);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete conversation" }));
+
+    await waitFor(() => expect(mocks.deleteThread).toHaveBeenCalledWith(thread.thread_id));
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(
+      "Conversation deleted from active data. Backup expiry is not verified.",
+      "success",
+    ));
   });
 
   it("removes the fixed response from the owner path when no capable model exists", async () => {

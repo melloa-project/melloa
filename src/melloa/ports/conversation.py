@@ -8,6 +8,7 @@ from typing import Protocol
 
 from melloa.domain.base import RecordId
 from melloa.domain.conversation import (
+    ConversationDeletionReceipt,
     ConversationMessage,
     ConversationProcessingAttempt,
     ConversationProcessingResumption,
@@ -60,6 +61,12 @@ class ConversationStore(Protocol):
 
     def list_threads(self, owner_id: RecordId) -> tuple[ConversationThread, ...]:
         """Return the owner's threads in deterministic update order."""
+
+    def delete_thread(
+        self,
+        deletion: ConversationDeletionReceipt,
+    ) -> ConversationDeletionReceipt:
+        """Delete active conversation content and retain only bounded deletion evidence."""
 
     def get_inbound_by_idempotency_key(
         self,

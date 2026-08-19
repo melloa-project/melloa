@@ -9,7 +9,7 @@ from typing import Any, TypeVar, cast
 
 import psycopg
 from psycopg import sql
-from psycopg.errors import UniqueViolation
+from psycopg.errors import CheckViolation, NoDataFound, SerializationFailure, UniqueViolation
 from psycopg.types.json import Jsonb
 
 from melloa.domain.base import (
@@ -20,6 +20,7 @@ from melloa.domain.base import (
     new_record_id,
 )
 from melloa.domain.conversation import (
+    ConversationDeletionReceipt,
     ConversationMessage,
     ConversationProcessingAttempt,
     ConversationProcessingOutcome,
@@ -124,6 +125,51 @@ class PostgresConversationStore:
             (owner_id,),
         ).fetchall()
         return tuple(self._parse_contract(ConversationThread, row[0]) for row in rows)
+
+    def delete_thread(
+        self,
+        deletion: ConversationDeletionReceipt,
+    ) -> ConversationDeletionReceipt:
+        try:
+            with self._connection.transaction():
+                row = self._connection.execute(
+                    """
+                    SELECT deletion_document
+                      FROM melloa.delete_conversation(
+                        %(deletion_id)s,
+                        %(thread_id)s,
+                        %(owner_id)s,
+                        %(deleted_at)s
+                      )
+                    """,
+                    {
+                        "deletion_id": deletion.deletion_id,
+                        "thread_id": deletion.thread_id,
+                        "owner_id": deletion.owner_id,
+                        "deleted_at": deletion.deleted_at,
+                    },
+                ).fetchone()
+                if row is None:
+                    raise ConversationConflictError(
+                        "conversation deletion returned no result"
+                    )
+                persisted = self._parse_contract(
+                    ConversationDeletionReceipt,
+                    row[0],
+                )
+                if persisted != deletion:
+                    raise ConversationConflictError(
+                        "persisted conversation deletion does not match its request"
+                    )
+                return persisted
+        except NoDataFound as error:
+            raise ConversationNotFoundError(
+                f"thread not found: {deletion.thread_id}"
+            ) from error
+        except (CheckViolation, SerializationFailure, UniqueViolation) as error:
+            raise ConversationConflictError(
+                "conversation deletion conflicts with durable state"
+            ) from error
 
     def get_inbound_by_idempotency_key(
         self,

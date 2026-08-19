@@ -125,6 +125,17 @@ async function closeConversationDrawerWithEscape(label) {
   await assertClosedDrawerCannotReceiveFocus(label);
 }
 
+async function inspectDeletionDialog(label, screenshotName) {
+  await page.getByRole("button", { name: "Delete conversation", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete this conversation?" });
+  await dialog.waitFor();
+  await dialog.getByText("Encrypted backups may retain an older copy", { exact: false }).waitFor();
+  await assertVisibleElementsInsideViewport(`${label} deletion dialog`);
+  await page.screenshot({ path: `${outputDirectory}/${screenshotName}` });
+  await dialog.getByRole("button", { name: "Keep conversation" }).click();
+  await dialog.waitFor({ state: "hidden" });
+}
+
 async function inspectConversationAt(width, height, suffix) {
   await page.setViewportSize({ width, height });
   await page.getByRole("heading", { name: "New conversation" }).waitFor();
@@ -173,6 +184,7 @@ try {
   await page.getByText("A private model connection needs attention", { exact: false }).waitFor();
   await assertVisibleElementsInsideViewport("desktop conversation");
   await page.screenshot({ path: `${outputDirectory}/conversation-desktop.png` });
+  await inspectDeletionDialog("desktop", "delete-conversation-desktop.png");
 
   await page.getByRole("link", { name: "Data and safety" }).click();
   await page.getByRole("heading", { name: "Data & safety" }).waitFor();
@@ -185,6 +197,7 @@ try {
   await inspectConversationAt(390, 844, "390px");
   await inspectSettingsAt(390, 844, "390px");
   await inspectConversationAt(320, 700, "320px");
+  await inspectDeletionDialog("320px", "delete-conversation-320px.png");
   await inspectSettingsAt(320, 700, "320px");
 } finally {
   await browser.close();
