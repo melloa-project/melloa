@@ -6,7 +6,13 @@ from datetime import datetime
 from typing import Protocol
 
 from melloa.domain.base import QualifiedName, RecordId, Sha256Digest
-from melloa.domain.self_change import ChangePatch, ChangeSummary, GitRevision, SelfChange
+from melloa.domain.self_change import (
+    ChangePatch,
+    ChangeSummary,
+    GitRevision,
+    PlannedSelfChange,
+    SelfChange,
+)
 
 
 class SelfChangeConflictError(RuntimeError):
@@ -15,6 +21,19 @@ class SelfChangeConflictError(RuntimeError):
 
 class SelfChangeNotFoundError(LookupError):
     """The requested self-change does not exist for this owner."""
+
+
+class SelfChangePlanningError(RuntimeError):
+    """A coding agent could not produce a policy-compliant proposal."""
+
+    def __init__(self, reason_code: QualifiedName) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+
+
+class SelfChangePlanner(Protocol):
+    def plan(self, change: SelfChange) -> PlannedSelfChange:
+        """Prepare one untrusted proposal from explicit request text and public source."""
 
 
 class SelfChangeStore(Protocol):
@@ -82,5 +101,7 @@ class SelfChangeStore(Protocol):
 __all__ = [
     "SelfChangeConflictError",
     "SelfChangeNotFoundError",
+    "SelfChangePlanner",
+    "SelfChangePlanningError",
     "SelfChangeStore",
 ]

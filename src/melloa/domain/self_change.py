@@ -35,6 +35,21 @@ class SelfChangeState(StrEnum):
     ROLLED_BACK = "rolled_back"
 
 
+class PlannedSelfChange(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    base_revision: GitRevision
+    summary: ChangeSummary
+    patch: ChangePatch
+
+    @property
+    def proposal_digest(self) -> str:
+        return self_change_proposal_digest(
+            base_revision=self.base_revision,
+            summary=self.summary,
+            patch=self.patch,
+        )
+
+
 class SelfChange(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     change_id: RecordId
@@ -202,6 +217,7 @@ __all__ = [
     "ChangePatch",
     "ChangeSummary",
     "GitRevision",
+    "PlannedSelfChange",
     "SelfChange",
     "SelfChangeState",
     "self_change_proposal_digest",

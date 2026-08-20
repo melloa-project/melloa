@@ -218,6 +218,7 @@ class PostgresSelfChangeStore:
                            proposal_summary = %s,
                            proposal_patch = %s,
                            proposal_digest = %s,
+                           attempt_count = 0,
                            available_at = %s,
                            lease_owner = NULL,
                            lease_expires_at = NULL,
