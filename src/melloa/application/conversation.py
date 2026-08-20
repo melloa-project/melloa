@@ -164,6 +164,41 @@ class ConversationService:
         self._store.create_thread(thread)
         return thread
 
+    def ensure_channel_thread(
+        self,
+        principal: AuthenticatedOwner,
+        *,
+        thread_id: RecordId,
+        title: str,
+        sensitivity: Sensitivity,
+    ) -> ConversationThread:
+        self._require_owner(principal)
+        try:
+            existing = self._store.get_thread(thread_id)
+        except ConversationNotFoundError:
+            self._require_write_mode()
+            now = self._clock()
+            existing = ConversationThread(
+                thread_id=thread_id,
+                owner_id=self._owner_id,
+                intelligence_id=self._intelligence_id,
+                title=title,
+                sensitivity=sensitivity,
+                created_at=now,
+                updated_at=now,
+            )
+            self._store.create_thread(existing)
+        self._require_thread_owner(principal, existing)
+        if (
+            existing.intelligence_id != self._intelligence_id
+            or existing.title != title
+            or existing.sensitivity is not sensitivity
+        ):
+            raise ConversationConflictError(
+                "owner channel conflicts with its canonical conversation"
+            )
+        return existing
+
     def list_threads(self, principal: AuthenticatedOwner) -> tuple[ConversationThread, ...]:
         self._require_owner(principal)
         return self._store.list_threads(principal.owner_id)
@@ -227,6 +262,7 @@ class ConversationService:
         thread_id: RecordId,
         text: str,
         idempotency_key: str,
+        source_client: QualifiedName = "client.owner-console",
     ) -> ConversationReply:
         return self._accept_owner_message(
             principal,
@@ -234,6 +270,7 @@ class ConversationService:
             text=text,
             idempotency_key=idempotency_key,
             corrects_message_id=None,
+            source_client=source_client,
         )
 
     def correct_owner_message(
@@ -244,6 +281,7 @@ class ConversationService:
         message_id: RecordId,
         text: str,
         idempotency_key: str,
+        source_client: QualifiedName = "client.owner-console",
     ) -> ConversationReply:
         return self._accept_owner_message(
             principal,
@@ -251,6 +289,7 @@ class ConversationService:
             text=text,
             idempotency_key=idempotency_key,
             corrects_message_id=message_id,
+            source_client=source_client,
         )
 
     def _accept_owner_message(
@@ -261,6 +300,7 @@ class ConversationService:
         text: str,
         idempotency_key: str,
         corrects_message_id: RecordId | None,
+        source_client: QualifiedName,
     ) -> ConversationReply:
         thread = self._store.get_thread(thread_id)
         self._require_thread_owner(principal, thread)
@@ -268,7 +308,12 @@ class ConversationService:
             raise ValueError("idempotency key must contain between 1 and 256 characters")
         existing = self._store.get_inbound_by_idempotency_key(thread_id, idempotency_key)
         if existing is not None:
-            self._require_same_submission(existing, text, corrects_message_id)
+            self._require_same_submission(
+                existing,
+                text,
+                corrects_message_id,
+                source_client,
+            )
             return self._process_accepted(existing, duplicate=True)
         if corrects_message_id is not None:
             target = self._store.get_message(corrects_message_id)
@@ -294,7 +339,7 @@ class ConversationService:
             message_id=self._id_factory("message"),
             thread_id=thread_id,
             author_principal_id=principal.owner_id,
-            source_client="client.owner-console",
+            source_client=source_client,
             parts=(MessagePart(kind=MessageKind.TEXT, text=text),),
             corrects_message_id=corrects_message_id,
             sensitivity=thread.sensitivity,
@@ -318,6 +363,7 @@ class ConversationService:
                 accepted.message,
                 text,
                 corrects_message_id,
+                source_client,
             )
             return self._process_accepted(accepted.message, duplicate=True)
         return self._process_accepted(accepted.message, duplicate=False)
@@ -588,7 +634,7 @@ class ConversationService:
             message_id=self._id_factory("message"),
             thread_id=thread.thread_id,
             author_principal_id=self._intelligence_id,
-            source_client="client.owner-console",
+            source_client=inbound.source_client,
             parts=(MessagePart(kind=MessageKind.TEXT, text=output.text),),
             reply_to_message_id=inbound.message_id,
             citation_ids=output.citation_ids,
@@ -908,13 +954,15 @@ class ConversationService:
         inbound: ConversationMessage,
         text: str,
         corrects_message_id: RecordId | None,
+        source_client: QualifiedName,
     ) -> None:
         if (
             self._message_text(inbound) != text
             or inbound.corrects_message_id != corrects_message_id
+            or inbound.source_client != source_client
         ):
             raise ConversationConflictError(
-                "idempotency key was reused with different message content"
+                "idempotency key was reused for a different submission"
             )
 
     def _reply_for_existing(

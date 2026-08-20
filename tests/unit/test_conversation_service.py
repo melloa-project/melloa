@@ -125,6 +125,8 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert reply.output_message is not None
     assert reply.output_message.parts[0].text == "Synthetic reply."
     assert reply.output_message.reply_to_message_id == reply.inbound_message.message_id
+    assert reply.inbound_message.source_client == "client.owner-console"
+    assert reply.output_message.source_client == "client.owner-console"
     assert reply.turn is not None
     assert reply.turn.triggering_message_ids == (reply.inbound_message.message_id,)
     assert reply.turn.retrieval_manifest_id is not None
@@ -203,6 +205,45 @@ def test_follow_up_includes_active_recent_conversation(fixed_time) -> None:
     ]
 
 
+def test_exact_owner_channel_reuses_one_thread_and_retains_source(fixed_time) -> None:
+    service, _store, _model = service_fixture(fixed_time)
+    owner = principal(fixed_time)
+    thread_id = record_id("thread", 77)
+
+    first_thread = service.ensure_channel_thread(
+        owner,
+        thread_id=thread_id,
+        title="Melli on Telegram",
+        sensitivity=Sensitivity.PERSONAL,
+    )
+    second_thread = service.ensure_channel_thread(
+        owner,
+        thread_id=thread_id,
+        title="Melli on Telegram",
+        sensitivity=Sensitivity.PERSONAL,
+    )
+    reply = service.post_owner_message(
+        owner,
+        thread_id=thread_id,
+        text="Hello from Telegram",
+        idempotency_key="telegram:update:12",
+        source_client="client.telegram",
+    )
+
+    assert first_thread == second_thread
+    assert reply.inbound_message.source_client == "client.telegram"
+    assert reply.output_message is not None
+    assert reply.output_message.source_client == "client.telegram"
+    with pytest.raises(ConversationConflictError, match="different submission"):
+        service.post_owner_message(
+            owner,
+            thread_id=thread_id,
+            text="Hello from Telegram",
+            idempotency_key="telegram:update:12",
+            source_client="client.owner-console",
+        )
+
+
 def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
     service, _store, model = service_fixture(fixed_time)
     owner = principal(fixed_time)
@@ -229,7 +270,7 @@ def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
     assert duplicate.output_message == first.output_message
     assert len(model.requests) == 1
 
-    with pytest.raises(ConversationConflictError, match="different message content"):
+    with pytest.raises(ConversationConflictError, match="different submission"):
         service.post_owner_message(
             owner,
             thread_id=thread.thread_id,
