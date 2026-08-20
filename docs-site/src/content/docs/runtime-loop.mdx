@@ -9,14 +9,16 @@ import RuntimeLoop from "../../components/RuntimeLoop.astro";
 
 ## Current direction
 
-Do not fork Hermes, OpenClaw-style gateway stacks, AgentTeams, or another broad agent harness as
-Melloa's runtime foundation right now.
+Do not fork Hermes, OpenClaw, AgentTeams, or another broad agent harness as Melloa's runtime
+foundation right now. The current comparison is in [Harness comparison](../harnesses/).
 
-Those projects are useful references. Hermes shows strong work on messaging gateways, provider
-switching, skills, memory, and a fast installer. AgentTeams/OpenClaw-style stacks show useful
-patterns for manager/worker isolation, human-visible rooms, model gateways, and preflight checks.
-But their center of gravity is broad runtime orchestration. Melloa's center of gravity is narrower:
-a one-owner relationship system that can safely change and recover its own home-server deployment.
+Those projects are useful references. OpenClaw shows strong channel-gateway and provider setup
+patterns. Hermes shows strong work on messaging gateways, provider switching, skills, memory, cron,
+and a fast installer. AgentTeams/OpenClaw-style stacks show useful patterns for manager/worker
+isolation, human-visible rooms, model gateways, and preflight checks. Memory layers such as GBrain
+show useful source-owned memory, synthesis, and citation patterns. But their center of gravity is
+broader than this deployment. Melloa's center of gravity is narrower: a one-owner relationship system
+that can safely change and recover its own home-server runtime.
 
 Forking a broad harness before this loop is proven would import channels, worker topologies, plugin
 surfaces, migration contracts, and tool authority that are not needed for the first owner server.

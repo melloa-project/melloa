@@ -1,0 +1,54 @@
+---
+title: Harness comparison
+description: Why Melloa is not forking OpenClaw, Hermes, AgentTeams, or a memory layer for the first server loop.
+---
+
+The short decision: do not fork OpenClaw, Hermes, AgentTeams, or GBrain as the Melloa runtime base
+for the first owner deployment.
+
+Melloa should own its recovery spine: exact-owner Telegram input, hosted model routing, retained
+self-change proposals, exact owner approval, commit/push/deploy, rollback, encrypted restore drill,
+and independent Guardian status. Existing agent harnesses are valuable references, but they do not
+make that narrow loop smaller today.
+
+## What to learn from each project
+
+| Project | Center of gravity | Useful patterns | Why not fork now |
+| --- | --- | --- | --- |
+| OpenClaw | Personal AI assistant gateway across devices, models, tools, plugins, and chat channels. | Onboarding, channel pairing, gateway status, provider configuration, security/runbook wording. | It brings a broad gateway and plugin/tool-host surface before Melloa has proven the one-owner recovery loop. Tools can run on the host unless sandboxed, so adopting it would move the safety problem rather than remove it. |
+| Hermes Agent | Self-improving agent with Telegram and other messaging gateways, provider switching, memory, skills, cron, and terminal backends. | Fast install/update ergonomics, `doctor`-style diagnostics, provider switching, skill lifecycle ideas, remote Telegram use. | Its normal runtime is a broad self-improving agent. Melloa needs self-change only through retained diffs and exact owner approval, with recovery-critical code kept outside casual change. |
+| AgentTeams / OpenClaw-style orchestration | Manager/worker multi-agent collaboration in visible Matrix rooms, with gateways, shared files, and Kubernetes/Helm deployment. | Manager/worker isolation, auditable rooms, credential gateway, LLM preflight, shared files for lower token cost. | It is optimized for teams of agents and enterprise orchestration. Matrix, MinIO, Kubernetes resources, worker contracts, and team rooms are excess surface for the first home-server path. |
+| GBrain and similar memory layers | Owned memory/knowledge layer for agents and coding assistants. | Markdown-owned memory, synthesis with citations, gap analysis, MCP integration, memory verbs. | It is not a conversation runtime or recovery spine. Memory should be adopted after Melloa proves stable conversation, source provenance, correction, export, and deletion in the owner journey. |
+
+## The runtime slice Melloa should own
+
+The first loop is deliberately small:
+
+1. the paired Telegram owner sends a message;
+2. Melli replies through the selected hosted model route;
+3. the owner asks for one bounded source change;
+4. the planner produces a retained diff from public-safe request text;
+5. the owner approves the exact diff with the exact Telegram token;
+6. the applier commits, pushes, deploys, verifies, and leaves rollback evidence;
+7. reboot, restore drill, update, rollback, and Telegram verification still work.
+
+If a framework makes that list shorter, safer, and easier to deploy on a dedicated server, it should
+be reconsidered. If it adds channels, plugins, workers, dashboards, provider matrices, or tool
+authority before that loop works, it waits.
+
+## Fork criteria
+
+Forking becomes credible only if an existing harness can satisfy the Melloa spine without major
+inversion:
+
+- exact one-owner Telegram binding, with no broad channel exposure by default;
+- hosted provider routes that never silently fall across cost/privacy boundaries;
+- Codex CLI or another planner usable as an unattended self-change worker without private
+  conversation history, release credentials, or source-write authority in the planning phase;
+- retained proposal diffs and exact owner approval before commit, push, deploy, or restart;
+- a rollback and restore proof that does not depend on the main application still being healthy;
+- independent Guardian remaining outside the harness's write, deploy, signing, credential, and
+  recovery authority.
+
+OpenClaw, Hermes, AgentTeams, and memory layers may provide pieces. They do not remove the need for
+Melloa to own this base loop.

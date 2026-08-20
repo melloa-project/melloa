@@ -1,0 +1,31 @@
+---
+const items = [
+  {
+    label: "Implemented path",
+    value: "Server install + Telegram + hosted routes + bounded self-change",
+    note: "The public guide is the path to follow on the home server.",
+  },
+  {
+    label: "Evidence still needed",
+    value: "One real dedicated-server run",
+    note: "Live provider, backup, reboot, restore, self-change, update, rollback, and dogfooding.",
+  },
+  {
+    label: "Fork decision",
+    value: "Own the recovery spine",
+    note: "Borrow from OpenClaw, Hermes, AgentTeams, and memory layers after the closed loop works.",
+  },
+];
+---
+
+<section class="melloa-status-strip" aria-label="Melloa project state">
+  {
+    items.map((item) => (
+      <article>
+        <p>{item.label}</p>
+        <h2>{item.value}</h2>
+        <span>{item.note}</span>
+      </article>
+    ))
+  }
+</section>

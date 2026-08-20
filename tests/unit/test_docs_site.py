@@ -11,6 +11,9 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     command_spine = (DOCS_SITE / "src/components/CommandSpine.astro").read_text(
         encoding="utf-8"
     )
+    status_strip = (DOCS_SITE / "src/components/StatusStrip.astro").read_text(
+        encoding="utf-8"
+    )
 
     assert "Run Melloa on a home server" in homepage
     assert "setup discovers your numeric owner ID during private pairing" in homepage
@@ -18,9 +21,14 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "You do not need a local GPU or local model to begin" in homepage
     assert "gpt-5.6-luna" in homepage
     assert "Melloa is not starting as a generic multi-agent harness" in homepage
+    assert "Harness comparison" in homepage
     assert "RuntimeLoop" in homepage
+    assert "StatusStrip" in homepage
     assert "Self-change is core" in homepage
     assert "CommandSpine" in homepage
+    assert "Implemented path" in status_strip
+    assert "One real dedicated-server run" in status_strip
+    assert "Fork decision" in status_strip
     assert "First server path" in command_spine
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in command_spine
     assert 'stat --format=\'%d\' /mnt/melloa-off-device-backup' in command_spine
@@ -66,6 +74,8 @@ def test_readme_opens_with_first_owner_server_path() -> None:
     assert "## Evidence status" in opening
     assert "Telegram message → routed hosted-model reply" in opening
     assert "separate conversation adapter" in readme
+    assert "OpenClaw, Hermes, AgentTeams, GBrain-style" in readme
+    assert "exact-owner Telegram, hosted model routing" in readme
     assert "Deployment readiness: NOT READY" not in opening
     assert "Do not deploy this repository" not in opening
     assert "disposable preview" not in opening
@@ -134,6 +144,9 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     runtime_loop = (DOCS_SITE / "src/content/docs/runtime-loop.mdx").read_text(
         encoding="utf-8"
     )
+    harnesses = (DOCS_SITE / "src/content/docs/harnesses.mdx").read_text(
+        encoding="utf-8"
+    )
 
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
@@ -154,10 +167,14 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "commits, pushes, deploys" in self_change
     assert "Codex CLI is the confined planner" in self_change
     assert "disposable checkout outside the active runtime" in self_change
-    assert "Do not fork Hermes" in runtime_loop
+    assert "Do not fork Hermes, OpenClaw, AgentTeams" in runtime_loop
     assert "AgentTeams/OpenClaw-style stacks" in runtime_loop
     assert "separate conversation adapter" in runtime_loop
     assert "no source checkout" in runtime_loop
+    assert "do not fork OpenClaw, Hermes, AgentTeams, or GBrain" in harnesses
+    assert "exact one-owner Telegram binding" in harnesses
+    assert "retained proposal diffs and exact owner approval" in harnesses
+    assert "independent Guardian remaining outside" in harnesses
 
 
 def test_public_site_uses_github_pages_safe_links() -> None:
@@ -175,6 +192,7 @@ def test_public_site_uses_github_pages_safe_links() -> None:
     assert "link: ./self-change/" in homepage
     assert "(./deploy/)" in homepage
     assert "(./runtime-loop/)" in homepage
+    assert "(./harnesses/)" in homepage
     assert "(../self-change/)" in deploy
     assert "(../runtime-loop/)" in deploy
     assert "link: /deploy/" not in homepage

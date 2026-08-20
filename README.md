@@ -108,9 +108,11 @@ The public project website is a Starlight site in [docs-site](docs-site), deploy
 workflow. It is the owner-facing setup path; the old MkDocs architecture bundle is not active
 guidance.
 
-The current fork/adopt decision is conservative: use Hermes, OpenClaw-style gateways, AgentTeams,
-and similar systems as references, but do not fork them as the Melloa runtime foundation until the
-one-owner recoverable self-change loop is proven on a real server.
+The current fork/adopt decision is conservative: use OpenClaw, Hermes, AgentTeams, GBrain-style
+memory layers, and similar systems as references, but do not fork them as the Melloa runtime
+foundation until the one-owner recoverable self-change loop is proven on a real server. Melloa needs
+to own the narrow spine first: exact-owner Telegram, hosted model routing, retained self-change diff,
+exact approval, commit/push/deploy, rollback, encrypted restore drill, and independent Guardian.
 
 ## What the first real server run must prove
 

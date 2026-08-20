@@ -18,6 +18,7 @@ hero:
 import { Card, CardGrid } from "@astrojs/starlight/components";
 import CommandSpine from "../../components/CommandSpine.astro";
 import RuntimeLoop from "../../components/RuntimeLoop.astro";
+import StatusStrip from "../../components/StatusStrip.astro";
 
 The current path is intentionally concrete: a dedicated Debian server, a private Telegram bot chat,
 two hosted OpenAI-compatible model routes, encrypted backups, and a bounded self-change loop that
@@ -25,6 +26,8 @@ can propose, commit, push, deploy, and roll back owner-approved changes.
 
 This site is the public front door. It should help you get a working Melli, then use Melli to improve
 the system from there.
+
+<StatusStrip />
 
 <CommandSpine />
 
@@ -56,7 +59,8 @@ the system from there.
 Melloa is not starting as a generic multi-agent harness, channel gateway, or plugin marketplace.
 Those systems are useful references, but the first deployment is narrower: one owner, one Telegram
 chat, hosted model routes, bounded self-change, and recovery evidence. See [Runtime loop](./runtime-loop/)
-for the comparison and the current fork/adopt decision.
+for the closed-loop design and [Harness comparison](./harnesses/) for the current fork/adopt
+decision.
 
 ## What you need
 
