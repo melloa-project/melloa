@@ -4,6 +4,7 @@ set -uo pipefail
 umask 077
 
 readonly BACKUP_TAG=melloa-database
+readonly RELEASE_TAG=melloa-release
 readonly DUMP_FILENAME=melloa.dump
 readonly DATABASE_PASSWORD_FILE=/run/melloa/private/postgres-backup-password
 readonly MIGRATION_PASSWORD_FILE=/run/melloa/private/postgres-migration-password
@@ -37,12 +38,18 @@ require_secret_file() {
   local path="$1"
   local label="$2"
   local mode
+  local permissions
   if [[ ! -f "$path" || -L "$path" || ! -r "$path" ]]; then
     echo "$label must be a readable regular secret" >&2
     return 1
   fi
   mode="$(stat --format='%a' "$path")"
-  if [[ "$mode" =~ ^[0-7][2367][0-7]$ || "$mode" =~ ^[0-7][0-7][2367]$ ]]; then
+  if [[ ! "$mode" =~ ^[0-7]{3,4}$ ]]; then
+    echo "$label has an invalid permission mode" >&2
+    return 1
+  fi
+  permissions=$((8#$mode))
+  if ((permissions & 0022)); then
     echo "$label must not be writable by its group or other users" >&2
     return 1
   fi
@@ -123,6 +130,7 @@ validate_writable_configuration() {
 }
 
 run_backup() {
+  local snapshot_tag="${1:-$BACKUP_TAG}"
   local backup_output
   local completed_at
   local snapshot_id
@@ -149,7 +157,7 @@ run_backup() {
     --lock-wait-timeout 30s |
     restic --no-cache backup \
       --host melloa-server \
-      --tag "$BACKUP_TAG" \
+      --tag "$snapshot_tag" \
       --stdin \
       --stdin-filename "$DUMP_FILENAME" \
       --json >"$backup_output"
@@ -176,12 +184,20 @@ run_backup() {
     return 1
   fi
 
-  if ! restic --no-cache forget \
-    --tag "$BACKUP_TAG" \
-    --keep-daily 14 \
-    --keep-weekly 8 \
-    --keep-monthly 12 \
-    --prune >/dev/null; then
+  if [[ "$snapshot_tag" == "$RELEASE_TAG" ]]; then
+    if ! restic --no-cache forget \
+      --tag "$RELEASE_TAG" \
+      --keep-last 10 \
+      --prune >/dev/null; then
+      fail_backup backup.retention_failed
+      return 1
+    fi
+  elif ! restic --no-cache forget \
+      --tag "$BACKUP_TAG" \
+      --keep-daily 14 \
+      --keep-weekly 8 \
+      --keep-monthly 12 \
+      --prune >/dev/null; then
     fail_backup backup.retention_failed
     return 1
   fi
@@ -220,6 +236,22 @@ run_loop() {
   done
 }
 
+run_once() {
+  if ! validate_writable_configuration || ! prepare_pgpass; then
+    fail_backup backup.configuration_invalid || true
+    return 2
+  fi
+  run_backup
+}
+
+run_release_backup() {
+  if ! validate_writable_configuration || ! prepare_pgpass; then
+    fail_backup backup.configuration_invalid || true
+    return 2
+  fi
+  run_backup "$RELEASE_TAG"
+}
+
 initialize_repository() {
   validate_writable_configuration || return 2
   restic --no-cache init
@@ -237,6 +269,7 @@ restore_snapshot() {
 
 restore_database() {
   local snapshot="${1:-latest}"
+  local replace="${2:-false}"
   local password
   local -a pipeline_status
   validate_common_configuration || return 2
@@ -255,6 +288,20 @@ restore_database() {
   printf 'postgres:5432:melloa:melloa_migrator:%s\n' "$password" \
     >"$RESTORE_PGPASS_PATH"
   unset password
+
+  if [[ "$replace" == true ]]; then
+    if ! PGCONNECT_TIMEOUT=5 PGPASSFILE="$RESTORE_PGPASS_PATH" psql \
+      --host postgres \
+      --port 5432 \
+      --username melloa_migrator \
+      --dbname melloa \
+      --set=ON_ERROR_STOP=1 \
+      --command='DROP SCHEMA IF EXISTS melloa CASCADE'; then
+      find /tmp -maxdepth 1 -type f -name 'postgres-restore.pgpass' -delete
+      echo "Existing database state could not be cleared for restore" >&2
+      return 1
+    fi
+  fi
 
   restic --no-cache --no-lock dump "$snapshot" "$DUMP_FILENAME" |
     PGCONNECT_TIMEOUT=5 PGPASSFILE="$RESTORE_PGPASS_PATH" pg_restore \
@@ -276,6 +323,12 @@ case "${1:-run}" in
   run)
     run_loop
     ;;
+  once)
+    run_once
+    ;;
+  release)
+    run_release_backup
+    ;;
   init)
     initialize_repository
     ;;
@@ -285,8 +338,11 @@ case "${1:-run}" in
   restore-database)
     restore_database "${2:-latest}"
     ;;
+  restore-database-replace)
+    restore_database "${2:-latest}" true
+    ;;
   *)
-    echo "Usage: melloa-backup [run|init|restore [snapshot-id]|restore-database [snapshot-id]]" >&2
+    echo "Usage: melloa-backup [run|once|release|init|restore|restore-database|restore-database-replace]" >&2
     exit 2
     ;;
 esac

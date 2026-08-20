@@ -8,6 +8,18 @@ readonly IMAGE="melloa-local/server-test:${PROJECT}"
 readonly BACKUP_IMAGE="melloa-local/backup-test:${PROJECT}"
 readonly ENV_FILE="$WORKDIR/server.env"
 readonly SENSITIVE_FIXTURE_MARKER='restore-private-owner-marker-v1'
+readonly SOURCE_REVISION='1111111111111111111111111111111111111111'
+readonly FAILED_REVISION='2222222222222222222222222222222222222222'
+readonly NEXT_REVISION='3333333333333333333333333333333333333333'
+readonly INTERRUPTED_REVISION='4444444444444444444444444444444444444444'
+readonly FAILED_IMAGE="melloa-local/server-test:${PROJECT}-failed"
+readonly FAILED_BACKUP_IMAGE="melloa-local/backup-test:${PROJECT}-failed"
+readonly NEXT_IMAGE="melloa-local/server-test:${PROJECT}-next"
+readonly NEXT_BACKUP_IMAGE="melloa-local/backup-test:${PROJECT}-next"
+readonly INTERRUPTED_IMAGE="melloa-local/server-test:${PROJECT}-interrupted"
+readonly INTERRUPTED_BACKUP_IMAGE="melloa-local/backup-test:${PROJECT}-interrupted"
+readonly IMAGE_STAGING_CONTAINER="${PROJECT}-image-staging"
+INTERRUPTED_RELEASE_PID=""
 
 detect_build_ca() {
   local candidate
@@ -39,7 +51,24 @@ compose() {
 }
 
 cleanup() {
+  local status=$?
+  if ((status != 0)) && [[ -f "$WORKDIR/interrupted-release.log" ]]; then
+    echo "Interrupted release diagnostic:" >&2
+    tail -n 160 "$WORKDIR/interrupted-release.log" >&2 || true
+  fi
+  if [[ "$INTERRUPTED_RELEASE_PID" =~ ^[1-9][0-9]*$ ]]; then
+    kill -TERM "$INTERRUPTED_RELEASE_PID" >/dev/null 2>&1 || true
+    wait "$INTERRUPTED_RELEASE_PID" 2>/dev/null || true
+  fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker container rm "$IMAGE_STAGING_CONTAINER" >/dev/null 2>&1 || true
+  docker image rm \
+    "$FAILED_IMAGE" \
+    "$FAILED_BACKUP_IMAGE" \
+    "$NEXT_IMAGE" \
+    "$NEXT_BACKUP_IMAGE" \
+    "$INTERRUPTED_IMAGE" \
+    "$INTERRUPTED_BACKUP_IMAGE" >/dev/null 2>&1 || true
   docker image rm "$IMAGE" >/dev/null 2>&1 || true
   docker image rm "$BACKUP_IMAGE" >/dev/null 2>&1 || true
   if [[ "$WORKDIR" == "$ROOT"/.server-runtime.* && -d "$WORKDIR" ]]; then
@@ -155,11 +184,42 @@ run_recovery_journey() {
     --expected-file /run/melloa/journey/expected-owner-state.json
 }
 
+relabel_image() {
+  local source="$1"
+  local target="$2"
+  local revision="$3"
+  local entrypoint="${4:-}"
+  local container
+  docker container rm "$IMAGE_STAGING_CONTAINER" >/dev/null 2>&1 || true
+  container="$(docker create --name "$IMAGE_STAGING_CONTAINER" "$source")"
+  if [[ -n "$entrypoint" ]]; then
+    docker commit \
+      --change "LABEL org.opencontainers.image.revision=$revision" \
+      --change "ENTRYPOINT [\"$entrypoint\"]" \
+      --change 'CMD []' \
+      "$container" "$target" >/dev/null
+  else
+    docker commit \
+      --change "LABEL org.opencontainers.image.revision=$revision" \
+      "$container" "$target" >/dev/null
+  fi
+  docker container rm "$container" >/dev/null
+}
+
+release() {
+  MELLOA_RELEASE_HEALTH_TIMEOUT_SECONDS=45 \
+  MELLOA_RELEASE_POLL_SECONDS=1 \
+    "$ROOT/tools/server_release.sh" "$@" \
+      --env-file "$ENV_FILE" \
+      --state-dir "$WORKDIR/release-state"
+}
+
 mkdir -p \
   "$WORKDIR/private/model-credentials" \
   "$WORKDIR/guardian-handoff" \
   "$WORKDIR/runtime-state" \
   "$WORKDIR/backup-repository" \
+  "$WORKDIR/release-state" \
   "$WORKDIR/journey"
 chmod 0700 \
   "$WORKDIR/private" \
@@ -168,6 +228,10 @@ chmod 0700 \
   "$WORKDIR/runtime-state" \
   "$WORKDIR/backup-repository" \
   "$WORKDIR/journey"
+chmod 0711 "$WORKDIR/release-state"
+
+write_private "$WORKDIR/release-state/active-revision" "$SOURCE_REVISION"
+chmod 0644 "$WORKDIR/release-state/active-revision"
 
 readonly ADMIN_PASSWORD="admin_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 readonly APP_PASSWORD="app_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
@@ -206,7 +270,7 @@ install -m 0600 /dev/null "$ENV_FILE"
   printf 'MELLOA_COMPOSE_PROJECT_NAME=%s\n' "$PROJECT"
   printf 'MELLOA_IMAGE=%s\n' "$IMAGE"
   printf 'MELLOA_BACKUP_IMAGE=%s\n' "$BACKUP_IMAGE"
-  printf 'MELLOA_SOURCE_REVISION=server-runtime-test\n'
+  printf 'MELLOA_SOURCE_REVISION=%s\n' "$SOURCE_REVISION"
   printf 'MELLOA_RUNTIME_UID=%s\n' "$(id -u)"
   printf 'MELLOA_RUNTIME_GID=%s\n' "$(id -g)"
   printf 'MELLOA_STATE_SUBNET=172.30.37.0/28\n'
@@ -235,6 +299,7 @@ install -m 0600 /dev/null "$ENV_FILE"
   printf 'MELLOA_GUARDIAN_HANDOFF_DIR=%s\n' "$WORKDIR/guardian-handoff"
   printf 'MELLOA_RUNTIME_STATE_DIR=%s\n' "$WORKDIR/runtime-state"
   printf 'MELLOA_BACKUP_REPOSITORY_DIR=%s\n' "$WORKDIR/backup-repository"
+  printf 'MELLOA_RELEASE_STATE_DIR=%s\n' "$WORKDIR/release-state"
   printf 'MELLOA_BACKUP_INTERVAL_SECONDS=4\n'
   printf 'MELLOA_BACKUP_RETRY_SECONDS=2\n'
 } >"$ENV_FILE"
@@ -385,4 +450,101 @@ if [[ "$BACKUP_HAS_MUTATION_PRIVILEGE" != f ]]; then
   exit 1
 fi
 
-echo "Persistent runtime, supervised recovery, scheduled encrypted backup, and clean restore passed."
+release deploy \
+  --revision "$SOURCE_REVISION" \
+  --app-image "$IMAGE" \
+  --backup-image "$BACKUP_IMAGE" \
+  --no-build >/dev/null
+[[ "$(jq -r .active.revision "$WORKDIR/release-state/release.json")" == "$SOURCE_REVISION" ]]
+[[ "$(stat --format='%a' "$WORKDIR/release-state")" == 711 ]]
+[[ "$(stat --format='%a' "$WORKDIR/release-state/active-revision")" == 644 ]]
+docker run --rm \
+  --user 10001:10001 \
+  --read-only \
+  --entrypoint python \
+  --volume "$WORKDIR/release-state:/run/melloa/release:ro" \
+  "$IMAGE" \
+  -c "from pathlib import Path; from melloa.application.release_activation import ReleaseActivationGate; assert ReleaseActivationGate(Path('/run/melloa/release/active-revision'), '$SOURCE_REVISION').is_active()"
+
+relabel_image "$IMAGE" "$INTERRUPTED_IMAGE" "$INTERRUPTED_REVISION"
+relabel_image "$BACKUP_IMAGE" "$INTERRUPTED_BACKUP_IMAGE" "$INTERRUPTED_REVISION"
+MELLOA_RELEASE_HEALTH_TIMEOUT_SECONDS=60 \
+MELLOA_RELEASE_POLL_SECONDS=30 \
+  "$ROOT/tools/server_release.sh" deploy \
+    --env-file "$ENV_FILE" \
+    --state-dir "$WORKDIR/release-state" \
+    --revision "$INTERRUPTED_REVISION" \
+    --app-image "$INTERRUPTED_IMAGE" \
+    --backup-image "$INTERRUPTED_BACKUP_IMAGE" \
+    --no-build >"$WORKDIR/interrupted-release.log" 2>&1 &
+INTERRUPTED_RELEASE_PID=$!
+interrupted_container=""
+for _ in $(seq 1 120); do
+  candidate_container="$(compose ps --all --quiet melloa)"
+  if [[ -n "$candidate_container" ]] &&
+    [[ "$(docker inspect --format '{{.Image}}' "$candidate_container")" == \
+      "$(docker image inspect --format '{{.Id}}' "$INTERRUPTED_IMAGE")" ]]; then
+    interrupted_container="$candidate_container"
+    break
+  fi
+  if ! kill -0 "$INTERRUPTED_RELEASE_PID" 2>/dev/null; then
+    cat "$WORKDIR/interrupted-release.log" >&2
+    echo "Candidate release ended before its interruption could be exercised" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ -z "$interrupted_container" ]]; then
+  kill -TERM "$INTERRUPTED_RELEASE_PID" 2>/dev/null || true
+  wait "$INTERRUPTED_RELEASE_PID" || true
+  INTERRUPTED_RELEASE_PID=""
+  cat "$WORKDIR/interrupted-release.log" >&2
+  echo "Candidate release did not enter its pre-activation state" >&2
+  exit 1
+fi
+kill -TERM "$INTERRUPTED_RELEASE_PID"
+if wait "$INTERRUPTED_RELEASE_PID"; then
+  echo "Interrupted release unexpectedly reported success" >&2
+  exit 1
+fi
+INTERRUPTED_RELEASE_PID=""
+grep --fixed-strings --quiet \
+  'The last active release has been recovered.' "$WORKDIR/interrupted-release.log"
+[[ "$(jq -r .active.revision "$WORKDIR/release-state/release.json")" == "$SOURCE_REVISION" ]]
+[[ "$(<"$WORKDIR/release-state/active-revision")" == "$SOURCE_REVISION" ]]
+run_recovery_journey verify >/dev/null
+
+relabel_image "$IMAGE" "$FAILED_IMAGE" "$FAILED_REVISION" /bin/false
+relabel_image "$BACKUP_IMAGE" "$FAILED_BACKUP_IMAGE" "$FAILED_REVISION"
+if release deploy \
+  --revision "$FAILED_REVISION" \
+  --app-image "$FAILED_IMAGE" \
+  --backup-image "$FAILED_BACKUP_IMAGE" \
+  --no-build >/dev/null; then
+  echo "Unhealthy candidate release unexpectedly activated" >&2
+  exit 1
+fi
+[[ "$(jq -r .active.revision "$WORKDIR/release-state/release.json")" == "$SOURCE_REVISION" ]]
+[[ "$(<"$WORKDIR/release-state/active-revision")" == "$SOURCE_REVISION" ]]
+run_recovery_journey verify >/dev/null
+
+relabel_image "$IMAGE" "$NEXT_IMAGE" "$NEXT_REVISION"
+relabel_image "$BACKUP_IMAGE" "$NEXT_BACKUP_IMAGE" "$NEXT_REVISION"
+release deploy \
+  --revision "$NEXT_REVISION" \
+  --app-image "$NEXT_IMAGE" \
+  --backup-image "$NEXT_BACKUP_IMAGE" \
+  --no-build >/dev/null
+[[ "$(jq -r .active.revision "$WORKDIR/release-state/release.json")" == "$NEXT_REVISION" ]]
+[[ "$(<"$WORKDIR/release-state/active-revision")" == "$NEXT_REVISION" ]]
+
+release rollback >/dev/null
+[[ "$(jq -r .active.revision "$WORKDIR/release-state/release.json")" == "$SOURCE_REVISION" ]]
+[[ "$(<"$WORKDIR/release-state/active-revision")" == "$SOURCE_REVISION" ]]
+run_recovery_journey verify >/dev/null
+
+readonly ACTIVE_MELLOA_CONTAINER="$(compose ps --all --quiet melloa)"
+[[ "$(docker inspect --format '{{.Image}}' "$ACTIVE_MELLOA_CONTAINER")" == "$(docker image inspect --format '{{.Id}}' "$IMAGE")" ]]
+[[ "$(jq -s '[.[].outcome] | index("interrupted") != null and index("rolled_back") != null and index("succeeded") != null' "$WORKDIR/release-state/history.jsonl")" == true ]]
+
+echo "Persistent runtime, encrypted recovery, interruption recovery, failed deploy rollback, and explicit rollback passed."

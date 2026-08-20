@@ -185,6 +185,23 @@ async def _run_runtime_watchdog(
             return
 
 
+async def _run_after_activation(
+    worker: Callable[[], Coroutine[object, object, None]],
+    activation_check: Callable[[], bool],
+    interval: float,
+) -> None:
+    while True:
+        try:
+            if await asyncio.to_thread(activation_check):
+                break
+        except Exception:
+            _LOGGER.warning(
+                "Release activation could not be verified; background work remains held."
+            )
+        await asyncio.sleep(interval)
+    await worker()
+
+
 def create_app(
     guardian_reader: GuardianStatusReader,
     owner_sessions: OwnerSessionManager | None = None,
@@ -196,6 +213,8 @@ def create_app(
     run_conversation_worker: bool = False,
     conversation_worker_interval: float = 1.0,
     owner_telegram_worker: Callable[[], Coroutine[object, object, None]] | None = None,
+    background_activation: Callable[[], bool] | None = None,
+    activation_poll_interval: float = 1.0,
     runtime_health: Callable[[], None] | None = None,
     runtime_failure_handler: Callable[[], None] | None = None,
     runtime_watchdog_interval: float = 5.0,
@@ -207,6 +226,8 @@ def create_app(
         raise ValueError("conversation worker requires a configured conversation service")
     if runtime_watchdog_interval <= 0:
         raise ValueError("runtime watchdog interval must be positive")
+    if activation_poll_interval <= 0:
+        raise ValueError("release activation poll interval must be positive")
     if runtime_failure_handler is not None and runtime_health is None:
         raise ValueError("runtime failure handling requires a health check")
 
@@ -214,16 +235,35 @@ def create_app(
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         workers: list[asyncio.Task[None]] = []
         if run_conversation_worker and conversation_service is not None:
+            async def conversation_worker() -> None:
+                await _run_conversation_worker(
+                    conversation_service,
+                    conversation_worker_interval,
+                )
+
             workers.append(
                 asyncio.create_task(
-                    _run_conversation_worker(
-                        conversation_service,
-                        conversation_worker_interval,
+                    conversation_worker()
+                    if background_activation is None
+                    else _run_after_activation(
+                        conversation_worker,
+                        background_activation,
+                        activation_poll_interval,
                     )
                 )
             )
         if owner_telegram_worker is not None:
-            workers.append(asyncio.create_task(owner_telegram_worker()))
+            workers.append(
+                asyncio.create_task(
+                    owner_telegram_worker()
+                    if background_activation is None
+                    else _run_after_activation(
+                        owner_telegram_worker,
+                        background_activation,
+                        activation_poll_interval,
+                    )
+                )
+            )
         if runtime_health is not None and runtime_failure_handler is not None:
             workers.append(
                 asyncio.create_task(

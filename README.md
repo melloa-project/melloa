@@ -28,9 +28,12 @@ the conversation; Melloa never silently falls back across routes. A generic, une
 runtime now gates startup on migrations and recovers from application or PostgreSQL restarts, but
 it remains an [engineering checkpoint](infra/server/README.md), not a qualified owner deployment
 path. It now streams automatic encrypted snapshots into an owner-mounted repository, reports backup
-health through `/status`, and proves a clean restore of representative owner state. Release
-installation/rollback, policy-bounded self-modification, a real off-device repository and recovery
-key setup, real provider configuration, and deployed dogfooding remain incomplete.
+health through `/status`, and proves a clean restore of representative owner state. A release tool
+now builds reviewed commits, holds Telegram and model work until atomic activation, takes an exact
+pre-deploy snapshot, recovers interrupted or unhealthy candidates, and supports schema-checked
+rollback. This is still only a disposable Docker proof: power-loss resumption,
+policy-bounded self-modification, a real off-device repository and recovery-key setup, real provider
+configuration, installation on an actual server, and deployed dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.
@@ -51,6 +54,11 @@ tested server installation and recovery path that:
 
 Until every item is exercised as a real owner journey on a deployed machine, Melloa is not ready in
 the sense used by this project or this README.
+
+The banner at the top of this README is the authoritative answer. When the system is ready, it will
+say **READY FOR OWNER DEPLOYMENT** and this README will contain the tested installation command,
+first Telegram conversation, update, rollback, and recovery journey. If it still says `NOT READY`,
+there is no supported persistent deployment to infer from lower-level engineering notes.
 
 ## Run the current baseline
 

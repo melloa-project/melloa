@@ -27,6 +27,7 @@ from melloa.adapters.postgres.migrations import (
     migration_status,
 )
 from melloa.adapters.telegram import TelegramOwnerConfig
+from melloa.application.release_activation import ReleaseActivationGate
 from melloa.apps.core import AccessScope
 from melloa.apps.runtime import build_runtime
 
@@ -229,6 +230,17 @@ def serve(args: argparse.Namespace) -> int:
                 else _read_telegram_bot_token(telegram_token_path)
             )
             backup_status_file = getattr(args, "backup_status_file", None)
+            activation_file = getattr(args, "deployment_activation_file", None)
+            source_revision = getattr(args, "source_revision", None)
+            if (activation_file is None) != (source_revision is None):
+                raise ValueError(
+                    "deployment activation file and source revision must be supplied together"
+                )
+            activation_gate = (
+                None
+                if activation_file is None or source_revision is None
+                else ReleaseActivationGate(activation_file, source_revision)
+            )
             if telegram_config is not None and connection is None:
                 raise ValueError("Telegram requires a private PostgreSQL database")
             if telegram_config is not None and model_routes is None:
@@ -250,6 +262,9 @@ def serve(args: argparse.Namespace) -> int:
                 telegram_config=telegram_config,
                 telegram_bot_token=telegram_token,
                 backup_status_file=backup_status_file,
+                background_activation=(
+                    None if activation_gate is None else activation_gate.is_active
+                ),
             )
         except psycopg.Error:
             _exit_error("Private database is unavailable or incompatible.")
@@ -279,6 +294,7 @@ def serve(args: argparse.Namespace) -> int:
                     "model_routing_enabled": model_routes is not None,
                     "persistence": runtime.persistence,
                     "telegram_enabled": telegram_config is not None,
+                    "release_activation_required": activation_gate is not None,
                 },
                 indent=2,
                 sort_keys=True,
@@ -371,6 +387,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--backup-status-file",
         type=Path,
         default=None if backup_status_path is None else Path(backup_status_path),
+    )
+    activation_path = os.environ.get("MELLOA_DEPLOYMENT_ACTIVATION_FILE")
+    serve_parser.add_argument(
+        "--deployment-activation-file",
+        type=Path,
+        default=None if activation_path is None else Path(activation_path),
+    )
+    source_revision = os.environ.get("MELLOA_SOURCE_REVISION")
+    serve_parser.add_argument(
+        "--source-revision",
+        default=source_revision,
     )
     serve_parser.add_argument("--host", type=_private_bind_address, default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)

@@ -149,6 +149,7 @@ def test_serve_builds_one_runtime_without_printing_owner_secret(
         "telegram_config": None,
         "telegram_bot_token": None,
         "backup_status_file": None,
+        "background_activation": None,
     }
     assert captured["uvicorn_kwargs"] == {
         "host": "127.0.0.1",
@@ -344,6 +345,10 @@ def test_parser_exposes_only_current_operator_commands() -> None:
             "/run/credentials/telegram-token",
             "--backup-status-file",
             "/var/lib/melloa/backup-status.json",
+            "--deployment-activation-file",
+            "/var/lib/melloa/release/active-revision",
+            "--source-revision",
+            "abc123",
         ]
     )
     migrate = parser.parse_args(
@@ -358,6 +363,10 @@ def test_parser_exposes_only_current_operator_commands() -> None:
     assert serve.telegram_owner_config == Path("/etc/melloa/telegram-owner.json")
     assert serve.telegram_bot_token_file == Path("/run/credentials/telegram-token")
     assert serve.backup_status_file == Path("/var/lib/melloa/backup-status.json")
+    assert serve.deployment_activation_file == Path(
+        "/var/lib/melloa/release/active-revision"
+    )
+    assert serve.source_revision == "abc123"
     assert migrate.handler is cli.migrate
     with pytest.raises(SystemExit):
         parser.parse_args(["serve-mvp"])

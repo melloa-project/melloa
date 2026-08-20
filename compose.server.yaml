@@ -232,6 +232,8 @@ services:
       MELLOA_CAPABLE_MODEL_CONFIG: /run/melloa/private/capable-model.json
       MELLOA_ECONOMY_MODEL_CONFIG: /run/melloa/private/economy-model.json
       MELLOA_BACKUP_STATUS_FILE: /run/melloa/state/backup-status.json
+      MELLOA_DEPLOYMENT_ACTIVATION_FILE: /run/melloa/release/active-revision
+      MELLOA_SOURCE_REVISION: ${MELLOA_SOURCE_REVISION:-uncommitted}
     volumes:
       - type: bind
         source: ${MELLOA_GUARDIAN_HANDOFF_DIR:?Set MELLOA_GUARDIAN_HANDOFF_DIR}
@@ -284,6 +286,12 @@ services:
       - type: bind
         source: ${MELLOA_RUNTIME_STATE_DIR:?Set MELLOA_RUNTIME_STATE_DIR}
         target: /run/melloa/state
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_RELEASE_STATE_DIR:?Set MELLOA_RELEASE_STATE_DIR}
+        target: /run/melloa/release
         read_only: true
         bind:
           create_host_path: false

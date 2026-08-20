@@ -108,6 +108,7 @@ def build_runtime(
     telegram_config: TelegramOwnerConfig | None = None,
     telegram_bot_token: str | None = None,
     backup_status_file: Path | None = None,
+    background_activation: Callable[[], bool] | None = None,
     runtime_failure_handler: Callable[[], None] = _terminate_for_supervised_restart,
     runtime_watchdog_interval: float = 5.0,
 ) -> MelloaRuntime:
@@ -278,6 +279,7 @@ def build_runtime(
             owner_telegram_worker=(
                 None if owner_telegram is None else owner_telegram.run_forever
             ),
+            background_activation=background_activation,
             runtime_health=None if database_connection is None else database_health,
             runtime_failure_handler=(
                 None if database_connection is None else runtime_failure_handler

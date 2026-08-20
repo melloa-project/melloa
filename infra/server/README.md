@@ -2,8 +2,9 @@
 
 This is the generic Linux container runtime intended to become Melloa's low-maintenance server
 path. It is **not yet an owner deployment instruction** and does not change the repository's
-`NOT READY` status. Release rollback, self-change policy, real provider and off-device storage
-configuration, and deployed dogfooding are still required.
+`NOT READY` status. Hard-power-loss release resumption, self-change policy, real provider and
+off-device storage configuration, actual server installation, and deployed dogfooding are still
+required.
 
 The runtime has five bounded roles:
 
@@ -79,6 +80,43 @@ other.
 Telegram bot chats are not end-to-end encrypted. Exact owner/chat binding prevents other Telegram
 users from operating Melloa, but it does not provide Secret Chat privacy.
 
+## Release activation and rollback
+
+`tools/server_release.sh` is the current engineering release path. It accepts only a full lowercase
+Git commit SHA, builds from a clean checkout by default, verifies both OCI revision labels, records
+the immutable local image IDs, and serializes operations with a protected host lock. The release
+state directory is mounted read-only into Melloa; Telegram polling and conversation model work stay
+held until the candidate revision matches its atomically written activation file. The root-owned
+directory is execute-only to non-root processes and the non-secret revision marker is read-only;
+release state, history, and the operation lock remain root-only. This lets the dedicated runtime UID
+read exactly the marker without granting release authority or exposing deployment records.
+
+For an existing installation, deployment stops owner-facing work, takes an exact encrypted
+snapshot under a separate release-retention tag, and only then runs candidate migrations and health
+checks. The ten newest release snapshots are protected from normal daily pruning. A migration or
+health failure replaces the database from that snapshot and restarts the prior image. `HUP`, `INT`,
+and `TERM` during the transaction take the same recovery path. Explicit rollback first snapshots
+current data and refuses to start an older image unless that image's migration manifest accepts the
+current schema; it does not silently discard post-deployment owner data.
+
+The operator-shaped commands currently exercised by the disposable proof are:
+
+```bash
+tools/server_release.sh deploy \
+  --env-file /etc/melloa/server.env \
+  --state-dir /var/lib/melloa/release-state
+tools/server_release.sh status \
+  --state-dir /var/lib/melloa/release-state
+tools/server_release.sh rollback \
+  --env-file /etc/melloa/server.env \
+  --state-dir /var/lib/melloa/release-state
+```
+
+These are not yet installation instructions. An untrappable `SIGKILL` or machine power loss during
+the narrow pre-activation window leaves model and Telegram work fail-closed, but automatic boot-time
+transaction resumption has not yet been implemented. That availability gap is one reason the root
+README remains `NOT READY`.
+
 ## Mechanical verification
 
 For a disposable local proof using only synthetic credentials and public Guardian fixtures:
@@ -90,7 +128,9 @@ make server-runtime
 That check builds both pinned runtime images, reconciles least-privilege database logins, applies
 all migrations, and proves application restart and PostgreSQL recovery. It also exercises the real
 scheduler through success, database outage, retry, encrypted-at-rest inspection, destruction of the
-source database, and clean recovery of conversation, memory, session, and Telegram route state.
-It is infrastructure evidence only—not real off-device storage or Telegram/provider dogfooding.
+source database, and clean recovery of conversation, memory, session, and Telegram route state. The
+same proof terminates a candidate release before activation, injects a broken release, installs a
+healthy release, and rolls it back while verifying owner data after every recovery. It is
+infrastructure evidence only—not real off-device storage or Telegram/provider dogfooding.
 The `MELLOA_POSTGRES_IMAGE` and `MELLOA_RESTIC_IMAGE` overrides may name locally cached copies of
 the exact pinned images when a registry is unavailable.

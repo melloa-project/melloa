@@ -15,12 +15,16 @@ scheduled container path: it seeds representative conversation, memory, session,
 route state; streams a custom PostgreSQL dump directly into restic; checks that the repository does
 not expose a known private marker; records success and failure status; retries after a database
 outage; destroys the source volume; and restores into a clean database as the migration role. The
-recovered state is then verified through the authenticated API and storage adapters.
+recovered state is then verified through the authenticated API and storage adapters. It also takes
+pre-release snapshots and verifies owner state after interrupted deployment, failed-candidate
+automatic rollback, and explicit image rollback.
 
 The server scheduler runs once at startup and daily thereafter. It uses a dedicated read-only
 database login, retains 14 daily, 8 weekly, and 12 monthly snapshots, prunes, runs `restic check`,
 and publishes an atomic mode-`0600` marker for Melli's `/status`. It never writes a plaintext dump
-to disk and has neither a Docker socket nor an egress network.
+to disk and has neither a Docker socket nor an egress network. Pre-release snapshots use a separate
+tag with the ten newest retained, so a candidate's startup backup cannot prune the snapshot needed
+to recover that deployment.
 
 These checks prove bounded mechanics with synthetic data. They do not prove a real installation has:
 

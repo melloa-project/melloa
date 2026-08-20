@@ -492,6 +492,34 @@ def test_core_lifecycle_starts_and_cleanly_cancels_owner_telegram(fixed_time) ->
     assert stopped.wait(timeout=1)
 
 
+def test_core_holds_background_work_until_release_activation(fixed_time) -> None:
+    active = Event()
+    started = Event()
+    stopped = Event()
+
+    async def owner_telegram_worker() -> None:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            stopped.set()
+
+    app = create_app(
+        _guardian(fixed_time),
+        owner_telegram_worker=owner_telegram_worker,
+        background_activation=active.is_set,
+        activation_poll_interval=0.01,
+    )
+
+    with TestClient(app) as client:
+        assert client.get("/health/runtime").status_code == 200
+        assert not started.wait(timeout=0.05)
+        active.set()
+        assert started.wait(timeout=1)
+
+    assert stopped.wait(timeout=1)
+
+
 def test_runtime_health_is_visible_and_requests_a_supervised_restart(fixed_time) -> None:
     failed = Event()
 
