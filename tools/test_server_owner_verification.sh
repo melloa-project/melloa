@@ -151,8 +151,35 @@ grep --fixed-strings --quiet "First owner deployment verification passed." \
   "$WORKDIR/output.log"
 grep --fixed-strings --quiet "optional self-change workers are disabled" \
   "$WORKDIR/output.log"
+grep --fixed-strings --quiet "Owner verification receipt updated:" \
+  "$WORKDIR/output.log"
 grep --fixed-strings --quiet "docker compose" "$LOG"
 grep --fixed-strings --quiet -- "--set=verification_phrase=$PHRASE" "$LOG"
 [[ "$(<"$QUERY_COUNT")" -ge 2 ]]
+readonly RECEIPT="$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json"
+[[ -f "$RECEIPT" && ! -L "$RECEIPT" ]]
+[[ "$(stat --format='%a' "$RECEIPT")" == 600 ]]
+jq -e \
+  --arg revision aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --arg snapshot "$(printf '%064d' 1)" \
+  '{
+    contract_version,
+    verification_kind,
+    active_revision,
+    backup_snapshot_id,
+    response_message_id
+  } == {
+    contract_version: "1.0.0",
+    verification_kind: "telegram_conversation",
+    active_revision: $revision,
+    backup_snapshot_id: $snapshot,
+    response_message_id: "message_reply_00000000000000000000000000000001"
+  } and
+  (.verified_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' \
+  "$RECEIPT" >/dev/null
+if grep --fixed-strings --quiet "$PHRASE" "$RECEIPT"; then
+  echo "Owner verification receipt exposed the Telegram verification phrase" >&2
+  exit 1
+fi
 
 echo "Owner Telegram conversation verifier checks passed."

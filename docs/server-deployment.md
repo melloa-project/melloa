@@ -181,16 +181,25 @@ banner can change.
 
 Keep a short private record from the first real server run. Do not paste raw logs publicly; verifier
 output can contain the one-time Telegram phrases and provider errors can contain account-specific
-details. A sufficient private record is:
+details. Each successful owner verifier run updates this redacted local receipt without storing the
+verification phrase or reply text:
+
+```bash
+sudo jq . /var/lib/melloa/runtime-state/owner-verification-status.json
+```
+
+A sufficient private record is:
 
 - the installed Melloa commit SHA from `git -C /srv/melloa/release-source rev-parse HEAD`;
 - the backup mount path and confirmation that `findmnt --mountpoint` showed it as an explicit mount
   independent from `/`;
-- the timestamp when first install's Telegram verifier passed;
+- the `verified_at`, `active_revision`, and `backup_snapshot_id` values from the verifier receipt
+  after first install's Telegram verifier passed;
 - the `/status` result after setup, including model route health and backup health;
-- the timestamp after reboot when `sudo /usr/local/libexec/melloa/verify-owner-journey` passed;
+- the verifier receipt values after reboot when
+  `sudo /usr/local/libexec/melloa/verify-owner-journey` passed;
 - the restore snapshot ID prefix printed by `sudo /usr/local/libexec/melloa/restore-drill`;
-- the timestamp when active verification passed again after the restore drill;
+- the verifier receipt values after active verification passed again after the restore drill;
 - after a later reviewed commit reaches `main`, the update revision, successful Telegram verifier,
   rollback result, and final active verification.
 

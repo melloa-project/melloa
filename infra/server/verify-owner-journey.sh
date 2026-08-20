@@ -186,6 +186,42 @@ conversation_status() {
   " --set=verification_phrase="$phrase"
 }
 
+write_verification_receipt() {
+  local response_id="$1"
+  local receipt_path
+  local receipt_dir
+  local temporary
+  receipt_path="$(destination "$RUNTIME_STATE_DIR/owner-verification-status.json")"
+  receipt_dir="${receipt_path%/*}"
+  [[ -d "$receipt_dir" && ! -L "$receipt_dir" ]] ||
+    fail "owner verification receipt directory is unavailable"
+  temporary="$(mktemp "$receipt_dir/.owner-verification-status.XXXXXX")" ||
+    fail "could not create owner verification receipt"
+  jq -n \
+    --arg verified_at "$(date --utc '+%Y-%m-%dT%H:%M:%SZ')" \
+    --arg active_revision "$ACTIVE_REVISION" \
+    --arg backup_snapshot_id "$SNAPSHOT" \
+    --arg response_message_id "$response_id" \
+    '{
+      contract_version: "1.0.0",
+      verification_kind: "telegram_conversation",
+      verified_at: $verified_at,
+      active_revision: $active_revision,
+      backup_snapshot_id: $backup_snapshot_id,
+      response_message_id: $response_message_id
+    }' >"$temporary" ||
+    fail "could not write owner verification receipt"
+  chmod 0600 "$temporary" ||
+    fail "could not protect owner verification receipt"
+  sync -f "$temporary" ||
+    fail "could not sync owner verification receipt"
+  mv -f -- "$temporary" "$receipt_path" ||
+    fail "could not publish owner verification receipt"
+  sync -f "$receipt_path" ||
+    fail "could not sync published owner verification receipt"
+  echo "Owner verification receipt updated: $receipt_path"
+}
+
 diagnose_timeout() {
   local last="$1"
   local state=""
@@ -220,7 +256,7 @@ Recovery:
 EOF
 }
 
-for command in awk date docker jq sleep systemctl; do
+for command in awk chmod date docker jq mktemp mv sleep sync systemctl; do
   require_command "$command"
 done
 validate_positive_integer "$TIMEOUT_SECONDS" "timeout"
@@ -343,6 +379,7 @@ while (($(date +%s) <= deadline)); do
     if [[ "$state" == sent && "$sent_parts" =~ ^[1-9][0-9]*$ && \
       -n "$response_id" && -z "$notice" && -n "$reply_text" ]]; then
       echo "Telegram conversation verified: Melloa accepted the message, generated a reply, and delivered it."
+      write_verification_receipt "$response_id"
       echo "First owner deployment verification passed."
       exit 0
     fi
