@@ -256,6 +256,17 @@ write_private "$WORKDIR/private/postgres-migration-password" "$MIGRATION_PASSWOR
 write_private "$WORKDIR/private/postgres-backup-password" "$BACKUP_PASSWORD"
 write_private "$WORKDIR/private/postgres-change-planner-password" "$PLANNER_PASSWORD"
 write_private "$WORKDIR/private/postgres-change-applier-password" "$APPLIER_PASSWORD"
+# Docker Compose bind-mounts these synthetic files into containers whose root
+# user may be remapped on CI runners. The private parent remains mode 0700, so
+# only the test owner can reach them on the host; world-readability applies
+# solely to the resulting file mounts inside the isolated test containers.
+chmod 0644 \
+  "$WORKDIR/private/postgres-admin-password" \
+  "$WORKDIR/private/postgres-app-password" \
+  "$WORKDIR/private/postgres-migration-password" \
+  "$WORKDIR/private/postgres-backup-password" \
+  "$WORKDIR/private/postgres-change-planner-password" \
+  "$WORKDIR/private/postgres-change-applier-password"
 write_private "$WORKDIR/private/restic-password" "$RESTIC_PASSWORD"
 write_private "$WORKDIR/private/database-application-dsn" \
   "host=172.30.37.2 port=5432 dbname=melloa user=melloa_app password=$APP_PASSWORD"
