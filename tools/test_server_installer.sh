@@ -14,6 +14,7 @@ trap cleanup EXIT HUP INT TERM
 "$ROOT/infra/server/install.sh" --source "$ROOT" --root "$WORKDIR" >/dev/null
 
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/codex")" == 755 ]]
+[[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/activate")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/self-change-verify")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/etc/systemd/system/melloa-release-recovery.service")" == 644 ]]
 [[ "$(stat --format='%a' "$WORKDIR/etc/melloa/server.env")" == 600 ]]

@@ -88,6 +88,7 @@ readonly SOURCE_REVISION="$(git -C "$SOURCE" rev-parse HEAD)"
 
 install -d -m 0755 "$LIBEXEC_DIR" "$SYSTEMD_DIR"
 install -d -m 0700 "$CONFIG_DIR" "$PRIVATE_DIR" "$WORKER_DIR" "$APPLIER_HOME"
+install -m 0755 "$SOURCE/infra/server/activate.sh" "$LIBEXEC_DIR/activate"
 install -m 0755 "$SOURCE/infra/server/codex-wrapper.sh" "$LIBEXEC_DIR/codex"
 install -m 0755 "$SOURCE/infra/server/self-change-plan.sh" "$LIBEXEC_DIR/self-change-plan"
 install -m 0755 "$SOURCE/infra/server/self-change-apply.sh" "$LIBEXEC_DIR/self-change-apply"
@@ -131,6 +132,27 @@ if [[ "$DESTINATION_ROOT" != / ]]; then
   exit 0
 fi
 
+readonly RUNTIME_UID=10001
+readonly RUNTIME_GID=10001
+if ! getent group melloa-runtime >/dev/null; then
+  groupadd --system --gid "$RUNTIME_GID" melloa-runtime
+fi
+[[ "$(getent group melloa-runtime | awk -F: '{print $3}')" == "$RUNTIME_GID" ]] ||
+  fail "melloa-runtime group must use GID $RUNTIME_GID"
+if ! id melloa-runtime >/dev/null 2>&1; then
+  useradd \
+    --system \
+    --uid "$RUNTIME_UID" \
+    --gid "$RUNTIME_GID" \
+    --home-dir /var/lib/melloa/runtime \
+    --shell /usr/sbin/nologin \
+    melloa-runtime
+fi
+[[ "$(id -u melloa-runtime)" == "$RUNTIME_UID" ]] ||
+  fail "melloa-runtime must use UID $RUNTIME_UID"
+[[ "$(id -g melloa-runtime)" == "$RUNTIME_GID" ]] ||
+  fail "melloa-runtime must use GID $RUNTIME_GID"
+
 if ! id melloa-codex >/dev/null 2>&1; then
   useradd \
     --system \
@@ -148,9 +170,12 @@ install -d -m 0755 /opt/melloa /srv/melloa /var/lib/melloa
 install -d -m 0700 \
   /opt/melloa/verifier \
   /var/lib/melloa/applying-work \
-  /var/lib/melloa/planning-work \
-  /var/lib/melloa/runtime-state
+  /var/lib/melloa/planning-work
 install -d -m 0711 /var/lib/melloa/release-state
+install -d -o "$RUNTIME_UID" -g "$RUNTIME_GID" -m 0700 \
+  /etc/melloa/private/model-credentials \
+  /var/lib/melloa/guardian-handoff \
+  /var/lib/melloa/runtime-state
 install -d -o "$CODEX_UID" -g "$CODEX_GID" -m 0700 \
   /var/lib/melloa/codex-agent \
   /var/lib/melloa/codex-agent/codex

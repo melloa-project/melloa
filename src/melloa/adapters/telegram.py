@@ -107,6 +107,18 @@ class TelegramBotClient:
             raise TelegramAPIError("telegram.webhook_configured")
         return identity
 
+    async def verify_private_chat(self, chat_id: int) -> TelegramChat:
+        if chat_id <= 0:
+            raise ValueError("Telegram private chat ID must be positive")
+        chat_document = await self._request("getChat", {"chat_id": chat_id})
+        try:
+            chat = TelegramChat.model_validate(chat_document)
+        except ValidationError as error:
+            raise TelegramAPIError("telegram.owner_chat_invalid") from error
+        if chat.id != chat_id or chat.type != "private":
+            raise TelegramAPIError("telegram.owner_chat_invalid")
+        return chat
+
     async def get_updates(
         self,
         *,

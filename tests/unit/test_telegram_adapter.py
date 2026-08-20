@@ -74,6 +74,42 @@ def test_preflight_rejects_existing_webhook_without_mutating_it() -> None:
         asyncio.run(client.verify_long_polling())
 
 
+def test_deployment_check_requires_the_exact_private_owner_chat() -> None:
+    captured: dict[str, object] = {}
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return _response(
+            {
+                "ok": True,
+                "result": {"id": 5678, "type": "private"},
+            }
+        )
+
+    client = TelegramBotClient(_TOKEN, transport=httpx.MockTransport(respond))
+
+    chat = asyncio.run(client.verify_private_chat(5678))
+
+    assert chat.id == 5678
+    assert chat.type == "private"
+    assert captured == {"chat_id": 5678}
+
+
+def test_deployment_check_rejects_a_group_or_different_chat() -> None:
+    async def respond(_request: httpx.Request) -> httpx.Response:
+        return _response(
+            {
+                "ok": True,
+                "result": {"id": 9999, "type": "group"},
+            }
+        )
+
+    client = TelegramBotClient(_TOKEN, transport=httpx.MockTransport(respond))
+
+    with pytest.raises(TelegramAPIError, match=r"telegram\.owner_chat_invalid"):
+        asyncio.run(client.verify_private_chat(5678))
+
+
 def test_poll_requests_only_messages_after_durable_offset() -> None:
     captured: dict[str, object] = {}
 

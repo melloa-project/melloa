@@ -39,6 +39,10 @@ from melloa.application.release_activation import ReleaseActivationGate
 from melloa.application.self_change_applying import SelfChangeApplyingWorker
 from melloa.application.self_change_planning import SelfChangePlanningWorker
 from melloa.apps.core import AccessScope
+from melloa.apps.deployment_check import (
+    DeploymentCheckError,
+    check_deployment_integrations,
+)
 from melloa.apps.runtime import build_runtime
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -267,6 +271,22 @@ def guardian_status(args: argparse.Namespace) -> int:
     except GuardianVerificationError as error:
         _exit_error(f"Guardian status rejected: {error}")
     print(verified.model_dump_json(indent=2))
+    return 0
+
+
+def deployment_check(args: argparse.Namespace) -> int:
+    try:
+        result = check_deployment_integrations(
+            guardian_status=args.guardian_status,
+            guardian_public_key=args.guardian_public_key,
+            capable_model_config=args.capable_model_config,
+            economy_model_config=args.economy_model_config,
+            telegram_owner_config=args.telegram_owner_config,
+            telegram_bot_token_file=args.telegram_bot_token_file,
+        )
+    except DeploymentCheckError as error:
+        _exit_error(f"Deployment activation check failed: {error}")
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
@@ -538,6 +558,25 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     guardian_parser.set_defaults(handler=guardian_status)
+
+    deployment_parser = subparsers.add_parser("deployment-check")
+    deployment_parser.add_argument(
+        "--status",
+        dest="guardian_status",
+        type=Path,
+        required=True,
+    )
+    deployment_parser.add_argument(
+        "--public-key",
+        dest="guardian_public_key",
+        type=Path,
+        required=True,
+    )
+    deployment_parser.add_argument("--capable-model-config", type=Path, required=True)
+    deployment_parser.add_argument("--economy-model-config", type=Path, required=True)
+    deployment_parser.add_argument("--telegram-owner-config", type=Path, required=True)
+    deployment_parser.add_argument("--telegram-bot-token-file", type=Path, required=True)
+    deployment_parser.set_defaults(handler=deployment_check)
 
     serve_parser = subparsers.add_parser("serve")
     serve_parser.add_argument("--status", dest="guardian_status", type=Path, required=True)

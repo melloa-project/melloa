@@ -332,6 +332,7 @@ install -m 0600 /dev/null "$ENV_FILE"
 compose config --quiet
 compose build melloa backup
 compose run --rm --no-deps backup init >/dev/null
+compose run --rm --no-deps backup check >/dev/null
 if ! compose up --detach --no-build; then
   compose ps --all >&2 || true
   compose logs --no-color --tail=160 >&2 || true

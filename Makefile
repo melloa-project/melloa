@@ -66,6 +66,7 @@ check: check-generated lint typecheck test web
 check-generated:
 	$(UV) run python tools/update_migration_manifest.py --check
 	bash -n \
+		infra/server/activate.sh \
 		infra/server/backup.sh \
 		infra/server/codex-wrapper.sh \
 		infra/server/install.sh \

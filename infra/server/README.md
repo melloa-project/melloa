@@ -60,9 +60,9 @@ are not yet installed or reboot-tested by this engineering checkpoint.
 uv 0.12.0, Python 3.13+, Node.js 22+, Docker Compose 2.27+, systemd 249+, Bubblewrap, and a Codex CLI
 whose non-interactive command exposes the exact sandbox, approval, ephemeral, user-config, and local-
 provider controls used by the planner. It creates the dedicated `melloa-codex` identity, separate
-public planning and credential-bearing release clones, immutable worker/verifier dependencies, and
-root-owned launchers and units. It deliberately does not start anything or overwrite an existing
-owner configuration:
+public planning and credential-bearing release clones, a fixed unprivileged `melloa-runtime`
+identity, immutable worker/verifier dependencies, and root-owned launchers and units. It
+deliberately does not start anything or overwrite an existing owner configuration:
 
 ```bash
 sudo infra/server/install.sh --source "$PWD"
@@ -70,10 +70,25 @@ sudo infra/server/preflight.sh --source "$PWD" --installed
 ```
 
 Those remain engineering commands, not supported owner deployment instructions. The installed
-preflight requires private DSNs, Git credentials, and either a private Codex API-key file or an
-explicitly selected non-key configuration. It also runs Bubblewrap as the dedicated coding UID and
-validates the installed units on the target host. Actual installation, service startup, reboot, and
-end-to-end self-change still need proof before the root README can become ready.
+preflight validates every runtime-owned private input, requires the backup repository to be a mount
+on storage independent from the root filesystem, and accepts either a private Codex API-key file or
+an explicitly selected `ollama`/`lmstudio` local provider. It also runs Bubblewrap as the dedicated
+coding UID and validates the installed units on the target host.
+
+After that preflight passes, `activate.sh` provides the bounded first-activation transaction. It
+builds the exact installed revision, verifies the signed Guardian handoff, both live model routes,
+the bot identity, and the exact private Telegram chat before starting owner-facing work. It refuses
+an absent backup repository unless the operator explicitly selects `--initialize-backup`, starts
+boot recovery before the first release, proves one encrypted snapshot, and only then enables the
+planner and applier:
+
+```bash
+sudo infra/server/activate.sh --source "$PWD" --initialize-backup
+```
+
+This remains an engineering command until the same sequence, a reboot, a real conversation, and a
+reviewed self-change have succeeded on the target server. Activation deliberately prints that the
+README is still not ready; a healthy synthetic or partial activation cannot change that contract.
 
 The backup database password is a third independent secret. The scheduler converts it to a
 mode-`0600` `.pgpass` in container tmpfs, so the password does not appear in process arguments or

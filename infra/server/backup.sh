@@ -257,6 +257,12 @@ initialize_repository() {
   restic --no-cache init
 }
 
+check_repository() {
+  validate_common_configuration || return 2
+  restic --no-cache snapshots --no-lock >/dev/null &&
+    restic --no-cache check >/dev/null
+}
+
 restore_snapshot() {
   local snapshot="${1:-latest}"
   validate_common_configuration || return 2
@@ -332,6 +338,9 @@ case "${1:-run}" in
   init)
     initialize_repository
     ;;
+  check)
+    check_repository
+    ;;
   restore)
     restore_snapshot "${2:-latest}"
     ;;
@@ -342,7 +351,7 @@ case "${1:-run}" in
     restore_database "${2:-latest}" true
     ;;
   *)
-    echo "Usage: melloa-backup [run|once|release|init|restore|restore-database|restore-database-replace]" >&2
+    echo "Usage: melloa-backup [run|once|release|init|check|restore|restore-database|restore-database-replace]" >&2
     exit 2
     ;;
 esac

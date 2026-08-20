@@ -82,3 +82,14 @@ def test_server_installer_packages_only_tracked_worker_code_and_reconciles_check
     assert '--no-owner --no-group --chmod=D0755,F0644' in installer
     assert 'chown -R root:root /opt/melloa/worker' in installer
     assert 'reset --quiet --hard "$SOURCE_REVISION"' in installer
+
+
+def test_server_activation_orders_recovery_before_release_and_workers() -> None:
+    activation = (ROOT / "infra/server/activate.sh").read_text(encoding="utf-8")
+
+    recovery = activation.index("systemctl start melloa-release-recovery.service")
+    deployment = activation.index('"$RELEASE_SOURCE/tools/server_release.sh" deploy')
+    workers = activation.index("systemctl restart \\")
+    assert recovery < deployment < workers
+    assert "deployment-check" in activation
+    assert "backup once" in activation

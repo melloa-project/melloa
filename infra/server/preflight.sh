@@ -56,12 +56,80 @@ require_private_file() {
   local path="$1"
   local label="$2"
   local minimum_size="${3:-1}"
+  local expected_uid="${4:-0}"
+  local expected_gid="${5:-0}"
   local mode
+  local permissions
   [[ -f "$path" && ! -L "$path" ]] || fail "$label must be a regular file"
-  [[ "$(stat --format='%u' "$path")" == 0 ]] || fail "$label must be owned by root"
+  [[ "$(stat --format='%u' "$path")" == "$expected_uid" ]] ||
+    fail "$label has the wrong owner"
+  [[ "$(stat --format='%g' "$path")" == "$expected_gid" ]] ||
+    fail "$label has the wrong group"
   mode="$(stat --format='%a' "$path")"
-  ((8#$mode & 0077)) && fail "$label must be mode 0600 or stricter"
+  permissions=$((8#$mode))
+  ((permissions & 0177)) && fail "$label must be mode 0600 or 0400"
+  ((permissions & 0400)) || fail "$label must be owner-readable"
   [[ "$(stat --format='%s' "$path")" -ge "$minimum_size" ]] || fail "$label is empty"
+}
+
+require_private_directory() {
+  local path="$1"
+  local label="$2"
+  local expected_uid="$3"
+  local expected_gid="$4"
+  local mode
+  [[ -d "$path" && ! -L "$path" ]] || fail "$label must be a directory"
+  [[ "$(stat --format='%u' "$path")" == "$expected_uid" ]] ||
+    fail "$label has the wrong owner"
+  [[ "$(stat --format='%g' "$path")" == "$expected_gid" ]] ||
+    fail "$label has the wrong group"
+  mode="$(stat --format='%a' "$path")"
+  ((8#$mode & 0077)) && fail "$label must be owner-only"
+}
+
+read_environment_value() {
+  local key="$1"
+  local count
+  local value
+  count="$(awk -F= -v key="$key" '$1 == key {count += 1} END {print count + 0}' \
+    /etc/melloa/server.env)"
+  [[ "$count" == 1 ]] || fail "$key must occur exactly once in the server environment file"
+  value="$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' \
+    /etc/melloa/server.env)"
+  [[ -n "$value" && "$value" != *$'\r'* && "$value" != *$'\n'* ]] ||
+    fail "$key has an invalid value"
+  printf '%s' "$value"
+}
+
+read_environment_path() {
+  local key="$1"
+  local value
+  value="$(read_environment_value "$key")"
+  [[ "$value" == /* && "$value" != *$'\t'* && "$value" != *' '* && \
+    "$value" != */../* && "$value" != */./* && "$value" != */.. && "$value" != */. ]] ||
+    fail "$key must be a plain absolute path"
+  printf '%s' "$value"
+}
+
+read_private_environment_path() {
+  local key="$1"
+  local value
+  value="$(read_environment_path "$key")"
+  [[ "$value" == /etc/melloa/private/* ]] ||
+    fail "$key must remain below /etc/melloa/private"
+  printf '%s' "$value"
+}
+
+require_password_file() {
+  local path="$1"
+  local label="$2"
+  local uid="$3"
+  local gid="$4"
+  local value
+  require_private_file "$path" "$label" 32 "$uid" "$gid"
+  value="$(<"$path")"
+  [[ "$value" =~ ^[A-Za-z0-9_-]{32,128}$ ]] ||
+    fail "$label must contain 32-128 base64url-safe characters"
 }
 
 [[ "$(uname -s)" == Linux ]] || fail "the persistent server path requires Linux"
@@ -71,9 +139,9 @@ require_private_file() {
 [[ -f "$SOURCE/pyproject.toml" && -f "$SOURCE/uv.lock" ]] || fail "source checkout is incomplete"
 
 for command in \
-  awk basename bash bwrap chown codex docker find findmnt git grep head id install jq mktemp node \
-  npm python3.13 rm rsync runuser sed sort stat sync systemctl systemd-analyze tar uname useradd \
-  uv; do
+  awk basename bash bwrap chown codex docker find findmnt getent git grep groupadd head id install \
+  jq mktemp node npm python3.13 rm rsync runuser sed sort stat sync systemctl systemd-analyze \
+  tar uname useradd uv wc; do
   require_command "$command"
 done
 
@@ -119,6 +187,11 @@ fi
 ((EUID == 0)) || fail "installed-server preflight must run as root"
 docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable"
 id melloa-codex >/dev/null 2>&1 || fail "melloa-codex system user is unavailable"
+id melloa-runtime >/dev/null 2>&1 || fail "melloa-runtime system user is unavailable"
+readonly RUNTIME_UID="$(id -u melloa-runtime)"
+readonly RUNTIME_GID="$(id -g melloa-runtime)"
+[[ "$RUNTIME_UID" == 10001 && "$RUNTIME_GID" == 10001 ]] ||
+  fail "melloa-runtime must use UID and GID 10001"
 
 require_private_file /etc/melloa/server.env "server environment file"
 require_private_file /etc/melloa/self-change.env "self-change environment file"
@@ -126,11 +199,105 @@ require_private_file /etc/melloa/private/database-change-planner-dsn "planner da
 require_private_file /etc/melloa/private/database-change-applier-dsn "applier database DSN"
 require_private_file /etc/melloa/private/git-credentials "Git credential"
 
+[[ "$(read_environment_value MELLOA_RUNTIME_UID)" == "$RUNTIME_UID" ]] ||
+  fail "MELLOA_RUNTIME_UID does not match melloa-runtime"
+[[ "$(read_environment_value MELLOA_RUNTIME_GID)" == "$RUNTIME_GID" ]] ||
+  fail "MELLOA_RUNTIME_GID does not match melloa-runtime"
+[[ "$(read_environment_value MELLOA_EGRESS_INTERNAL)" == false ]] ||
+  fail "MELLOA_EGRESS_INTERNAL must be false for Telegram and hosted model access"
+
+for specification in \
+  MELLOA_POSTGRES_ADMIN_PASSWORD_FILE:administrative-database-password \
+  MELLOA_POSTGRES_APP_PASSWORD_FILE:application-database-password \
+  MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE:migration-database-password \
+  MELLOA_POSTGRES_CHANGE_PLANNER_PASSWORD_FILE:planner-database-password \
+  MELLOA_POSTGRES_CHANGE_APPLIER_PASSWORD_FILE:applier-database-password; do
+  key="${specification%%:*}"
+  label="${specification#*:}"
+  require_password_file "$(read_private_environment_path "$key")" "$label" 0 0
+done
+require_password_file \
+  "$(read_private_environment_path MELLOA_POSTGRES_BACKUP_PASSWORD_FILE)" \
+  "backup database password" "$RUNTIME_UID" "$RUNTIME_GID"
+require_private_file \
+  "$(read_private_environment_path MELLOA_RESTIC_PASSWORD_FILE)" \
+  "restic password" 16 "$RUNTIME_UID" "$RUNTIME_GID"
+
+for specification in \
+  MELLOA_DATABASE_APPLICATION_DSN_FILE:application-database-DSN \
+  MELLOA_DATABASE_MIGRATION_DSN_FILE:migration-database-DSN \
+  MELLOA_OWNER_CREDENTIAL_FILE:owner-credential \
+  MELLOA_TELEGRAM_OWNER_CONFIG_FILE:Telegram-owner-config \
+  MELLOA_TELEGRAM_BOT_TOKEN_FILE:Telegram-bot-token \
+  MELLOA_CAPABLE_MODEL_CONFIG_FILE:capable-model-config \
+  MELLOA_ECONOMY_MODEL_CONFIG_FILE:economy-model-config; do
+  key="${specification%%:*}"
+  label="${specification#*:}"
+  require_private_file \
+    "$(read_private_environment_path "$key")" "$label" 1 "$RUNTIME_UID" "$RUNTIME_GID"
+done
+
+readonly MODEL_CREDENTIALS_DIR="$(read_private_environment_path MELLOA_MODEL_CREDENTIALS_DIR)"
+[[ "$MODEL_CREDENTIALS_DIR" == /etc/melloa/private/model-credentials ]] ||
+  fail "model credentials must use the installed private directory"
+require_private_directory \
+  "$MODEL_CREDENTIALS_DIR" "model credentials directory" "$RUNTIME_UID" "$RUNTIME_GID"
+while IFS= read -r -d '' credential; do
+  require_private_file "$credential" "model credential" 1 "$RUNTIME_UID" "$RUNTIME_GID"
+done < <(find "$MODEL_CREDENTIALS_DIR" -mindepth 1 -maxdepth 1 -print0)
+
+readonly RUNTIME_STATE_DIR="$(read_environment_path MELLOA_RUNTIME_STATE_DIR)"
+[[ "$RUNTIME_STATE_DIR" == /var/lib/melloa/runtime-state ]] ||
+  fail "runtime state must use the installed private directory"
+require_private_directory \
+  "$RUNTIME_STATE_DIR" "runtime state directory" "$RUNTIME_UID" "$RUNTIME_GID"
+readonly BACKUP_REPOSITORY_DIR="$(read_environment_path MELLOA_BACKUP_REPOSITORY_DIR)"
+require_private_directory \
+  "$BACKUP_REPOSITORY_DIR" "backup repository directory" "$RUNTIME_UID" "$RUNTIME_GID"
+findmnt --mountpoint "$BACKUP_REPOSITORY_DIR" >/dev/null ||
+  fail "backup repository directory must be an explicit mount point"
+[[ "$(stat --format='%d' "$BACKUP_REPOSITORY_DIR")" != "$(stat --format='%d' /)" ]] ||
+  fail "backup repository must be on storage independent from the server root filesystem"
+
+readonly GUARDIAN_HANDOFF_DIR="$(read_environment_path MELLOA_GUARDIAN_HANDOFF_DIR)"
+[[ "$GUARDIAN_HANDOFF_DIR" == /var/lib/melloa/guardian-handoff ]] ||
+  fail "Guardian handoff must use the installed read-only directory"
+[[ -d "$GUARDIAN_HANDOFF_DIR" && ! -L "$GUARDIAN_HANDOFF_DIR" ]] ||
+  fail "Guardian handoff directory is unavailable"
+for guardian_file in status.json public.pem; do
+  [[ -f "$GUARDIAN_HANDOFF_DIR/$guardian_file" && ! -L "$GUARDIAN_HANDOFF_DIR/$guardian_file" ]] ||
+    fail "Guardian handoff $guardian_file is unavailable"
+  runuser -u melloa-runtime -- test -r "$GUARDIAN_HANDOFF_DIR/$guardian_file" ||
+    fail "Guardian handoff $guardian_file is not readable by melloa-runtime"
+done
+[[ "$(find "$GUARDIAN_HANDOFF_DIR" -mindepth 1 -maxdepth 1 -printf '.\n' | wc -l)" == 2 ]] ||
+  fail "Guardian handoff directory must contain only status.json and public.pem"
+
+readonly BUILD_CA_FILE="$(read_environment_path MELLOA_BUILD_CA_FILE)"
+[[ -f "$BUILD_CA_FILE" && ! -L "$BUILD_CA_FILE" && -r "$BUILD_CA_FILE" ]] ||
+  fail "build CA bundle must be a readable regular file"
+
+[[ "$(read_private_environment_path MELLOA_DATABASE_CHANGE_PLANNER_DSN_FILE)" == \
+  /etc/melloa/private/database-change-planner-dsn ]] ||
+  fail "planner DSN must use the systemd credential path"
+[[ "$(read_private_environment_path MELLOA_DATABASE_CHANGE_APPLIER_DSN_FILE)" == \
+  /etc/melloa/private/database-change-applier-dsn ]] ||
+  fail "applier DSN must use the systemd credential path"
+
+readonly RELEASE_STATE_DIR="$(read_environment_path MELLOA_RELEASE_STATE_DIR)"
+[[ "$RELEASE_STATE_DIR" == /var/lib/melloa/release-state ]] ||
+  fail "release state directory must use the installed protected path"
+
 readonly USE_API_KEY="$(awk -F= '$1 == "MELLOA_CODEX_USE_API_KEY" {print $2}' /etc/melloa/self-change.env)"
 [[ "$USE_API_KEY" == true || "$USE_API_KEY" == false ]] ||
   fail "MELLOA_CODEX_USE_API_KEY must occur once as true or false"
+readonly LOCAL_PROVIDER="$(awk -F= '$1 == "MELLOA_CODEX_LOCAL_PROVIDER" {print $2}' /etc/melloa/self-change.env)"
 if [[ "$USE_API_KEY" == true ]]; then
   require_private_file /etc/melloa/private/codex-api-key "Codex API key" 20
+  [[ -z "$LOCAL_PROVIDER" ]] || fail "API-key Codex mode cannot select a local provider"
+else
+  [[ "$LOCAL_PROVIDER" == ollama || "$LOCAL_PROVIDER" == lmstudio ]] ||
+    fail "non-key Codex mode requires ollama or lmstudio"
 fi
 
 for directory in \
@@ -157,6 +324,15 @@ systemd-analyze verify \
   /etc/systemd/system/melloa-release-recovery.service \
   /etc/systemd/system/melloa-self-change-planner.service \
   /etc/systemd/system/melloa-self-change-applier.service >/dev/null
+
+MELLOA_SOURCE_REVISION="$REVISION" \
+MELLOA_IMAGE="melloa-local/server:$REVISION" \
+MELLOA_BACKUP_IMAGE="melloa-local/backup:$REVISION" \
+  docker compose \
+    --project-directory "$SOURCE" \
+    --env-file /etc/melloa/server.env \
+    --file "$SOURCE/compose.server.yaml" \
+    config --quiet
 
 runuser -u melloa-codex -- \
   bwrap --die-with-parent --new-session --unshare-all \
