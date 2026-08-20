@@ -657,8 +657,10 @@ Next qualification steps:
   2. Reboot the server, then run: sudo /usr/local/libexec/melloa/verify-owner-journey
   3. Prove the actual backup path: sudo /usr/local/libexec/melloa/restore-drill
   4. Rerun active verification: sudo /usr/local/libexec/melloa/verify-owner-journey
+  5. After a later reviewed main commit exists, run: sudo /usr/local/libexec/melloa/update
+  6. Only after that update succeeds, prove rollback: sudo /usr/local/libexec/melloa/rollback
 
-Keep using the installed update and rollback wrappers for later reviewed releases:
+Keep using the installed wrappers for later reviewed releases:
   sudo /usr/local/libexec/melloa/update
   sudo /usr/local/libexec/melloa/rollback
 EOF

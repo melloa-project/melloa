@@ -174,8 +174,8 @@ Then send the first ordinary message to Melli. Telegram is the normal owner inte
 should be rare after setup.
 
 Do not treat this as a completed deployment yet. The first real server still has to pass the reboot
-verifier, restore drill, and update/rollback path below before the repository readiness banner can
-change.
+verifier, restore drill, and a real later update/rollback path before the repository readiness
+banner can change.
 
 ## After reboot or maintenance
 
@@ -234,6 +234,12 @@ back. If it fails after stopping owner-facing work, do not improvise; run:
 sudo systemctl start melloa-release-recovery.service
 sudo /usr/local/libexec/melloa/verify-owner-journey
 ```
+
+Rollback proof requires a previous recorded release. Immediately after the first install there may
+not be one: if `main` has not advanced, `update` can refresh the active deployment but it cannot
+create a meaningful rollback target. For first-server qualification, run `update` after a later
+reviewed commit has reached `main`, verify Telegram through that updated release, and only then run
+the rollback wrapper below.
 
 To roll back after a bad update:
 
