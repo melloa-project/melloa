@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from threading import RLock
 from typing import Any, cast
 
@@ -25,10 +26,14 @@ from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
 from melloa.adapters.postgres.store import PostgresEventAuditStore
+from melloa.adapters.postgres.telegram import PostgresTelegramStore
+from melloa.adapters.telegram import TelegramBotClient, TelegramOwnerConfig
 from melloa.application.conversation import ConversationModelLimits, ConversationService
 from melloa.application.exports import OwnerExportService
+from melloa.application.owner_status import OwnerStatusReporter
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.core import AccessScope, create_app
+from melloa.apps.owner_telegram import TELEGRAM_THREAD_ID, OwnerTelegramService
 from melloa.domain.base import (
     RecordId,
     canonical_json_bytes,
@@ -41,6 +46,7 @@ from melloa.ports.conversation import ConversationStore
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import MemoryStore
 from melloa.ports.store import EventAuditStore
+from melloa.ports.telegram import TelegramStore
 from melloa.release import CURRENT_RELEASE
 
 OWNER_ID: RecordId = "owner_00000000000000000000000000000001"
@@ -59,6 +65,7 @@ class MelloaRuntime:
     event_audit_store: EventAuditStore
     model_id: str | None
     persistence: str
+    owner_telegram: OwnerTelegramService | None
 
 
 class _LockedPort:
@@ -89,7 +96,18 @@ def build_runtime(
     id_factory: Callable[[str], str] = new_record_id,
     secure_session_cookie: bool = True,
     access_scope: AccessScope = "unverified",
+    telegram_config: TelegramOwnerConfig | None = None,
+    telegram_bot_token: str | None = None,
+    backup_status_file: Path | None = None,
 ) -> MelloaRuntime:
+    if (telegram_config is None) != (telegram_bot_token is None):
+        raise ValueError("Telegram owner config and bot token must be supplied together")
+    if telegram_config is not None and database_connection is None:
+        raise ValueError("Telegram owner service requires PostgreSQL persistence")
+    if telegram_config is not None and model_config is None:
+        raise ValueError("Telegram owner service requires a configured conversation model")
+
+    database_lock: RLock | None = None
     if database_connection is None:
         event_audit_store: EventAuditStore = InMemoryEventAuditStore()
         conversation_store: ConversationStore = InMemoryConversationStore(id_factory=id_factory)
@@ -176,6 +194,41 @@ def build_runtime(
         clock=clock,
         id_factory=id_factory,
     )
+    owner_telegram: OwnerTelegramService | None = None
+    if telegram_config is not None and telegram_bot_token is not None:
+        if (
+            database_connection is None
+            or database_lock is None
+            or model_gateway is None
+            or model_config is None
+        ):
+            raise ValueError("Telegram owner service dependencies are unavailable")
+        telegram_store = cast(
+            TelegramStore,
+            _LockedPort(PostgresTelegramStore(database_connection), database_lock),
+        )
+        status_reporter = OwnerStatusReporter(
+            guardian_reader=guardian_reader,
+            conversation_store=conversation_store,
+            telegram_store=telegram_store,
+            thread_id=TELEGRAM_THREAD_ID,
+            model_id=model_config.model_id,
+            model_health=model_gateway.health,
+            backup_status_file=backup_status_file,
+            clock=clock,
+        )
+        owner_telegram = OwnerTelegramService(
+            config=telegram_config,
+            client=TelegramBotClient(telegram_bot_token),
+            store=telegram_store,
+            conversation=conversation,
+            conversation_store=conversation_store,
+            owner_id=OWNER_ID,
+            intelligence_id=MELLI_ID,
+            status_text=status_reporter.render,
+            clock=clock,
+            id_factory=id_factory,
+        )
     return MelloaRuntime(
         app=create_app(
             guardian_reader,
@@ -185,6 +238,9 @@ def build_runtime(
             model_health=None if model_gateway is None else model_gateway.health,
             secure_session_cookie=secure_session_cookie,
             run_conversation_worker=True,
+            owner_telegram_worker=(
+                None if owner_telegram is None else owner_telegram.run_forever
+            ),
             access_scope=access_scope,
         ),
         owner_id=OWNER_ID,
@@ -196,6 +252,7 @@ def build_runtime(
         event_audit_store=event_audit_store,
         model_id=None if model_config is None else model_config.model_id,
         persistence=persistence,
+        owner_telegram=owner_telegram,
     )
 
 

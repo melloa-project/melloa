@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
@@ -464,3 +465,26 @@ def test_blocked_model_invocation_does_not_block_core_liveness(fixed_time) -> No
         assert live_errors == []
         assert message_statuses == [200]
         assert live_statuses == [200]
+
+
+def test_core_lifecycle_starts_and_cleanly_cancels_owner_telegram(fixed_time) -> None:
+    started = Event()
+    stopped = Event()
+
+    async def owner_telegram_worker() -> None:
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            stopped.set()
+
+    app = create_app(
+        _guardian(fixed_time),
+        owner_telegram_worker=owner_telegram_worker,
+    )
+
+    with TestClient(app) as client:
+        assert client.get("/health/live").status_code == 200
+        assert started.wait(timeout=1)
+
+    assert stopped.wait(timeout=1)

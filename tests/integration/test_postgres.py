@@ -15,9 +15,11 @@ from psycopg.types.json import Jsonb
 
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.model import FakeModelGateway
+from melloa.adapters.models.openai_compatible import OpenAICompatibleModelConfig
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
 from melloa.adapters.postgres.telegram import PostgresTelegramStore
+from melloa.adapters.telegram import TelegramOwnerConfig
 from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.runtime import MELLI_ID, OWNER_ID, build_runtime
@@ -469,3 +471,28 @@ def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
                 owner_chat_id=222,
                 now=_NOW + timedelta(seconds=16),
             )
+
+
+def test_runtime_composes_persistent_owner_telegram_service() -> None:
+    dsn = os.environ["MELLOA_TEST_DATABASE_DSN"]
+    with _connect(dsn) as connection:
+        runtime = build_runtime(
+            _guardian(),
+            _OWNER_CREDENTIAL,
+            OpenAICompatibleModelConfig(
+                display_name="Integration model",
+                provider_id="provider.integration-local",
+                model_id="integration-model-v1",
+                base_url="http://127.0.0.1:11434/v1",
+            ),
+            database_connection=connection,
+            telegram_config=TelegramOwnerConfig(
+                owner_user_id=1_234_567,
+                owner_chat_id=7_654_321,
+            ),
+            telegram_bot_token="123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456",
+        )
+
+    assert runtime.persistence == "postgresql"
+    assert runtime.model_id == "integration-model-v1"
+    assert runtime.owner_telegram is not None

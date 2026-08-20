@@ -21,6 +21,11 @@ The active work is subtractive: collapse the operations-console experience, remo
 architecture and preview machinery, and make conversation with Melli the unmistakable product.
 There is no milestone implementation queue and no compatibility promise for preview behavior.
 
+The main branch now has an exact-owner Telegram long-polling path with a PostgreSQL cursor,
+canonical conversation continuity, and restart-safe reply delivery. It is still integration work,
+not an owner deployment path: server installation, backup automation, model routing,
+self-modification, rollback, and real deployed dogfooding remain incomplete.
+
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.
 

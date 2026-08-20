@@ -16,6 +16,7 @@ from typing import NoReturn
 import psycopg
 import uvicorn
 from psycopg.conninfo import conninfo_to_dict
+from pydantic import ValidationError
 
 from melloa.adapters.guardian.file import FileGuardianStatusReader, GuardianVerificationError
 from melloa.adapters.models.openai_compatible import load_openai_compatible_model_config
@@ -24,6 +25,7 @@ from melloa.adapters.postgres.migrations import (
     discover_migrations,
     migration_status,
 )
+from melloa.adapters.telegram import TelegramOwnerConfig
 from melloa.apps.core import AccessScope
 from melloa.apps.runtime import build_runtime
 
@@ -91,6 +93,18 @@ def _read_secret_file(path: Path) -> str:
 
 def _read_owner_credential_file(path: Path) -> str:
     return _read_private_file(path, label="owner credential", minimum=32)
+
+
+def _read_telegram_owner_config(path: Path) -> TelegramOwnerConfig:
+    document = _read_private_file(path, label="Telegram owner config")
+    try:
+        return TelegramOwnerConfig.model_validate_json(document, strict=True)
+    except ValidationError:
+        _exit_error("Telegram owner config is invalid")
+
+
+def _read_telegram_bot_token(path: Path) -> str:
+    return _read_private_file(path, label="Telegram bot token", minimum=37)
 
 
 def _validate_private_database_dsn(dsn: str) -> str:
@@ -179,6 +193,29 @@ def serve(args: argparse.Namespace) -> int:
                         ),
                     )
                 )
+            telegram_config_path = getattr(args, "telegram_owner_config", None)
+            telegram_token_path = getattr(args, "telegram_bot_token_file", None)
+            if (telegram_config_path is None) != (telegram_token_path is None):
+                raise ValueError(
+                    "Telegram owner config and bot token file must be supplied together"
+                )
+            telegram_config = (
+                None
+                if telegram_config_path is None
+                else _read_telegram_owner_config(telegram_config_path)
+            )
+            telegram_token = (
+                None
+                if telegram_token_path is None
+                else _read_telegram_bot_token(telegram_token_path)
+            )
+            backup_status_file = getattr(args, "backup_status_file", None)
+            if telegram_config is not None and connection is None:
+                raise ValueError("Telegram requires a private PostgreSQL database")
+            if telegram_config is not None and model_config is None:
+                raise ValueError("Telegram requires a configured conversation model")
+            if backup_status_file is not None and telegram_config is None:
+                raise ValueError("backup status is exposed through the Telegram owner channel")
             access_scope: AccessScope = (
                 "loopback"
                 if args.host == "localhost" or ipaddress.ip_address(args.host).is_loopback
@@ -190,6 +227,9 @@ def serve(args: argparse.Namespace) -> int:
                 model_config,
                 database_connection=connection,
                 access_scope=access_scope,
+                telegram_config=telegram_config,
+                telegram_bot_token=telegram_token,
+                backup_status_file=backup_status_file,
             )
         except psycopg.Error:
             _exit_error("Private database is unavailable or incompatible.")
@@ -206,6 +246,7 @@ def serve(args: argparse.Namespace) -> int:
                         else model_config.processing_location.value == "approved_provider"
                     ),
                     "persistence": runtime.persistence,
+                    "telegram_enabled": telegram_config is not None,
                 },
                 indent=2,
                 sort_keys=True,
@@ -268,6 +309,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--database-dsn-file",
         type=Path,
         default=None if database_path is None else Path(database_path),
+    )
+    telegram_config_path = os.environ.get("MELLOA_TELEGRAM_OWNER_CONFIG")
+    serve_parser.add_argument(
+        "--telegram-owner-config",
+        type=Path,
+        default=None if telegram_config_path is None else Path(telegram_config_path),
+    )
+    telegram_token_path = os.environ.get("MELLOA_TELEGRAM_BOT_TOKEN_FILE")
+    serve_parser.add_argument(
+        "--telegram-bot-token-file",
+        type=Path,
+        default=None if telegram_token_path is None else Path(telegram_token_path),
+    )
+    backup_status_path = os.environ.get("MELLOA_BACKUP_STATUS_FILE")
+    serve_parser.add_argument(
+        "--backup-status-file",
+        type=Path,
+        default=None if backup_status_path is None else Path(backup_status_path),
     )
     serve_parser.add_argument("--host", type=_private_bind_address, default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Literal, cast
 
@@ -177,6 +177,7 @@ def create_app(
     secure_session_cookie: bool = True,
     run_conversation_worker: bool = False,
     conversation_worker_interval: float = 1.0,
+    owner_telegram_worker: Callable[[], Coroutine[object, object, None]] | None = None,
     access_scope: AccessScope = "unverified",
 ) -> FastAPI:
     if conversation_worker_interval <= 0:
@@ -186,18 +187,24 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        worker = (
-            None
-            if not run_conversation_worker or conversation_service is None
-            else asyncio.create_task(
-                _run_conversation_worker(conversation_service, conversation_worker_interval)
+        workers: list[asyncio.Task[None]] = []
+        if run_conversation_worker and conversation_service is not None:
+            workers.append(
+                asyncio.create_task(
+                    _run_conversation_worker(
+                        conversation_service,
+                        conversation_worker_interval,
+                    )
+                )
             )
-        )
+        if owner_telegram_worker is not None:
+            workers.append(asyncio.create_task(owner_telegram_worker()))
         try:
             yield
         finally:
-            if worker is not None:
+            for worker in workers:
                 worker.cancel()
+            for worker in workers:
                 with suppress(asyncio.CancelledError):
                     await worker
 

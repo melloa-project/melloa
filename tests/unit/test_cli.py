@@ -50,6 +50,20 @@ def test_private_configuration_files_reject_weak_permissions_and_symlinks(tmp_pa
         cli._read_owner_credential_file(linked)
     assert symlink.value.code == 2
 
+    telegram_config = tmp_path / "telegram-owner.json"
+    telegram_config.write_text(
+        '{"owner_user_id":1234,"owner_chat_id":5678}',
+        encoding="utf-8",
+    )
+    telegram_config.chmod(0o600)
+    assert cli._read_telegram_owner_config(telegram_config).owner_chat_id == 5678
+
+    telegram_token = tmp_path / "telegram-token"
+    token = "123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456"
+    telegram_token.write_text(token, encoding="utf-8")
+    telegram_token.chmod(0o600)
+    assert cli._read_telegram_bot_token(telegram_token) == token
+
 
 @pytest.mark.parametrize(
     "dsn",
@@ -121,6 +135,9 @@ def test_serve_builds_one_runtime_without_printing_owner_secret(
     assert captured["runtime_kwargs"] == {
         "database_connection": None,
         "access_scope": "loopback",
+        "telegram_config": None,
+        "telegram_bot_token": None,
+        "backup_status_file": None,
     }
     assert captured["uvicorn_kwargs"] == {
         "host": "127.0.0.1",
@@ -130,7 +147,88 @@ def test_serve_builds_one_runtime_without_printing_owner_secret(
     output = capsys.readouterr().out
     assert '"persistence": "process-only"' in output
     assert '"model_configured": false' in output
+    assert '"telegram_enabled": false' in output
     assert _OWNER_CREDENTIAL not in output
+
+
+def test_serve_wires_private_telegram_files_without_printing_personal_values(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    credential = tmp_path / "owner-credential"
+    credential.write_text(_OWNER_CREDENTIAL, encoding="utf-8")
+    credential.chmod(0o600)
+    dsn_file = tmp_path / "database-dsn"
+    dsn_file.write_text("host=127.0.0.1 dbname=melloa", encoding="utf-8")
+    dsn_file.chmod(0o600)
+    telegram_config = tmp_path / "telegram-owner.json"
+    telegram_config.write_text(
+        '{"owner_user_id":1234,"owner_chat_id":5678}',
+        encoding="utf-8",
+    )
+    telegram_config.chmod(0o600)
+    telegram_token = tmp_path / "telegram-token"
+    token = "123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456"
+    telegram_token.write_text(token, encoding="utf-8")
+    telegram_token.chmod(0o600)
+    model_config_path = tmp_path / "model.json"
+    model_config = SimpleNamespace(processing_location=SimpleNamespace(value="device"))
+    backup_status = tmp_path / "backup-status.json"
+    captured: dict[str, object] = {}
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(cli.psycopg, "connect", lambda *_args, **_kwargs: Connection())
+    monkeypatch.setattr(
+        cli,
+        "load_openai_compatible_model_config",
+        lambda path: model_config if path == model_config_path else None,
+    )
+
+    def build(reader, owner_token, configured_model, **kwargs):
+        captured.update(
+            reader=reader,
+            owner_token=owner_token,
+            configured_model=configured_model,
+            runtime_kwargs=kwargs,
+        )
+        return SimpleNamespace(app=object(), persistence="postgresql")
+
+    monkeypatch.setattr(cli, "build_runtime", build)
+    monkeypatch.setattr(cli.uvicorn, "run", lambda *_args, **_kwargs: None)
+    args = argparse.Namespace(
+        guardian_status=tmp_path / "guardian-status.json",
+        guardian_public_key=tmp_path / "guardian-public.pem",
+        owner_credential_file=credential,
+        model_config=model_config_path,
+        database_dsn_file=dsn_file,
+        telegram_owner_config=telegram_config,
+        telegram_bot_token_file=telegram_token,
+        backup_status_file=backup_status,
+        host="127.0.0.1",
+        port=8080,
+    )
+
+    assert cli.serve(args) == 0
+    assert captured["owner_token"] == _OWNER_CREDENTIAL
+    assert captured["configured_model"] is model_config
+    runtime_kwargs = captured["runtime_kwargs"]
+    assert isinstance(runtime_kwargs, dict)
+    assert runtime_kwargs["telegram_config"].owner_user_id == 1234
+    assert runtime_kwargs["telegram_config"].owner_chat_id == 5678
+    assert runtime_kwargs["telegram_bot_token"] == token
+    assert runtime_kwargs["backup_status_file"] == backup_status
+    output = capsys.readouterr().out
+    assert '"telegram_enabled": true' in output
+    assert token not in output
+    assert "1234" not in output
+    assert "5678" not in output
 
 
 def test_migrate_dispatches_without_printing_dsn(tmp_path, monkeypatch, capsys) -> None:
@@ -191,6 +289,12 @@ def test_parser_exposes_only_current_operator_commands() -> None:
             "sha256:" + "0" * 64,
             "--owner-credential-file",
             "/run/melloa/owner-credential",
+            "--telegram-owner-config",
+            "/etc/melloa/telegram-owner.json",
+            "--telegram-bot-token-file",
+            "/run/credentials/telegram-token",
+            "--backup-status-file",
+            "/var/lib/melloa/backup-status.json",
         ]
     )
     migrate = parser.parse_args(
@@ -200,6 +304,9 @@ def test_parser_exposes_only_current_operator_commands() -> None:
     assert guardian.handler is cli.guardian_status
     assert serve.handler is cli.serve
     assert serve.expected_guardian_receipt == "sha256:" + "0" * 64
+    assert serve.telegram_owner_config == Path("/etc/melloa/telegram-owner.json")
+    assert serve.telegram_bot_token_file == Path("/run/credentials/telegram-token")
+    assert serve.backup_status_file == Path("/var/lib/melloa/backup-status.json")
     assert migrate.handler is cli.migrate
     with pytest.raises(SystemExit):
         parser.parse_args(["serve-mvp"])
