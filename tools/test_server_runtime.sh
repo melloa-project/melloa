@@ -238,16 +238,24 @@ readonly APP_PASSWORD="app_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 readonly MIGRATION_PASSWORD="migration_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 readonly BACKUP_PASSWORD="backup_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
 readonly RESTIC_PASSWORD="restic_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+readonly PLANNER_PASSWORD="planner_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+readonly APPLIER_PASSWORD="applier_GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
 
 write_private "$WORKDIR/private/postgres-admin-password" "$ADMIN_PASSWORD"
 write_private "$WORKDIR/private/postgres-app-password" "$APP_PASSWORD"
 write_private "$WORKDIR/private/postgres-migration-password" "$MIGRATION_PASSWORD"
 write_private "$WORKDIR/private/postgres-backup-password" "$BACKUP_PASSWORD"
+write_private "$WORKDIR/private/postgres-change-planner-password" "$PLANNER_PASSWORD"
+write_private "$WORKDIR/private/postgres-change-applier-password" "$APPLIER_PASSWORD"
 write_private "$WORKDIR/private/restic-password" "$RESTIC_PASSWORD"
 write_private "$WORKDIR/private/database-application-dsn" \
   "host=172.30.37.2 port=5432 dbname=melloa user=melloa_app password=$APP_PASSWORD"
 write_private "$WORKDIR/private/database-migration-dsn" \
   "host=172.30.37.2 port=5432 dbname=melloa user=melloa_migrator password=$MIGRATION_PASSWORD"
+write_private "$WORKDIR/private/database-change-planner-dsn" \
+  "host=172.30.37.2 port=5432 dbname=melloa user=melloa_change_planner_login password=$PLANNER_PASSWORD"
+write_private "$WORKDIR/private/database-change-applier-dsn" \
+  "host=172.30.37.2 port=5432 dbname=melloa user=melloa_change_applier_login password=$APPLIER_PASSWORD"
 write_private "$WORKDIR/private/owner-credential" \
   "server-runtime-owner-credential-00000000000000000001"
 write_private "$WORKDIR/private/telegram-bot-token" \
@@ -285,11 +293,19 @@ install -m 0600 /dev/null "$ENV_FILE"
     "$WORKDIR/private/postgres-migration-password"
   printf 'MELLOA_POSTGRES_BACKUP_PASSWORD_FILE=%s\n' \
     "$WORKDIR/private/postgres-backup-password"
+  printf 'MELLOA_POSTGRES_CHANGE_PLANNER_PASSWORD_FILE=%s\n' \
+    "$WORKDIR/private/postgres-change-planner-password"
+  printf 'MELLOA_POSTGRES_CHANGE_APPLIER_PASSWORD_FILE=%s\n' \
+    "$WORKDIR/private/postgres-change-applier-password"
   printf 'MELLOA_RESTIC_PASSWORD_FILE=%s\n' "$WORKDIR/private/restic-password"
   printf 'MELLOA_DATABASE_APPLICATION_DSN_FILE=%s\n' \
     "$WORKDIR/private/database-application-dsn"
   printf 'MELLOA_DATABASE_MIGRATION_DSN_FILE=%s\n' \
     "$WORKDIR/private/database-migration-dsn"
+  printf 'MELLOA_DATABASE_CHANGE_PLANNER_DSN_FILE=%s\n' \
+    "$WORKDIR/private/database-change-planner-dsn"
+  printf 'MELLOA_DATABASE_CHANGE_APPLIER_DSN_FILE=%s\n' \
+    "$WORKDIR/private/database-change-applier-dsn"
   printf 'MELLOA_OWNER_CREDENTIAL_FILE=%s\n' "$WORKDIR/private/owner-credential"
   printf 'MELLOA_TELEGRAM_OWNER_CONFIG_FILE=%s\n' "$WORKDIR/private/telegram-owner.json"
   printf 'MELLOA_TELEGRAM_BOT_TOKEN_FILE=%s\n' "$WORKDIR/private/telegram-bot-token"
@@ -345,6 +361,8 @@ for secret_value in \
   "$APP_PASSWORD" \
   "$MIGRATION_PASSWORD" \
   "$BACKUP_PASSWORD" \
+  "$PLANNER_PASSWORD" \
+  "$APPLIER_PASSWORD" \
   "$RESTIC_PASSWORD"; do
   if grep --fixed-strings --quiet "$secret_value" <<<"$backup_process_metadata"; then
     echo "A database or recovery secret appeared in backup process metadata" >&2
@@ -356,15 +374,22 @@ readonly ROLE_ROWS="$(
   compose exec --no-TTY --user postgres postgres \
     psql --tuples-only --no-align --field-separator=, \
     --username postgres --dbname melloa \
-    --command="SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolinherit FROM pg_roles WHERE rolname IN ('melloa_app', 'melloa_backup_login', 'melloa_migrator') ORDER BY rolname"
+    --command="SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolinherit FROM pg_roles WHERE rolname IN ('melloa_app', 'melloa_backup_login', 'melloa_change_applier_login', 'melloa_change_planner_login', 'melloa_migrator') ORDER BY rolname"
 )"
 grep -qx 'melloa_app,f,f,f,f' <<<"$ROLE_ROWS"
 grep -qx 'melloa_backup_login,f,f,f,f' <<<"$ROLE_ROWS"
+grep -qx 'melloa_change_applier_login,f,f,f,f' <<<"$ROLE_ROWS"
+grep -qx 'melloa_change_planner_login,f,f,f,f' <<<"$ROLE_ROWS"
 grep -qx 'melloa_migrator,f,f,f,f' <<<"$ROLE_ROWS"
 [[ "$(
   compose exec --no-TTY --user postgres postgres psql --tuples-only --no-align \
     --username postgres --dbname melloa \
     --command="SELECT pg_has_role('melloa_backup_login', 'melloa_backup', 'MEMBER') AND NOT pg_has_role('melloa_backup_login', 'melloa_core', 'MEMBER')"
+)" == t ]]
+[[ "$(
+  compose exec --no-TTY --user postgres postgres psql --tuples-only --no-align \
+    --username postgres --dbname melloa \
+    --command="SELECT pg_has_role('melloa_change_planner_login', 'melloa_change_planner', 'MEMBER') AND NOT pg_has_role('melloa_change_planner_login', 'melloa_change_applier', 'MEMBER') AND pg_has_role('melloa_change_applier_login', 'melloa_change_applier', 'MEMBER') AND NOT pg_has_role('melloa_change_applier_login', 'melloa_change_planner', 'MEMBER')"
 )" == t ]]
 [[ "$(
   compose exec --no-TTY --user postgres postgres psql --tuples-only --no-align \

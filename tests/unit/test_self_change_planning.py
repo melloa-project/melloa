@@ -189,6 +189,53 @@ def test_codex_planner_rejects_changes_to_its_own_control_plane(
         raise AssertionError("self-change control-plane change was accepted")
 
 
+def test_secure_codex_planner_requires_credential_free_https_origin(
+    tmp_path: Path,
+) -> None:
+    repository, work_root, git = _repository(tmp_path)
+    planner = CodexCliSourceChangePlanner(
+        repository=repository,
+        work_root=work_root,
+        codex_executable=_fake_codex(tmp_path, "exit 0\n"),
+        git_executable=git,
+    )
+
+    try:
+        planner._require_public_origin()
+    except SelfChangePlanningError as error:
+        assert error.reason_code == "self_change.public_source_invalid"
+    else:
+        raise AssertionError("local planning origin was accepted as public source")
+
+    _run(
+        (
+            str(git),
+            "-C",
+            str(repository),
+            "remote",
+            "set-url",
+            "origin",
+            "https://example.invalid/melloa.git",
+        )
+    )
+    _run(
+        (
+            str(git),
+            "-C",
+            str(repository),
+            "config",
+            "credential.helper",
+            "unsafe-helper",
+        )
+    )
+    try:
+        planner._require_public_origin()
+    except SelfChangePlanningError as error:
+        assert error.reason_code == "self_change.public_source_untrusted"
+    else:
+        raise AssertionError("credential-bearing planning source was accepted")
+
+
 def _repository(tmp_path: Path) -> tuple[Path, Path, Path]:
     git_path = shutil.which("git")
     assert git_path is not None

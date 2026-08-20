@@ -354,6 +354,48 @@ def test_parser_exposes_only_current_operator_commands() -> None:
     migrate = parser.parse_args(
         ["migrate", "check", "--dsn-file", "/run/melloa/database-dsn"]
     )
+    plan = parser.parse_args(
+        [
+            "self-change-plan",
+            "--dsn-file",
+            "/run/melloa/planner-dsn",
+            "--repository",
+            "/srv/melloa/planning-source",
+            "--work-root",
+            "/var/lib/melloa/planning-work",
+            "--codex-executable",
+            "/usr/local/libexec/melloa/codex",
+            "--agent-uid",
+            "10002",
+            "--agent-gid",
+            "10002",
+            "--agent-home",
+            "/var/lib/melloa/codex-agent",
+            "--codex-home",
+            "/var/lib/melloa/codex-agent/codex",
+        ]
+    )
+    apply = parser.parse_args(
+        [
+            "self-change-apply",
+            "--dsn-file",
+            "/run/melloa/applier-dsn",
+            "--repository",
+            "/srv/melloa/release-source",
+            "--work-root",
+            "/var/lib/melloa/applying-work",
+            "--verifier-executable",
+            "/usr/local/libexec/melloa/self-change-verify",
+            "--verifier-python-env",
+            "/opt/melloa/verifier/.venv",
+            "--verifier-node-modules",
+            "/opt/melloa/verifier/node_modules",
+            "--server-environment-file",
+            "/etc/melloa/server.env",
+            "--release-state-dir",
+            "/var/lib/melloa/release-state",
+        ]
+    )
 
     assert guardian.handler is cli.guardian_status
     assert serve.handler is cli.serve
@@ -368,5 +410,137 @@ def test_parser_exposes_only_current_operator_commands() -> None:
     )
     assert serve.source_revision == "abc123"
     assert migrate.handler is cli.migrate
+    assert plan.handler is cli.self_change_plan
+    assert plan.agent_uid == 10002
+    assert apply.handler is cli.self_change_apply
+    assert apply.verifier_executable == Path(
+        "/usr/local/libexec/melloa/self-change-verify"
+    )
     with pytest.raises(SystemExit):
         parser.parse_args(["serve-mvp"])
+
+
+def test_planning_worker_receives_only_explicit_model_environment(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    api_key = tmp_path / "codex-api-key"
+    api_key.write_text("codex-test-key-that-is-private", encoding="utf-8")
+    api_key.chmod(0o600)
+    captured: dict[str, object] = {}
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    for key in cli._PLANNER_ENVIRONMENT:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9999")
+    monkeypatch.setenv("DEPLOYMENT_SECRET", "must-not-reach-codex")
+    monkeypatch.setattr(cli, "_reject_planner_container_authority", lambda: None)
+    monkeypatch.setattr(cli, "_require_private_directory", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "_connect_self_change_database",
+        lambda *_args, **_kwargs: Connection(),
+    )
+    monkeypatch.setattr(cli, "PostgresSelfChangeStore", lambda connection: ("store", connection))
+
+    def planner(**kwargs):
+        captured["planner"] = kwargs
+        return "planner"
+
+    def worker(**kwargs):
+        captured["worker"] = kwargs
+        return "worker"
+
+    monkeypatch.setattr(cli, "CodexCliSourceChangePlanner", planner)
+    monkeypatch.setattr(cli, "SelfChangePlanningWorker", worker)
+    monkeypatch.setattr(cli, "_run_worker", lambda value: captured.update(ran=value))
+    args = argparse.Namespace(
+        dsn_file=tmp_path / "planner-dsn",
+        repository=Path("/srv/melloa/planning-source"),
+        work_root=Path("/var/lib/melloa/planning-work"),
+        codex_executable=Path("/usr/local/libexec/melloa/codex"),
+        git_executable=Path("/usr/bin/git"),
+        agent_uid=10002,
+        agent_gid=10002,
+        agent_home=Path("/var/lib/melloa/codex-agent"),
+        codex_home=Path("/var/lib/melloa/codex-agent/codex"),
+        openai_api_key_file=api_key,
+        model="codex-owner-selected",
+        local_provider=None,
+    )
+
+    assert cli.self_change_plan(args) == 0
+
+    planner_kwargs = captured["planner"]
+    assert isinstance(planner_kwargs, dict)
+    assert planner_kwargs["agent_environment"] == {
+        "CODEX_HOME": "/var/lib/melloa/codex-agent/codex",
+        "HOME": "/var/lib/melloa/codex-agent",
+        "HTTPS_PROXY": "http://127.0.0.1:9999",
+        "OPENAI_API_KEY": "codex-test-key-that-is-private",
+    }
+    assert "DEPLOYMENT_SECRET" not in planner_kwargs["agent_environment"]
+    assert captured["ran"] == "worker"
+
+
+def test_applying_worker_rejects_model_credentials(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-reach-applier")
+    args = argparse.Namespace(
+        dsn_file=tmp_path / "applier-dsn",
+        repository=Path("/srv/melloa/release-source"),
+        work_root=Path("/var/lib/melloa/applying-work"),
+        git_executable=Path("/usr/bin/git"),
+        verifier_executable=Path("/usr/local/libexec/melloa/self-change-verify"),
+        verifier_python_env=Path("/opt/melloa/verifier/.venv"),
+        verifier_node_modules=Path("/opt/melloa/verifier/node_modules"),
+        server_environment_file=Path("/etc/melloa/server.env"),
+        release_state_dir=Path("/var/lib/melloa/release-state"),
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        cli.self_change_apply(args)
+
+    assert failure.value.code == 2
+    assert "must not receive model credentials" in capsys.readouterr().err
+
+
+def test_self_change_worker_database_requires_its_exact_role(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dsn_file = tmp_path / "worker-dsn"
+    dsn_file.write_text("host=127.0.0.1 dbname=melloa", encoding="utf-8")
+    dsn_file.chmod(0o600)
+
+    class Query:
+        @staticmethod
+        def fetchone():
+            return ("melloa_core",)
+
+    class Connection:
+        closed = False
+
+        @staticmethod
+        def execute(_query):
+            return Query()
+
+        def close(self):
+            self.closed = True
+
+    connection = Connection()
+    monkeypatch.setattr(cli.psycopg, "connect", lambda *_args, **_kwargs: connection)
+
+    with pytest.raises(ValueError, match="wrong active role"):
+        cli._connect_self_change_database(
+            dsn_file,
+            application_name="test-worker",
+            expected_role="melloa_change_planner",
+        )
+
+    assert connection.closed

@@ -9,6 +9,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Final, Literal
+from urllib.parse import urlsplit
 
 from melloa.domain.self_change import PlannedSelfChange, SelfChange, SelfChangeState
 from melloa.ports.self_change import SelfChangePlanningError
@@ -49,6 +50,42 @@ _AGENT_ENVIRONMENT: Final = frozenset(
         "SSL_CERT_FILE",
     }
 )
+_FORBIDDEN_GIT_CONFIG_PREFIXES: Final = (
+    "alias.",
+    "credential.",
+    "diff.",
+    "filter.",
+    "gpg.",
+    "http.",
+    "https.",
+    "include.",
+    "includeif.",
+    "interactive.",
+    "merge.",
+    "protocol.",
+    "url.",
+)
+_FORBIDDEN_GIT_CONFIG_KEYS: Final = frozenset(
+    {
+        "commit.gpgsign",
+        "core.askpass",
+        "core.attributesfile",
+        "core.fsmonitor",
+        "core.hookspath",
+        "core.sshcommand",
+        "remote.origin.proxy",
+        "remote.origin.pushurl",
+        "remote.origin.receivepack",
+        "remote.origin.uploadpack",
+    }
+)
+_PUBLIC_GIT_ENVIRONMENT: Final = {
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_TERMINAL_PROMPT": "0",
+    "HOME": "/nonexistent",
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "XDG_CONFIG_HOME": "/nonexistent",
+}
 
 
 class CodexCliSourceChangePlanner:
@@ -110,6 +147,8 @@ class CodexCliSourceChangePlanner:
         if change.state is not SelfChangeState.PLANNING:
             raise SelfChangePlanningError("self_change.invalid_planning_claim")
         self._require_runtime_paths()
+        if self._agent_uid is not None:
+            self._require_public_origin()
         self._run_git(("fetch", "--quiet", "--no-tags", "origin", "main"))
         base_revision = self._run_git(("rev-parse", "refs/remotes/origin/main^{commit}"))
         revision = base_revision.stdout.decode("ascii").strip()
@@ -279,11 +318,66 @@ class CodexCliSourceChangePlanner:
                 or not os.access(executable, os.X_OK)
             ):
                 raise SelfChangePlanningError("self_change.coding_command_unavailable")
+            metadata = executable.stat(follow_symlinks=False)
+            if self._agent_uid is not None and (
+                metadata.st_uid != 0 or metadata.st_mode & 0o022
+            ):
+                raise SelfChangePlanningError("self_change.coding_command_untrusted")
+
+    def _require_public_origin(self) -> None:
+        try:
+            remote = (
+                self._run_git(("remote", "get-url", "origin"))
+                .stdout.decode("utf-8")
+                .strip()
+            )
+            parsed = urlsplit(remote)
+        except (UnicodeDecodeError, ValueError) as error:
+            raise SelfChangePlanningError("self_change.public_source_invalid") from error
+        if (
+            not remote
+            or "\n" in remote
+            or parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or not parsed.path.strip("/")
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise SelfChangePlanningError("self_change.public_source_invalid")
+        try:
+            names = (
+                self._run_git(("config", "--local", "--name-only", "--list", "-z"))
+                .stdout.decode("utf-8")
+                .split("\0")
+            )
+        except UnicodeDecodeError as error:
+            raise SelfChangePlanningError("self_change.public_source_invalid") from error
+        for raw_name in names:
+            name = raw_name.lower()
+            if name and (
+                name in _FORBIDDEN_GIT_CONFIG_KEYS
+                or name.startswith(_FORBIDDEN_GIT_CONFIG_PREFIXES)
+            ):
+                raise SelfChangePlanningError("self_change.public_source_untrusted")
 
     def _run_git(self, arguments: Sequence[str]) -> subprocess.CompletedProcess[bytes]:
         try:
             completed = subprocess.run(  # noqa: S603
-                (str(self._git_executable), "-C", str(self._repository), *arguments),
+                (
+                    str(self._git_executable),
+                    "-c",
+                    "credential.helper=",
+                    "-c",
+                    "core.askPass=",
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-C",
+                    str(self._repository),
+                    *arguments,
+                ),
+                env=_PUBLIC_GIT_ENVIRONMENT,
                 check=False,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,

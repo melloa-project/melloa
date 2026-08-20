@@ -39,6 +39,14 @@ migration_password="$(
 backup_password="$(
   read_password "$SECRET_DIR/postgres_backup_password" "Backup database password"
 )"
+planner_password="$(
+  read_password "$SECRET_DIR/postgres_change_planner_password" \
+    "Self-change planner database password"
+)"
+applier_password="$(
+  read_password "$SECRET_DIR/postgres_change_applier_password" \
+    "Self-change applier database password"
+)"
 
 install -m 0600 /dev/null "$PGPASS_PATH"
 printf 'postgres:5432:melloa:postgres:%s\n' "$admin_password" >"$PGPASS_PATH"
@@ -80,13 +88,48 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'melloa_backup_login')
 SELECT format('ALTER ROLE melloa_backup_login PASSWORD %L', '$backup_password')
 \gexec
 
+DO \$roles\$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'melloa_change_planner') THEN
+        CREATE ROLE melloa_change_planner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'melloa_change_applier') THEN
+        CREATE ROLE melloa_change_applier NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+    END IF;
+END
+\$roles\$;
+
+SELECT format(
+  'CREATE ROLE melloa_change_planner_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
+  '$planner_password'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'melloa_change_planner_login')
+\gexec
+
+SELECT format('ALTER ROLE melloa_change_planner_login PASSWORD %L', '$planner_password')
+\gexec
+
+SELECT format(
+  'CREATE ROLE melloa_change_applier_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
+  '$applier_password'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'melloa_change_applier_login')
+\gexec
+
+SELECT format('ALTER ROLE melloa_change_applier_login PASSWORD %L', '$applier_password')
+\gexec
+
 GRANT melloa_core TO melloa_app;
 GRANT melloa_migrate TO melloa_migrator;
 GRANT melloa_backup TO melloa_backup_login;
+GRANT melloa_change_planner TO melloa_change_planner_login;
+GRANT melloa_change_applier TO melloa_change_applier_login;
 GRANT CREATE ON DATABASE melloa TO melloa_migrate;
 ALTER ROLE melloa_app SET role = 'melloa_core';
 ALTER ROLE melloa_migrator SET role = 'melloa_migrate';
 ALTER ROLE melloa_backup_login SET role = 'melloa_backup';
+ALTER ROLE melloa_change_planner_login SET role = 'melloa_change_planner';
+ALTER ROLE melloa_change_applier_login SET role = 'melloa_change_applier';
 SQL
 
-unset app_password migration_password backup_password
+unset app_password migration_password backup_password planner_password applier_password

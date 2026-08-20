@@ -96,6 +96,18 @@ class ExternalSandboxSelfChangeVerifier:
             or metadata.st_mode & 0o022
         ):
             raise SelfChangeReleaseError("self_change.verifier_untrusted")
+        if self._require_root_owner:
+            for parent in self._executable.parents:
+                try:
+                    parent_metadata = parent.stat(follow_symlinks=False)
+                except OSError as error:
+                    raise SelfChangeReleaseError("self_change.verifier_unavailable") from error
+                if (
+                    not stat.S_ISDIR(parent_metadata.st_mode)
+                    or parent_metadata.st_uid != 0
+                    or parent_metadata.st_mode & 0o022
+                ):
+                    raise SelfChangeReleaseError("self_change.verifier_untrusted")
 
 
 class ServerReleaseDeployment:

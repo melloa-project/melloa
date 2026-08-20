@@ -42,6 +42,7 @@ def test_recovery_receipt_tracks_only_current_migrations() -> None:
         "0013_owner_model_routes.sql",
         "0014_backup_sequence_privileges.sql",
         "0015_owner_self_changes.sql",
+        "0016_self_change_worker_privileges.sql",
     ]
     assert set(receipt["checks"].values()) == {"pass"}
     assert recovery.SENSITIVE_FIXTURE_MARKER not in json.dumps(receipt)

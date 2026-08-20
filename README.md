@@ -32,8 +32,9 @@ health through `/status`, and proves a clean restore of representative owner sta
 now builds reviewed commits, holds Telegram and model work until atomic activation, takes an exact
 pre-deploy snapshot, recovers interrupted or unhealthy candidates, and supports schema-checked
 rollback. This is still only a disposable Docker proof: power-loss resumption,
-policy-bounded self-modification, a real off-device repository and recovery-key setup, real provider
-configuration, installation on an actual server, and deployed dogfooding remain incomplete.
+supervised installation of the policy-bounded self-change workers, a real off-device repository and
+recovery-key setup, real provider configuration, installation on an actual server, and deployed
+dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.

@@ -49,6 +49,8 @@ services:
       - postgres_app_password
       - postgres_migration_password
       - postgres_backup_password
+      - postgres_change_planner_password
+      - postgres_change_applier_password
     volumes:
       - ./infra/server/reconcile-logins.sh:/usr/local/bin/melloa-reconcile-logins:ro
     networks:
@@ -351,3 +353,7 @@ secrets:
     file: ${MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE:?Set MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE}
   postgres_backup_password:
     file: ${MELLOA_POSTGRES_BACKUP_PASSWORD_FILE:?Set MELLOA_POSTGRES_BACKUP_PASSWORD_FILE}
+  postgres_change_planner_password:
+    file: ${MELLOA_POSTGRES_CHANGE_PLANNER_PASSWORD_FILE:?Set MELLOA_POSTGRES_CHANGE_PLANNER_PASSWORD_FILE}
+  postgres_change_applier_password:
+    file: ${MELLOA_POSTGRES_CHANGE_APPLIER_PASSWORD_FILE:?Set MELLOA_POSTGRES_CHANGE_APPLIER_PASSWORD_FILE}

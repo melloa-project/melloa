@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import ipaddress
 import json
 import os
@@ -11,13 +12,19 @@ import stat
 import sys
 from contextlib import ExitStack
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn, Protocol
 
 import psycopg
 import uvicorn
 from psycopg.conninfo import conninfo_to_dict
 from pydantic import ValidationError
 
+from melloa.adapters.coding import (
+    CodexCliSourceChangePlanner,
+    ExternalSandboxSelfChangeVerifier,
+    GitSelfChangeReleaseExecutor,
+    ServerReleaseDeployment,
+)
 from melloa.adapters.guardian.file import FileGuardianStatusReader, GuardianVerificationError
 from melloa.adapters.models.openai_compatible import load_openai_compatible_model_config
 from melloa.adapters.models.routed import ModelRouteConfigs
@@ -26,12 +33,46 @@ from melloa.adapters.postgres.migrations import (
     discover_migrations,
     migration_status,
 )
+from melloa.adapters.postgres.self_change import PostgresSelfChangeStore
 from melloa.adapters.telegram import TelegramOwnerConfig
 from melloa.application.release_activation import ReleaseActivationGate
+from melloa.application.self_change_applying import SelfChangeApplyingWorker
+from melloa.application.self_change_planning import SelfChangePlanningWorker
 from melloa.apps.core import AccessScope
 from melloa.apps.runtime import build_runtime
 
 ROOT = Path(__file__).resolve().parents[3]
+_PLANNER_ENVIRONMENT = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+)
+_RELEASE_ENVIRONMENT = (
+    "DOCKER_CONFIG",
+    "HOME",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "MELLOA_POSTGRES_IMAGE",
+    "MELLOA_PYTHON_IMAGE",
+    "MELLOA_RELEASE_HEALTH_TIMEOUT_SECONDS",
+    "MELLOA_RELEASE_POLL_SECONDS",
+    "MELLOA_RESTIC_IMAGE",
+    "MELLOA_UV_IMAGE",
+    "NO_PROXY",
+)
+_MODEL_CREDENTIAL_ENVIRONMENT = ("CODEX_HOME", "OPENAI_API_KEY")
+_CONTAINER_CONTROL_SOCKETS = (
+    Path("/run/docker.sock"),
+    Path("/var/run/docker.sock"),
+    Path("/run/podman/podman.sock"),
+)
+
+
+class _ForeverWorker(Protocol):
+    async def run_forever(self) -> None:
+        """Run until the service supervisor stops the process."""
 
 
 def _exit_error(message: str) -> NoReturn:
@@ -107,6 +148,66 @@ def _read_telegram_owner_config(path: Path) -> TelegramOwnerConfig:
 
 def _read_telegram_bot_token(path: Path) -> str:
     return _read_private_file(path, label="Telegram bot token", minimum=37)
+
+
+def _require_private_directory(path: Path, *, label: str, owner_uid: int) -> None:
+    try:
+        metadata = path.stat(follow_symlinks=False)
+    except OSError as error:
+        raise ValueError(f"{label} is unavailable") from error
+    if (
+        not path.is_absolute()
+        or not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != owner_uid
+        or metadata.st_mode & 0o077
+    ):
+        raise ValueError(f"{label} must be an owner-only directory for the coding agent")
+
+
+def _reject_planner_container_authority() -> None:
+    if os.environ.get("DOCKER_HOST"):
+        raise ValueError("self-change planning must not receive container-control authority")
+    for path in _CONTAINER_CONTROL_SOCKETS:
+        try:
+            metadata = path.stat(follow_symlinks=False)
+        except (FileNotFoundError, PermissionError):
+            continue
+        except OSError as error:
+            raise ValueError("container-control authority could not be verified") from error
+        if stat.S_ISSOCK(metadata.st_mode) and os.access(path, os.R_OK | os.W_OK):
+            raise ValueError("self-change planning must not access a container-control socket")
+
+
+def _connect_self_change_database(
+    dsn_file: Path,
+    *,
+    application_name: str,
+    expected_role: str,
+) -> psycopg.Connection[tuple[Any, ...]]:
+    dsn = _validate_private_database_dsn(_read_secret_file(dsn_file))
+    connection: psycopg.Connection[tuple[Any, ...]] = psycopg.connect(
+        dsn,
+        autocommit=True,
+        connect_timeout=5,
+        application_name=application_name,
+        options=(
+            "-c statement_timeout=30000 -c lock_timeout=5000 "
+            "-c idle_in_transaction_session_timeout=10000"
+        ),
+    )
+    try:
+        row = connection.execute("SELECT current_user").fetchone()
+    except Exception:
+        connection.close()
+        raise
+    if row != (expected_role,):
+        connection.close()
+        raise ValueError("self-change database login has the wrong active role")
+    return connection
+
+
+def _run_worker(worker: _ForeverWorker) -> None:
+    asyncio.run(worker.run_forever())
 
 
 def _validate_private_database_dsn(dsn: str) -> str:
@@ -318,6 +419,112 @@ def migrate(args: argparse.Namespace) -> int:
     return 0 if args.migration_command == "apply" or not result.pending else 1
 
 
+def self_change_plan(args: argparse.Namespace) -> int:
+    try:
+        _reject_planner_container_authority()
+        _require_private_directory(
+            args.agent_home,
+            label="coding-agent home",
+            owner_uid=args.agent_uid,
+        )
+        _require_private_directory(
+            args.codex_home,
+            label="Codex home",
+            owner_uid=args.agent_uid,
+        )
+        if args.local_provider is not None and args.openai_api_key_file is not None:
+            raise ValueError("local Codex providers cannot receive an OpenAI API key")
+        agent_environment = {
+            key: os.environ[key]
+            for key in _PLANNER_ENVIRONMENT
+            if os.environ.get(key)
+        }
+        agent_environment.update(
+            {
+                "CODEX_HOME": str(args.codex_home),
+                "HOME": str(args.agent_home),
+            }
+        )
+        if args.openai_api_key_file is not None:
+            agent_environment["OPENAI_API_KEY"] = _read_private_file(
+                args.openai_api_key_file,
+                label="Codex API key",
+                minimum=20,
+            )
+        with _connect_self_change_database(
+            args.dsn_file,
+            application_name="melloa-self-change-planner",
+            expected_role="melloa_change_planner",
+        ) as connection:
+            worker = SelfChangePlanningWorker(
+                store=PostgresSelfChangeStore(connection),
+                planner=CodexCliSourceChangePlanner(
+                    repository=args.repository,
+                    work_root=args.work_root,
+                    codex_executable=args.codex_executable,
+                    git_executable=args.git_executable,
+                    model=args.model,
+                    local_provider=args.local_provider,
+                    agent_environment=agent_environment,
+                    agent_uid=args.agent_uid,
+                    agent_gid=args.agent_gid,
+                ),
+            )
+            _run_worker(worker)
+    except psycopg.Error:
+        _exit_error("Self-change planning database is unavailable or unauthorized.")
+    except (OSError, ValueError) as error:
+        _exit_error(f"Self-change planning configuration rejected: {error}")
+    return 0
+
+
+def self_change_apply(args: argparse.Namespace) -> int:
+    try:
+        leaked_environment = [
+            key for key in _MODEL_CREDENTIAL_ENVIRONMENT if os.environ.get(key)
+        ]
+        if leaked_environment:
+            raise ValueError("self-change application must not receive model credentials")
+        release_environment = {
+            key: os.environ[key]
+            for key in _RELEASE_ENVIRONMENT
+            if os.environ.get(key)
+        }
+        verifier = ExternalSandboxSelfChangeVerifier(
+            args.verifier_executable,
+            environment={
+                "MELLOA_VERIFIER_NODE_MODULES": str(args.verifier_node_modules),
+                "MELLOA_VERIFIER_PYTHON_ENV": str(args.verifier_python_env),
+            },
+        )
+        deployment = ServerReleaseDeployment(
+            environment_file=args.server_environment_file,
+            release_state_dir=args.release_state_dir,
+            environment=release_environment,
+        )
+        with _connect_self_change_database(
+            args.dsn_file,
+            application_name="melloa-self-change-applier",
+            expected_role="melloa_change_applier",
+        ) as connection:
+            worker = SelfChangeApplyingWorker(
+                store=PostgresSelfChangeStore(connection),
+                executor=GitSelfChangeReleaseExecutor(
+                    repository=args.repository,
+                    state_root=args.work_root,
+                    git_executable=args.git_executable,
+                    verifier=verifier,
+                    deployment=deployment,
+                ),
+            )
+            _run_worker(worker)
+    except psycopg.Error:
+        _exit_error("Self-change application database is unavailable or unauthorized.")
+    except (OSError, ValueError) as error:
+        _exit_error(f"Self-change application configuration rejected: {error}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="melloa")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -412,6 +619,33 @@ def build_parser() -> argparse.ArgumentParser:
         required="MELLOA_DATABASE_DSN_FILE" not in os.environ,
     )
     migrate_parser.set_defaults(handler=migrate)
+
+    plan_parser = subparsers.add_parser("self-change-plan")
+    plan_parser.add_argument("--dsn-file", type=Path, required=True)
+    plan_parser.add_argument("--repository", type=Path, required=True)
+    plan_parser.add_argument("--work-root", type=Path, required=True)
+    plan_parser.add_argument("--codex-executable", type=Path, required=True)
+    plan_parser.add_argument("--git-executable", type=Path, default=Path("/usr/bin/git"))
+    plan_parser.add_argument("--agent-uid", type=int, required=True)
+    plan_parser.add_argument("--agent-gid", type=int, required=True)
+    plan_parser.add_argument("--agent-home", type=Path, required=True)
+    plan_parser.add_argument("--codex-home", type=Path, required=True)
+    plan_parser.add_argument("--openai-api-key-file", type=Path)
+    plan_parser.add_argument("--model")
+    plan_parser.add_argument("--local-provider", choices=("ollama", "lmstudio"))
+    plan_parser.set_defaults(handler=self_change_plan)
+
+    apply_parser = subparsers.add_parser("self-change-apply")
+    apply_parser.add_argument("--dsn-file", type=Path, required=True)
+    apply_parser.add_argument("--repository", type=Path, required=True)
+    apply_parser.add_argument("--work-root", type=Path, required=True)
+    apply_parser.add_argument("--git-executable", type=Path, default=Path("/usr/bin/git"))
+    apply_parser.add_argument("--verifier-executable", type=Path, required=True)
+    apply_parser.add_argument("--verifier-python-env", type=Path, required=True)
+    apply_parser.add_argument("--verifier-node-modules", type=Path, required=True)
+    apply_parser.add_argument("--server-environment-file", type=Path, required=True)
+    apply_parser.add_argument("--release-state-dir", type=Path, required=True)
+    apply_parser.set_defaults(handler=self_change_apply)
     return parser
 
 

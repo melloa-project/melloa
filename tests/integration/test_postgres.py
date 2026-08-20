@@ -590,6 +590,89 @@ def test_self_change_queue_and_exact_approval_survive_restart() -> None:
             )
 
 
+def test_self_change_workers_have_disjoint_database_authority() -> None:
+    dsn = os.environ["MELLOA_TEST_DATABASE_DSN"]
+    requested_at = _NOW + timedelta(days=2)
+    request_text = "Prove the planner and applier database roles remain disjoint."
+    change = SelfChange(
+        change_id="change_00000000000000000000000000000d01",
+        owner_id=OWNER_ID,
+        request_text=request_text,
+        request_digest=self_change_request_digest(request_text),
+        requested_update_id=601,
+        state=SelfChangeState.REQUESTED,
+        available_at=requested_at,
+        requested_at=requested_at,
+        updated_at=requested_at,
+    )
+    with _connect(dsn) as owner_connection:
+        build_runtime(
+            _guardian(),
+            _OWNER_CREDENTIAL,
+            database_connection=owner_connection,
+            clock=lambda: requested_at,
+        )
+        PostgresSelfChangeStore(owner_connection).create(change)
+
+    with psycopg.connect(dsn, autocommit=True) as planner_connection:
+        planner_connection.execute("SET ROLE melloa_change_planner")
+        planner_store = PostgresSelfChangeStore(planner_connection)
+        planning = planner_store.claim_next_planning(
+            lease_owner="worker_00000000000000000000000000000d01",
+            now=requested_at + timedelta(seconds=1),
+            lease_expires_at=requested_at + timedelta(seconds=20),
+        )
+        assert planning is not None
+        proposal = planner_store.record_proposal(
+            planning,
+            base_revision="d" * 40,
+            summary="Keep worker database authority separate.",
+            patch="diff --git a/example b/example\n+separate authority\n",
+            now=requested_at + timedelta(seconds=2),
+        )
+        with pytest.raises(psycopg.Error, match="permission denied"):
+            planner_connection.execute(
+                "UPDATE melloa.self_changes SET candidate_revision = %s WHERE change_id = %s",
+                ("e" * 40, change.change_id),
+            )
+
+    with _connect(dsn) as owner_connection:
+        approved = PostgresSelfChangeStore(owner_connection).approve(
+            OWNER_ID,
+            change.change_id,
+            proposal_digest=proposal.proposal_digest,
+            approval_update_id=602,
+            now=requested_at + timedelta(seconds=3),
+        )
+        assert approved.state is SelfChangeState.APPROVED
+
+    with psycopg.connect(dsn, autocommit=True) as applier_connection:
+        applier_connection.execute("SET ROLE melloa_change_applier")
+        applier_store = PostgresSelfChangeStore(applier_connection)
+        applying = applier_store.claim_next_applying(
+            lease_owner="worker_00000000000000000000000000000d02",
+            now=requested_at + timedelta(seconds=4),
+            lease_expires_at=requested_at + timedelta(seconds=24),
+        )
+        assert applying is not None
+        applying = applier_store.record_candidate(
+            applying,
+            candidate_revision="e" * 40,
+            now=requested_at + timedelta(seconds=5),
+        )
+        deployed = applier_store.record_deployed(
+            applying,
+            candidate_revision="e" * 40,
+            now=requested_at + timedelta(seconds=6),
+        )
+        assert deployed.state is SelfChangeState.DEPLOYED
+        with pytest.raises(psycopg.Error, match="permission denied"):
+            applier_connection.execute(
+                "UPDATE melloa.self_changes SET proposal_summary = %s WHERE change_id = %s",
+                ("unauthorized", change.change_id),
+            )
+
+
 def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
     dsn = os.environ["MELLOA_TEST_DATABASE_DSN"]
     inbound_message_id = "message_00000000000000000000000000000a01"

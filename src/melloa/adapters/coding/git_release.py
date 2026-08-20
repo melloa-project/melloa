@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -352,6 +353,10 @@ class GitSelfChangeReleaseExecutor:
         return f"refs/heads/melloa-candidates/{change.change_id}"
 
     def _require_runtime_paths(self) -> None:
+        try:
+            git_metadata = self._git_executable.stat(follow_symlinks=False)
+        except OSError as error:
+            raise SelfChangeReleaseError("self_change.release_workspace_unavailable") from error
         if (
             not self._repository.is_dir()
             or self._repository.is_symlink()
@@ -359,8 +364,9 @@ class GitSelfChangeReleaseExecutor:
             or not self._state_root.is_dir()
             or self._state_root.is_symlink()
             or not os.access(self._state_root, os.W_OK)
-            or not self._git_executable.is_file()
-            or self._git_executable.is_symlink()
+            or not stat.S_ISREG(git_metadata.st_mode)
+            or git_metadata.st_uid != 0
+            or git_metadata.st_mode & 0o022
             or not os.access(self._git_executable, os.X_OK)
         ):
             raise SelfChangeReleaseError("self_change.release_workspace_unavailable")
