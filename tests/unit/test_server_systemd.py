@@ -67,7 +67,7 @@ def test_codex_cli_is_optional_until_self_change_workers_are_enabled() -> None:
     assert "codex" not in preflight_required_commands
     assert "verify_codex_cli" in preflight
     assert "require_codex_self_change_tools" in first_install
-    assert "optional self-change workers require Codex CLI" in first_install
+    assert "bounded self-change workers require Codex CLI" in first_install
 
 
 def test_guided_first_install_defaults_self_change_for_real_interactive_server_path() -> None:

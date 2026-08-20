@@ -245,9 +245,10 @@ sudo infra/server/preflight.sh --source "$PWD" --installed
 
 Those remain engineering commands, not supported owner deployment instructions. The installed
 preflight validates every runtime-owned private input, requires the backup repository to be a mount
-on storage independent from the root filesystem, and accepts either disabled self-change workers,
-a private Codex API-key file, or an explicitly selected `ollama`/`lmstudio` local provider. It also
-runs Bubblewrap as the dedicated coding UID and validates the installed units on the target host.
+on storage independent from the root filesystem, and accepts either a recorded conversation-only
+bring-up, a private Codex API-key file, or an explicitly selected `ollama`/`lmstudio` local
+provider. It also runs Bubblewrap as the dedicated coding UID and validates the installed units on
+the target host.
 
 After that preflight passes, `activate.sh` provides the bounded first-activation transaction called
 by `first-install.sh`. It builds the exact installed revision, verifies the signed Guardian handoff,

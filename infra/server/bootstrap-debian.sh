@@ -20,8 +20,8 @@ Usage: infra/server/bootstrap-debian.sh [--source PATH] [--origin HTTPS_URL] [--
 Installs and verifies the reviewed Melloa host toolchain on a fresh Debian 13 amd64
 systemd server. --check performs no package or tool installation.
 
---self-change-tools also installs and verifies the pinned Codex CLI required only by the
-optional self-change workers.
+--self-change-tools also installs and verifies the pinned Codex CLI required by the
+bounded self-change workers used in the first-server proof.
 EOF
   exit 2
 }
@@ -359,5 +359,5 @@ if [[ -n "$CA_FILE" ]]; then
 fi
 printf '\n'
 if [[ "$SELF_CHANGE_TOOLS" == false ]]; then
-  echo "Optional self-change workers require rerunning bootstrap with --self-change-tools before they are enabled."
+  echo "Self-change proof requires rerunning bootstrap with --self-change-tools before those workers are enabled."
 fi

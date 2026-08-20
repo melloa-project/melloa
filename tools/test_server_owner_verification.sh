@@ -206,7 +206,7 @@ MELLOA_VERIFY_ROOT="$TARGET" \
 
 grep --fixed-strings --quiet "First owner deployment verification passed." \
   "$WORKDIR/output.log"
-grep --fixed-strings --quiet "optional self-change workers are disabled" \
+grep --fixed-strings --quiet "conversation-only bring-up until self-change is enabled and exercised" \
   "$WORKDIR/output.log"
 grep --fixed-strings --quiet "Backup repository mount is explicit and independent" \
   "$WORKDIR/output.log"

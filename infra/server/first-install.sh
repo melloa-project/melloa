@@ -25,7 +25,7 @@ Runs the reviewed first-owner server setup:
   3. generate model route JSON and secret files;
   4. pair the dedicated Telegram bot unless an owner ID is supplied by test input;
   5. install private configuration; and
-  6. configure disabled or explicitly enabled self-change workers;
+  6. configure the bounded self-change workers, or record a conversation-only bring-up;
   7. activate the server unless --skip-activation is selected; and
   8. verify the first Telegram conversation unless --skip-verification is selected.
 
@@ -634,26 +634,26 @@ require_codex_self_change_tools() {
   bootstrap_command="$(codex_self_change_tools_command)"
   toolchain_lock="$SOURCE/infra/server/toolchain.lock"
   [[ -f "$toolchain_lock" && ! -L "$toolchain_lock" ]] ||
-    fail "optional self-change workers require the reviewed toolchain lock; rerun $bootstrap_command before enabling them"
+    fail "bounded self-change workers require the reviewed toolchain lock; rerun $bootstrap_command before enabling them"
   # shellcheck disable=SC1090
   source "$toolchain_lock"
   [[ -x /usr/local/bin/codex ]] ||
-    fail "optional self-change workers require Codex CLI; rerun $bootstrap_command before enabling them"
+    fail "bounded self-change workers require Codex CLI; rerun $bootstrap_command before enabling them"
   codex_version="$(/usr/local/bin/codex --version | awk 'NR == 1 {print $2}')" ||
-    fail "optional self-change workers require a working Codex CLI; rerun $bootstrap_command before enabling them"
+    fail "bounded self-change workers require a working Codex CLI; rerun $bootstrap_command before enabling them"
   [[ "$codex_version" == "$MELLOA_CODEX_CLI_VERSION" ]] ||
-    fail "optional self-change workers require Codex CLI $MELLOA_CODEX_CLI_VERSION; rerun $bootstrap_command before enabling them"
+    fail "bounded self-change workers require Codex CLI $MELLOA_CODEX_CLI_VERSION; rerun $bootstrap_command before enabling them"
   codex_help="$(/usr/local/bin/codex --help 2>&1)" ||
-    fail "optional self-change workers require a working Codex CLI; rerun $bootstrap_command before enabling them"
+    fail "bounded self-change workers require a working Codex CLI; rerun $bootstrap_command before enabling them"
   codex_exec_help="$(/usr/local/bin/codex exec --help 2>&1)" ||
-    fail "optional self-change workers require a working Codex CLI exec path; rerun $bootstrap_command before enabling them"
+    fail "bounded self-change workers require a working Codex CLI exec path; rerun $bootstrap_command before enabling them"
   for option in --sandbox --ask-for-approval --oss --local-provider; do
     grep --fixed-strings --quiet -- "$option" <<<"$codex_help" ||
-      fail "optional self-change workers require Codex CLI option $option; rerun $bootstrap_command before enabling them"
+      fail "bounded self-change workers require Codex CLI option $option; rerun $bootstrap_command before enabling them"
   done
   for option in --ephemeral --ignore-user-config; do
     grep --fixed-strings --quiet -- "$option" <<<"$codex_exec_help" ||
-      fail "optional self-change workers require Codex CLI exec option $option; rerun $bootstrap_command before enabling them"
+      fail "bounded self-change workers require Codex CLI exec option $option; rerun $bootstrap_command before enabling them"
   done
 }
 

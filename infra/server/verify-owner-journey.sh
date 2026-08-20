@@ -345,13 +345,13 @@ else
     melloa-self-change-planner.service \
     melloa-self-change-applier.service; do
     if systemctl is-enabled --quiet "$service"; then
-      fail "$service is enabled even though optional self-change workers are disabled"
+      fail "$service is enabled even though self-change workers are disabled"
     fi
     if systemctl is-active --quiet "$service"; then
-      fail "$service is active even though optional self-change workers are disabled"
+      fail "$service is active even though self-change workers are disabled"
     fi
   done
-  echo "Host recovery service is enabled and active; optional self-change workers are disabled."
+  echo "Host recovery service is enabled and active; self-change workers are disabled, so this remains a conversation-only bring-up until self-change is enabled and exercised."
 fi
 
 compose config --quiet

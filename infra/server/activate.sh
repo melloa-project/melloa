@@ -12,7 +12,7 @@ usage() {
 Usage: infra/server/activate.sh [--source PATH] [--origin HTTPS_URL] [--initialize-backup]
 
 Builds and checks the exact installed revision, deploys it, proves one encrypted backup,
-and enables boot recovery plus optional self-change workers when configured. It is safe to rerun.
+and enables boot recovery plus bounded self-change workers when configured. It is safe to rerun.
 --initialize-backup is required only for a new, independently mounted restic repository.
 EOF
   exit 2
@@ -174,7 +174,7 @@ else
   systemctl disable --now \
     melloa-self-change-planner.service \
     melloa-self-change-applier.service >/dev/null 2>&1 || true
-  echo "Optional self-change workers are disabled for this deployment."
+  echo "Self-change workers are disabled; this deployment remains conversation-only until self-change is enabled and exercised."
 fi
 sleep 2
 for service in melloa-release-recovery.service; do

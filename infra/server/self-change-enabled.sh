@@ -8,7 +8,7 @@ if [[ "$ENABLED" == true ]]; then
 fi
 
 if [[ "$ENABLED" == false ]]; then
-  echo "Optional Melloa self-change workers are disabled by /etc/melloa/self-change.env." >&2
+  echo "Melloa self-change workers are disabled by /etc/melloa/self-change.env; this server remains conversation-only until self-change is enabled and exercised." >&2
   exit 1
 fi
 
