@@ -220,7 +220,7 @@ Recovery:
 EOF
 }
 
-for command in awk date docker jq python3.13 sleep systemctl; do
+for command in awk date docker jq sleep systemctl; do
   require_command "$command"
 done
 validate_positive_integer "$TIMEOUT_SECONDS" "timeout"
@@ -318,6 +318,7 @@ readonly SNAPSHOT="$(
 echo "Latest encrypted backup succeeded: ${SNAPSHOT:0:12}."
 
 if [[ -z "$PHRASE" ]]; then
+  require_command python3.13
   PHRASE="$(
     python3.13 -c 'import secrets; print("Hello Melli, please reply to setup verification melloa_verify_" + secrets.token_urlsafe(12))'
   )"

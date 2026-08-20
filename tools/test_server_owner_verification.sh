@@ -10,9 +10,21 @@ readonly QUERY_COUNT="$WORKDIR/query-count"
 readonly PHRASE="Hello Melli, please reply to setup verification melloa_verify_testNonce123; it's me"
 
 cleanup() {
+  local status=$?
+  if ((status != 0)); then
+    if [[ -f "$WORKDIR/output.log" ]]; then
+      echo "--- owner verification output ---" >&2
+      sed -n '1,200p' "$WORKDIR/output.log" >&2
+    fi
+    if [[ -f "$LOG" ]]; then
+      echo "--- fake command log ---" >&2
+      sed -n '1,200p' "$LOG" >&2
+    fi
+  fi
   if [[ "$WORKDIR" == /tmp/melloa-owner-verification-test.* && -d "$WORKDIR" ]]; then
     rm -rf -- "$WORKDIR"
   fi
+  exit "$status"
 }
 trap cleanup EXIT HUP INT TERM
 
