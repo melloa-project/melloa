@@ -222,8 +222,9 @@ After rebooting the server, rerun the owner-facing verifier:
 sudo /usr/local/libexec/melloa/verify-owner-journey
 ```
 
-It checks enabled systemd services, running containers, the active release marker, the latest
-encrypted backup receipt, and a fresh Telegram conversation through Melloa's real worker.
+It checks enabled systemd services, running containers, the active release marker, the configured
+backup repository mount, the latest encrypted backup receipt, and a fresh Telegram conversation
+through Melloa's real worker.
 
 ## Backup and recovery
 

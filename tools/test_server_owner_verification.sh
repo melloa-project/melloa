@@ -8,6 +8,7 @@ readonly FAKEBIN="$WORKDIR/fakebin"
 readonly LOG="$WORKDIR/commands.log"
 readonly QUERY_COUNT="$WORKDIR/query-count"
 readonly PHRASE="Hello Melli, please reply to setup verification melloa_verify_testNonce123; it's me"
+readonly BACKUP_REPOSITORY="$TARGET/mnt/melloa-off-device-backup"
 
 cleanup() {
   local status=$?
@@ -30,6 +31,7 @@ trap cleanup EXIT HUP INT TERM
 
 install -d -m 0700 \
   "$TARGET/etc/melloa" \
+  "$BACKUP_REPOSITORY" \
   "$TARGET/var/lib/melloa/runtime-state" \
   "$TARGET/var/lib/melloa/release-state" \
   "$FAKEBIN"
@@ -61,6 +63,7 @@ printf '{"result":"success","snapshot_id":"%064d"}\n' 1 \
   printf 'MELLOA_SOURCE_REVISION=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n'
   printf 'MELLOA_RUNTIME_STATE_DIR=/var/lib/melloa/runtime-state\n'
   printf 'MELLOA_RELEASE_STATE_DIR=/var/lib/melloa/release-state\n'
+  printf 'MELLOA_BACKUP_REPOSITORY_DIR=/mnt/melloa-off-device-backup\n'
 } >"$TARGET/etc/melloa/server.env"
 {
   printf 'MELLOA_SELF_CHANGE_ENABLED=false\n'
@@ -80,6 +83,36 @@ fi
 exit 0
 EOF
 chmod +x "$FAKEBIN/systemctl"
+
+cat >"$FAKEBIN/findmnt" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == --mountpoint ]]
+[[ "${MELLOA_VERIFY_FAIL_FINDMNT:-false}" != true ]]
+[[ "$2" == "$MELLOA_VERIFY_BACKUP_REPOSITORY" ]]
+EOF
+chmod +x "$FAKEBIN/findmnt"
+
+cat >"$FAKEBIN/stat" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == --format=%d ]]; then
+  case "$2" in
+    "$MELLOA_VERIFY_BACKUP_REPOSITORY")
+      printf '200\n'
+      ;;
+    "$MELLOA_VERIFY_ROOT")
+      printf '100\n'
+      ;;
+    *)
+      /usr/bin/stat "$@"
+      ;;
+  esac
+  exit 0
+fi
+/usr/bin/stat "$@"
+EOF
+chmod +x "$FAKEBIN/stat"
 
 cat >"$FAKEBIN/docker" <<'EOF'
 #!/usr/bin/env bash
@@ -136,9 +169,33 @@ exit 64
 EOF
 chmod +x "$FAKEBIN/docker"
 
+set +e
 PATH="$FAKEBIN:$PATH" \
+MELLOA_VERIFY_BACKUP_REPOSITORY="$BACKUP_REPOSITORY" \
+MELLOA_VERIFY_FAIL_FINDMNT=true \
 MELLOA_VERIFY_FAKE_LOG="$LOG" \
 MELLOA_VERIFY_QUERY_COUNT="$QUERY_COUNT" \
+MELLOA_VERIFY_ROOT="$TARGET" \
+  "$ROOT/infra/server/verify-owner-journey.sh" \
+    --source "$ROOT" \
+    --root "$TARGET" \
+    --phrase "$PHRASE" \
+    --timeout 5 \
+    --poll-seconds 1 \
+    >"$WORKDIR/missing-mount-output.log" 2>&1
+status=$?
+set -e
+[[ "$status" == 1 ]]
+grep --fixed-strings --quiet \
+  "backup repository must be an explicit mount point" \
+  "$WORKDIR/missing-mount-output.log"
+[[ ! -f "$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json" ]]
+
+PATH="$FAKEBIN:$PATH" \
+MELLOA_VERIFY_BACKUP_REPOSITORY="$BACKUP_REPOSITORY" \
+MELLOA_VERIFY_FAKE_LOG="$LOG" \
+MELLOA_VERIFY_QUERY_COUNT="$QUERY_COUNT" \
+MELLOA_VERIFY_ROOT="$TARGET" \
   "$ROOT/infra/server/verify-owner-journey.sh" \
     --source "$ROOT" \
     --root "$TARGET" \
@@ -150,6 +207,8 @@ MELLOA_VERIFY_QUERY_COUNT="$QUERY_COUNT" \
 grep --fixed-strings --quiet "First owner deployment verification passed." \
   "$WORKDIR/output.log"
 grep --fixed-strings --quiet "optional self-change workers are disabled" \
+  "$WORKDIR/output.log"
+grep --fixed-strings --quiet "Backup repository mount is explicit and independent" \
   "$WORKDIR/output.log"
 grep --fixed-strings --quiet "Owner verification receipt updated:" \
   "$WORKDIR/output.log"

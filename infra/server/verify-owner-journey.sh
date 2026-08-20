@@ -17,9 +17,9 @@ Usage: infra/server/verify-owner-journey.sh [--source PATH] [--root PATH]
                                            [--phrase TEXT]
 
 Verifies the first-owner server journey after activation. It checks the supervised host services,
-the active containers, the latest encrypted backup receipt, then asks the owner to send one exact
-Telegram message. The script proves Melloa itself accepted that Telegram message, completed a
-conversation reply, and delivered that reply back through Telegram.
+the active containers, the off-device backup mount, the latest encrypted backup receipt, then asks
+the owner to send one exact Telegram message. The script proves Melloa itself accepted that Telegram
+message, completed a conversation reply, and delivered that reply back through Telegram.
 EOF
   exit 2
 }
@@ -116,6 +116,23 @@ validate_positive_integer() {
   local value="$1"
   local label="$2"
   [[ "$value" =~ ^[1-9][0-9]*$ ]] || fail "$label must be a positive integer"
+}
+
+require_backup_mount() {
+  local backup_path
+  local root_path
+  backup_path="$(destination "$BACKUP_REPOSITORY_DIR")"
+  if [[ "$DESTINATION_ROOT" == / ]]; then
+    root_path=/
+  else
+    root_path="$DESTINATION_ROOT"
+  fi
+  [[ -d "$backup_path" && ! -L "$backup_path" ]] ||
+    fail "backup repository mount is unavailable; mount off-device storage at $BACKUP_REPOSITORY_DIR and rerun this verifier"
+  findmnt --mountpoint "$backup_path" >/dev/null ||
+    fail "backup repository must be an explicit mount point; mount off-device storage at $BACKUP_REPOSITORY_DIR and rerun this verifier"
+  [[ "$(stat --format='%d' "$backup_path")" != "$(stat --format='%d' "$root_path")" ]] ||
+    fail "backup repository must use storage independent from the server root filesystem"
 }
 
 compose() {
@@ -256,7 +273,7 @@ Recovery:
 EOF
 }
 
-for command in awk chmod date docker jq mktemp mv sleep sync systemctl; do
+for command in awk chmod date docker findmnt jq mktemp mv sleep stat sync systemctl; do
   require_command "$command"
 done
 validate_positive_integer "$TIMEOUT_SECONDS" "timeout"
@@ -344,6 +361,11 @@ require_container_running backup
 echo "Persistent containers are running and Melloa is healthy."
 
 readonly RUNTIME_STATE_DIR="$(read_environment_path "$ENV_FILE" MELLOA_RUNTIME_STATE_DIR)"
+readonly BACKUP_REPOSITORY_DIR="$(
+  read_environment_path "$ENV_FILE" MELLOA_BACKUP_REPOSITORY_DIR
+)"
+require_backup_mount
+echo "Backup repository mount is explicit and independent from the server root filesystem."
 readonly BACKUP_STATUS_FILE="$(destination "$RUNTIME_STATE_DIR/backup-status.json")"
 [[ -f "$BACKUP_STATUS_FILE" && ! -L "$BACKUP_STATUS_FILE" ]] ||
   fail "backup status receipt is unavailable"

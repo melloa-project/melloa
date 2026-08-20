@@ -264,8 +264,9 @@ After a reboot or maintenance window, the owner-facing health proof is:
 sudo /usr/local/libexec/melloa/verify-owner-journey
 ```
 
-It verifies enabled systemd services, running containers, the latest encrypted backup receipt, the
-active release marker, and a fresh Telegram conversation through Melloa's real long-polling worker.
+It verifies enabled systemd services, running containers, the configured backup repository mount,
+the latest encrypted backup receipt, the active release marker, and a fresh Telegram conversation
+through Melloa's real long-polling worker.
 On success it also updates `/var/lib/melloa/runtime-state/owner-verification-status.json` with a
 redacted receipt containing the verification time, active revision, backup snapshot ID, and internal
 reply message ID; it deliberately does not store the Telegram verification phrase or reply text.
