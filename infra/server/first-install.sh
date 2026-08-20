@@ -25,7 +25,7 @@ Runs the reviewed first-owner server setup:
   3. generate model route JSON and secret files;
   4. pair the dedicated Telegram bot unless an owner ID is supplied by test input;
   5. install private configuration; and
-  6. defer or configure optional self-change workers;
+  6. configure disabled or explicitly enabled self-change workers;
   7. activate the server unless --skip-activation is selected; and
   8. verify the first Telegram conversation unless --skip-verification is selected.
 
@@ -666,12 +666,15 @@ activate_and_verify() {
     cat >&2 <<'EOF'
 Next qualification steps:
   1. In Telegram, send /status and then one ordinary message to Melli.
-  2. Reboot the server, then run: sudo /usr/local/libexec/melloa/verify-owner-journey
-  3. Prove the actual backup path: sudo /usr/local/libexec/melloa/restore-drill
-  4. Rerun active verification: sudo /usr/local/libexec/melloa/verify-owner-journey
-  5. Save the private evidence snapshot: sudo /usr/local/libexec/melloa/qualification-record
-  6. After a later reviewed main commit exists, run: sudo /usr/local/libexec/melloa/update
-  7. Only after that update succeeds, prove rollback: sudo /usr/local/libexec/melloa/rollback
+  2. If self-change workers are enabled, prove one public-safe /change proposal, exact approval,
+     commit, push, and deployed revision from Telegram. If they are disabled, this is only a
+     conversation bring-up and cannot qualify owner-deployment readiness.
+  3. Reboot the server, then run: sudo /usr/local/libexec/melloa/verify-owner-journey
+  4. Prove the actual backup path: sudo /usr/local/libexec/melloa/restore-drill
+  5. Rerun active verification: sudo /usr/local/libexec/melloa/verify-owner-journey
+  6. Save the private evidence snapshot: sudo /usr/local/libexec/melloa/qualification-record
+  7. After a later reviewed main commit exists, run: sudo /usr/local/libexec/melloa/update
+  8. Only after that update succeeds, prove rollback: sudo /usr/local/libexec/melloa/rollback
 
 Keep using the installed wrappers for later reviewed releases:
   sudo /usr/local/libexec/melloa/update
@@ -867,7 +870,7 @@ unset restic_password
 
 declare -a SELF_CHANGE_ARGS=(--self-change-disabled)
 if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \
-  "Enable optional self-change workers during this first deployment" no; then
+  "Enable bounded self-change workers for readiness qualification" no; then
   require_codex_self_change_tools
   SELF_CHANGE_ARGS=()
   github_token="$(

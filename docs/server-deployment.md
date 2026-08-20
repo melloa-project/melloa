@@ -5,6 +5,77 @@ does not change the repository readiness banner by itself: the path still needs 
 server, survive reboot, prove recovery, and be dogfooded before the root README can honestly say
 ready.
 
+## Direction in plain terms
+
+This path is meant to produce one persistent Melli you talk to from Telegram. It is not a local-model
+project and it is not an operations console project.
+
+The first deployment path is:
+
+1. prepare a fresh Debian server;
+2. mount off-device backup storage;
+3. clone Melloa and bootstrap host prerequisites;
+4. prepare Guardian's public-only handoff;
+5. install the pinned Codex CLI toolchain for the bounded self-change workers;
+6. run one guided setup command;
+7. pair a dedicated Telegram bot;
+8. enter two hosted OpenAI-compatible model routes:
+   - `capable` for higher-quality replies;
+   - `economy` for cheaper routine replies;
+9. enable the bounded self-change workers during setup when running the first real qualification;
+10. verify one real Telegram conversation through the installed worker;
+11. complete one owner-approved `/change` proposal, approval, deploy, and rollback evidence path
+    before claiming owner-deployment readiness.
+
+For this first path, assume hosted model APIs. You do not need Ollama, a GPU, or a local model. A
+cheaper online provider is fine when it offers an owner-reviewed HTTPS OpenAI-compatible endpoint,
+model ID, API style, bearer token, and token pricing. If a provider does not expose that shape,
+use a reviewed compatible router or defer it.
+
+Codex CLI is separate from normal Melli conversation. It is required for the bounded self-change
+qualification path: the owner asks for a public-safe source change from Telegram, reviews the exact
+diff, approves the exact proposal token, and the worker may then test, commit, push, and deploy only
+that retained diff. This is not arbitrary self-modification.
+
+The currently implemented unattended Codex credential modes are:
+
+- `api-key`: a Codex/OpenAI API key read from a private file by the planner;
+- `local`: an explicitly installed `ollama` or `lmstudio` provider.
+
+Because the first deployment is hosted-provider-first and does not assume local model hardware, the
+first self-change qualification should use `api-key`. An interactive ChatGPT/Codex subscription
+login has not been qualified as unattended systemd service auth in this repository; do not treat it
+as supported until there is real deployment evidence or official documentation proving that mode.
+
+## Fast path
+
+The complete command spine is intentionally short:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes --no-install-recommends ca-certificates git
+git clone https://github.com/melloa-project/melloa.git
+cd melloa
+sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+
+cd ..
+git clone https://github.com/melloa-project/melloa-guardian.git
+cd melloa-guardian
+make preview-state
+cd ../melloa
+
+sudo infra/server/first-install.sh --source "$PWD"
+```
+
+When setup asks whether to enable self-change workers, answer `yes` for the first real
+qualification run. The installer still defaults that prompt to `no` as a safety latch because
+enabling the workers grants a deterministic path to commit, push, and deploy after exact owner
+approval. Choosing `no` can be useful for a conversation-only bring-up, but that run cannot qualify
+the repository as ready for owner deployment.
+
+The rest of this document explains what must be ready before those commands and how to prove the
+result afterward.
+
 ## Supported starting point
 
 Use a fresh Debian 13 (`trixie`) amd64 machine booted with systemd. The machine should be a
@@ -35,8 +106,15 @@ The guided setup prompts for these values and writes the private files for you:
 - a dedicated Telegram bot token from BotFather; setup can clear an existing webhook, but no other
   long poller should be using the bot;
 - Guardian's public-only `status.json` and `public.pem` handoff files;
-- capable and economy hosted OpenAI-compatible model choices: base URL, model ID, API style,
-  bearer token, sensitivity approval, and reviewed GBP token/cost ceilings;
+- two hosted OpenAI-compatible conversation model choices:
+  - `capable`: the stronger model Melli should use when quality matters;
+  - `economy`: a cheaper compatible model/provider for routine replies;
+- for each model route: base URL, model ID, API style, bearer token, sensitivity approval, reviewed
+  GBP token prices, and a per-request cost ceiling;
+- a fine-grained GitHub token for this repository with contents read/write access, used only by the
+  self-change applier after exact owner approval;
+- a Codex/OpenAI API key for the self-change planner, unless you are deliberately qualifying a
+  separate local-provider path;
 - a high-entropy base64url restic password retained away from this server and the backup repository.
 
 Do not paste secret values into shell commands. The setup prompts read them without echoing and
@@ -53,24 +131,26 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 The setup accepts only 32-128 base64url-safe characters for that password. If the server and backup
 repository are both lost, this retained password is what makes the encrypted backup restorable.
 
-The first deployment defaults optional self-change workers off. If you intentionally enable them
-during setup, also have a fine-grained GitHub token for this repository with contents read/write
-access and either a Codex API key or an explicitly installed local Codex provider (`ollama` or
-`lmstudio`). For the first owner conversation, choose the default `no` when setup asks about
-self-change workers. When disabled, activation stops and disables those units, and the units
-themselves are condition-gated so accidental manual starts are skipped.
+The first owner conversation does not need Codex CLI, but owner-deployment readiness now does. For
+the first real qualification, bootstrap with `--self-change-tools` and choose `yes` when setup asks
+about self-change workers. If you choose `no`, activation stops and disables those units, and the
+units themselves are condition-gated so accidental manual starts are skipped; that is a
+conversation-only bring-up, not a ready-for-owner-deployment qualification.
 
-The normal bootstrap does not install Codex CLI. If you deliberately want self-change workers
-during the first deployment, rerun bootstrap with `--self-change-tools` before choosing `yes` in
-first install.
+When setup asks for the Codex self-change planner credential mode, choose `api-key` for this hosted
+first path. The `local` mode is retained for separately tested `ollama` or `lmstudio` deployments,
+not for the first home-server target described here.
 
-For the first deployment, use one of these model prompt patterns:
+For the model prompts, use one of these hosted patterns:
 
 - simplest hosted path: choose `openai` for both routes, use a stronger model ID for `capable`, a
   cheaper distinct model ID for `economy`, and enter the current GBP token prices and per-request
   ceilings you have reviewed for your account;
-- alternate hosted path: choose `external` for a route only when you already have a reviewed
-  OpenAI-compatible HTTPS provider, model ID, API style, bearer token, and price ceilings.
+- mixed hosted path: choose `openai` for `capable` and `external` for `economy` when the cheaper
+  provider exposes a reviewed OpenAI-compatible HTTPS endpoint, model ID, API style, bearer token,
+  and price ceilings;
+- external hosted path: choose `external` for both routes only when both providers already meet the
+  same compatibility and pricing requirements.
 
 The guided first-owner path does not currently configure a local conversation model. Docker host
 networking, model bind addresses, and disclosure classification need a separately tested path
@@ -82,25 +162,24 @@ boundaries between routes just because the route labels differ.
 
 ## Install and activate
 
-On the fresh server, clone Melloa and install the reviewed host prerequisites:
+On the fresh server, clone Melloa and install the reviewed host prerequisites plus the pinned Codex
+CLI required by the self-change workers:
 
 ```bash
 sudo apt-get update
 sudo apt-get install --yes --no-install-recommends ca-certificates git
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
-sudo infra/server/bootstrap-debian.sh --source "$PWD"
-```
-
-The bootstrap installs and verifies Docker, Compose, Python, Node.js, uv, and Go. Go is needed only
-to create the public Guardian handoff used by this first deployment path.
-
-If you deliberately plan to enable optional self-change workers during this first setup, prepare the
-pinned Codex CLI before first install:
-
-```bash
 sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
 ```
+
+The bootstrap installs and verifies Docker, Compose, Python, Node.js, uv, Go, and the reviewed
+Codex CLI. Go is needed only to create the public Guardian handoff used by this first deployment
+path. Codex CLI is needed only by the self-change planner; it is not mounted into the normal
+conversation worker and does not receive private chat history.
+
+If you are doing a conversation-only bring-up and intentionally not qualifying self-change yet, you
+can omit `--self-change-tools`; do not use that run as readiness evidence.
 
 If the server needs an owner-approved outbound TLS proxy or private CA, pass its public PEM bundle
 to bootstrap with `--ca-file /absolute/path/to/ca.pem`, then pass the same flag to first install
@@ -143,6 +222,29 @@ The first-install step installs host assets, prompts for private values, generat
 configuration, pairs the exact Telegram owner chat, initializes backup when approved, activates
 Melloa, and then runs the final owner-journey verifier.
 
+The model prompts are intentionally explicit:
+
+- choose `openai` for the fixed OpenAI HTTPS base URL and Responses API style;
+- choose `external` for another hosted OpenAI-compatible provider or router;
+- enter the exact model ID from that provider;
+- enter reviewed token prices and a maximum GBP cost per request;
+- enter the bearer token only when setup asks for the secret.
+
+Do not enter guessed zero prices just to get through setup. The retained route record is what Melloa
+uses to report and constrain model cost/disclosure boundaries.
+
+The self-change prompts are intentionally separate from the conversation model prompts:
+
+- answer `yes` to enabling self-change workers for the first real qualification run;
+- enter the GitHub token only when setup asks for it;
+- choose `api-key` for the Codex self-change planner credential mode;
+- leave the optional Codex model override blank unless you have reviewed a specific model choice for
+  this account;
+- enter the Codex/OpenAI API key only when setup asks for the secret.
+
+Do not paste a ChatGPT/Codex subscription login artifact into these prompts. The current server path
+does not qualify interactive subscription login as unattended service auth.
+
 Before asking for Telegram, model, or backup secrets, setup checks that the backup repository path
 is a plain absolute path and, on the real server, an explicit mount on storage independent from the
 root filesystem. It also checks that the two Guardian handoff paths are readable public files. If
@@ -173,9 +275,48 @@ After the verifier passes, continue in the same Telegram chat:
 Then send the first ordinary message to Melli. Telegram is the normal owner interface; machine login
 should be rare after setup.
 
-Do not treat this as a completed deployment yet. The first real server still has to pass the reboot
-verifier, restore drill, and a real later update/rollback path before the repository readiness
-banner can change.
+Do not treat this as a completed deployment yet. The first real server still has to pass the
+self-change qualification below, the reboot verifier, restore drill, and a real later
+update/rollback path before the repository readiness banner can change.
+
+## Self-change qualification
+
+Before the repository can say it is ready for owner deployment, prove the bounded self-change loop
+on the real server. This should be a small, public-safe request in the current allowed source/test
+area, not a private-memory feature and not infrastructure, release, authentication, Guardian,
+Telegram binding, database, migration, or self-change-policy work.
+
+In Telegram:
+
+```text
+/change propose <one small public-safe source/test improvement>
+```
+
+Wait for the planner to return a proposal, then inspect it:
+
+```text
+/change
+/change diff <change_id>
+```
+
+Approve only if the retained diff is exactly acceptable:
+
+```text
+/change approve <change_id> <16-character proposal token>
+```
+
+The applier may then test, commit, push, and deploy only that exact retained diff. After it
+finishes, record:
+
+- `/change show <change_id>` with `State: deployed`, the proposal digest, and the deployed revision;
+- `sudo /usr/local/libexec/melloa/qualification-record` showing `self_change_enabled: true` and
+  `codex_mode: api_key`;
+- the remote `main` revision matching the deployed change;
+- a fresh `sudo /usr/local/libexec/melloa/verify-owner-journey` after the self-change deployment;
+- rollback evidence from the installed rollback wrapper when proving the full maintenance path.
+
+If self-change was disabled during first install, this section cannot pass. Treat that server as a
+conversation-only bring-up until you perform a reviewed reconfiguration path and rerun the evidence.
 
 ## Private qualification record
 
@@ -203,6 +344,8 @@ A sufficient private record is:
 - the `verified_at`, `active_revision`, and `backup_snapshot_id` values from the verifier receipt
   after first install's Telegram verifier passed;
 - the `/status` result after setup, including model route health and backup health;
+- the self-change receipt: `/change show <change_id>` after the approved change reaches
+  `State: deployed`, including the proposal digest and deployed revision;
 - the verifier receipt values after reboot when
   `sudo /usr/local/libexec/melloa/verify-owner-journey` passed;
 - the restore-drill receipt values printed by

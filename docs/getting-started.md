@@ -3,6 +3,10 @@
 This guide starts the product that existed when the owner-experience reset began. It is useful for
 inspecting and simplifying the current behavior. It is not evidence that Melli is already valuable.
 
+This is not the dedicated-server deployment guide. It does not connect Telegram, does not configure
+hosted model providers, and does not install the persistent server runtime. If your goal is the
+home-server path, use [first-owner server deployment](server-deployment.md).
+
 ## Requirements
 
 - Linux or macOS with Bash
@@ -58,7 +62,7 @@ cd ../melloa-guardian
 make preview-state-clean
 ```
 
-## Talk through the on-device model
+## Optional disposable local model check
 
 To exercise real model behavior in this baseline:
 
@@ -72,6 +76,8 @@ unavailable. Owner text and selected context go only to this configured model on
 are not disclosed to an external provider.
 
 This model is a technical baseline, not a recommended quality ceiling or the target daily-use path.
+The first-owner server path is currently hosted-provider-first and does not require local model
+hardware.
 
 ## Current limitations
 

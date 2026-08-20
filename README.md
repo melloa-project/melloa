@@ -9,6 +9,24 @@ underlying model changes.
 > Do not deploy this repository as your persistent Melli yet. The runnable path below is a disposable
 > engineering baseline, not the low-maintenance server product described in “What ready means.”
 
+If your immediate goal is the dedicated home-server path, start with the
+[first-owner server deployment guide](docs/server-deployment.md), not the disposable preview below.
+The current intended first-server shape is:
+
+- Debian server, not the owner's laptop;
+- Telegram bot chat as the normal owner interface;
+- two hosted OpenAI-compatible conversation routes: one capable route and one cheaper economy route;
+- no expected local model or GPU setup for the first deployment;
+- bounded Codex/self-change workers explicitly enabled and proven before this repository can be
+  called ready for owner deployment.
+
+Codex CLI is not the normal conversation model route. The conversation path uses model-provider API
+credentials entered during setup. Codex CLI is used by the bounded owner-approved self-change path:
+`/change propose`, reviewable diff, exact Telegram approval token, commit, push, deploy, and
+rollback evidence. The currently implemented unattended server credential modes are a Codex/OpenAI
+API key or an explicitly configured local provider; an interactive ChatGPT/Codex subscription login
+has not been qualified as server auth.
+
 ## Current status
 
 Melloa is in an owner-experience reset. The existing `v0.2.0` preview proves private conversation,
@@ -37,8 +55,8 @@ first-install wrapper now compose the prerequisite installation, private configu
 generated model route JSON, exact Telegram owner pairing, backup initialization, activation, and a
 database-backed first Telegram conversation proof into one server path. This is still not a
 qualified owner deployment: real provider selections, a real off-device repository and recovery-key
-retention, live server installation, reboot/recovery drills, and deployed dogfooding remain
-incomplete.
+retention, live server installation, reboot/recovery drills, one owner-approved Codex/self-change
+deployment, update/rollback evidence, and deployed dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.
@@ -46,7 +64,7 @@ as a requirement.
 The current first-owner server deployment path is the
 [server deployment guide](docs/server-deployment.md). It is intentionally still a qualification path,
 not a readiness claim, until it has succeeded on the real dedicated server with reboot, recovery,
-and dogfooding evidence.
+update/rollback, and dogfooding evidence.
 
 ## What “ready” means
 
@@ -57,8 +75,9 @@ tested server installation and recovery path that:
 - gives the owner a simple private Telegram chat as the normal interface;
 - supports deliberate routing across OpenAI/Codex-capable workflows and configurable cheaper or
   open models without pretending one model is Melli;
-- keeps optional self-change workers out of the first-deployment path unless explicitly enabled
-  after separate owner review; the base deployment does not depend on Melloa modifying itself;
+- proves the bounded owner-approved Codex self-change loop on the real server: explicit public-safe
+  request, retained proposal diff, exact Telegram approval, verified commit/push/deploy, and a
+  rollback path;
 - needs machine login only for rare maintenance and makes failures visible from the owner interface;
 - keeps a controlled, incremental path for connecting more owner services and data later.
 
@@ -70,7 +89,11 @@ say **READY FOR OWNER DEPLOYMENT** and this README will contain the tested insta
 first Telegram conversation, update, rollback, and recovery journey. If it still says `NOT READY`,
 there is no supported persistent deployment to infer from lower-level engineering notes.
 
-## Run the current baseline
+## Disposable local preview, not server setup
+
+This section is for inspecting the current local baseline on a development machine. It is not the
+dedicated-server path, does not connect Telegram, and should not be used as the owner deployment
+guide. Use [the server deployment guide](docs/server-deployment.md) for the Telegram/server path.
 
 Melloa requires Linux or macOS, Bash, Python 3.13+, uv 0.12.0, and Node.js 22+. Preparing the
 separate Guardian handoff additionally requires Go 1.24+ and the Guardian repository beside this
@@ -107,23 +130,26 @@ and removes only its own credential and logs on `Ctrl-C`. Only the status and pu
 passed; no Guardian private key, journal, lock, CLI argument, or mutation command is passed. Melloa
 does not remove the supplied handoff.
 
-To exercise the one configured on-device model:
+To exercise one disposable on-device model in the local preview:
 
 ```bash
 ollama pull qwen3:4b-instruct-2507-q4_K_M
 make preview PREVIEW_MODEL=ollama
 ```
 
-This remains disposable and is not the target owner experience.
+This remains disposable and is not the target first-server experience. The first-server guide uses
+hosted OpenAI-compatible provider routes instead of assuming local model hardware.
 
 ## Current Telegram model controls
 
-The server integration now requires two distinct model config files whenever Telegram is enabled:
+The server integration now requires two distinct model config files whenever Telegram is enabled.
+The guided first-owner setup generates these files from prompts:
 
 - `--capable-model-config` can target an OpenAI-compatible Responses API by setting
   `"api_style": "responses"`; this is the bounded path intended for a capable OpenAI model;
 - `--economy-model-config` can target a cheaper hosted router or a private/local compatible model;
-  [the Ollama example](config/model/ollama.example.json) shows the local shape.
+  for first deployment, prefer a hosted OpenAI-compatible endpoint with reviewed pricing and a
+  bearer token. Local model configuration remains lower-level engineering material.
 
 Each file declares its exact endpoint, model, processing location, sensitivity allowance, token and
 cost ceilings, timeout, and optional owner-only token file. External owner context is sent only to

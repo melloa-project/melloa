@@ -11,9 +11,11 @@ readonly BAD_MODEL_TARGET="$WORKDIR/bad-model-target"
 readonly BAD_COST_TARGET="$WORKDIR/bad-cost-target"
 readonly BAD_DUPLICATE_TARGET="$WORKDIR/bad-duplicate-target"
 readonly BAD_LOCAL_TARGET="$WORKDIR/bad-local-target"
+readonly SELF_CHANGE_TARGET="$WORKDIR/self-change-target"
 readonly CA_RESUME_TARGET="$WORKDIR/ca-resume-target"
 readonly LOG="$WORKDIR/first-install.log"
 readonly RESUME_LOG="$WORKDIR/first-install-resume.log"
+readonly SELF_CHANGE_LOG="$WORKDIR/first-install-self-change.log"
 readonly CA_RESUME_SETUP_LOG="$WORKDIR/first-install-ca-resume-setup.log"
 readonly CA_RESUME_LOG="$WORKDIR/first-install-ca-resume.log"
 readonly BAD_LOG="$WORKDIR/first-install-bad-input.log"
@@ -105,6 +107,49 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet \
   "Then verify before treating the server as ready: sudo /usr/local/libexec/melloa/verify-owner-journey" \
   "$LOG"
+
+MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+MELLOA_SETUP_CAPABLE_MODEL_ID=self-change-capable-model \
+MELLOA_SETUP_CAPABLE_TOKEN=capable_self_change_secret \
+MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
+MELLOA_SETUP_ECONOMY_MODEL_ID=self-change-economy-model \
+MELLOA_SETUP_ECONOMY_TOKEN=economy_self_change_secret \
+MELLOA_SETUP_ECONOMY_ESTIMATED_MAX_COST_GBP=0.01 \
+MELLOA_SETUP_ECONOMY_INPUT_COST_GBP_PER_MILLION_TOKENS=0.25 \
+MELLOA_SETUP_ECONOMY_OUTPUT_COST_GBP_PER_MILLION_TOKENS=2 \
+MELLOA_SETUP_RESTIC_PASSWORD=restic_self_change_secret_123456789 \
+MELLOA_SETUP_ENABLE_SELF_CHANGE=yes \
+MELLOA_SETUP_GITHUB_TOKEN=githubpatfirstinstall1234567890 \
+MELLOA_SETUP_CODEX_MODE=api-key \
+MELLOA_SETUP_CODEX_MODEL=codex-first-install-test \
+MELLOA_SETUP_CODEX_API_KEY=sk-first-install-codex-key-1234567890 \
+  "$ROOT/infra/server/first-install.sh" \
+    --source "$ROOT" \
+    --root "$SELF_CHANGE_TARGET" \
+    --skip-activation \
+    </dev/null \
+    >"$SELF_CHANGE_LOG" 2>&1
+
+readonly SELF_CHANGE_PRIVATE="$SELF_CHANGE_TARGET/etc/melloa/private"
+grep --fixed-strings --quiet 'MELLOA_SELF_CHANGE_ENABLED=true' \
+  "$SELF_CHANGE_TARGET/etc/melloa/self-change.env"
+grep --fixed-strings --quiet 'MELLOA_CODEX_USE_API_KEY=true' \
+  "$SELF_CHANGE_TARGET/etc/melloa/self-change.env"
+grep --fixed-strings --quiet 'MELLOA_CODEX_MODEL=codex-first-install-test' \
+  "$SELF_CHANGE_TARGET/etc/melloa/self-change.env"
+[[ "$(jq -r .codex_mode "$SELF_CHANGE_TARGET/etc/melloa/configuration.json")" == api_key ]]
+grep --fixed-strings --quiet \
+  'https://x-access-token:githubpatfirstinstall1234567890@github.com' \
+  "$SELF_CHANGE_PRIVATE/git-credentials"
+[[ "$(<"$SELF_CHANGE_PRIVATE/codex-api-key")" == sk-first-install-codex-key-1234567890 ]]
 "$ROOT/infra/server/first-install.sh" \
   --source "$ROOT" \
   --root "$TARGET" \
@@ -170,8 +215,13 @@ for secret in \
   '123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
   capable_first_install_secret \
   economy_first_install_secret \
-  restic_first_install_secret_123456789; do
-  if grep --fixed-strings --quiet "$secret" "$LOG"; then
+  restic_first_install_secret_123456789 \
+  capable_self_change_secret \
+  economy_self_change_secret \
+  restic_self_change_secret_123456789 \
+  githubpatfirstinstall1234567890 \
+  sk-first-install-codex-key-1234567890; do
+  if grep --fixed-strings --quiet "$secret" "$LOG" "$SELF_CHANGE_LOG"; then
     echo "First-install setup exposed a private input" >&2
     exit 1
   fi

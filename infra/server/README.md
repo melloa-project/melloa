@@ -4,11 +4,17 @@ Owner-facing installation instructions live in the canonical
 [first-owner server deployment path](../../docs/server-deployment.md). This file is the technical
 reference for the checked-in server runtime and the lower-level commands behind that guide.
 
+Read this file as implementation reference, not as the owner path. The intended first deployment is
+Telegram plus hosted OpenAI-compatible conversation routes. Local conversation models are not part
+of the guided first-owner setup. Codex CLI is not part of normal conversation, but the first real
+owner-deployment qualification now includes the bounded self-change workers and their evidence.
+
 This is the container runtime intended to become Melloa's low-maintenance server path. The first
 qualification target is now one concrete host: a fresh Debian 13 (`trixie`) amd64 machine booted
 with systemd. It is **not yet an owner deployment instruction** and does not change the
 repository's `NOT READY` status. Real provider and off-device storage configuration, actual server
-installation, reboot and recovery drills, and deployed dogfooding are still required.
+installation, one owner-approved Codex/self-change deployment, reboot and recovery drills, and
+deployed dogfooding are still required.
 
 The runtime has five bounded roles:
 
@@ -45,17 +51,16 @@ sudo apt-get update
 sudo apt-get install --yes --no-install-recommends ca-certificates git
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
-sudo infra/server/bootstrap-debian.sh --source "$PWD"
+sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
 The reviewed versions and artifact hashes live in `toolchain.lock`. The bootstrap verifies Docker's
 repository signing-key fingerprint, installs Docker CE and Compose from its Debian repository,
 installs checksum-pinned Node.js and uv artifacts, and installs Go for the public Guardian handoff
-drill. It starts and enables Docker, then runs the normal clean/current-main build preflight. The
-integrity-pinned Codex CLI npm packages are installed only when bootstrap is rerun with
-`--self-change-tools` for explicitly enabled self-change workers. Bootstrap does not configure
-secrets, initialize storage, or start Melloa. The guided
+drill. It starts and enables Docker, then runs the normal clean/current-main build preflight. With
+`--self-change-tools`, it also installs the integrity-pinned Codex CLI npm packages needed by the
+planner worker. Bootstrap does not configure secrets, initialize storage, or start Melloa. The guided
 `first-install.sh` step installs host assets, prompts for the owner-private values, generates the
 route JSON, pairs the Telegram bot, installs private configuration, initializes the encrypted backup
 repository when approved, activates Melloa, and runs a final owner-journey verifier. That verifier
@@ -101,11 +106,13 @@ Before invoking it, have these owner-controlled values ready:
 - a high-entropy base64url restic password retained separately from this machine and the backup
   repository.
 
-The guided first-owner path defaults optional self-change workers off. If the owner intentionally
-enables them during setup, also prepare a fine-grained GitHub token for this repository with
-contents read/write access and a separate OpenAI API key for Codex planning, or select an
-explicitly installed `ollama`/`lmstudio` local Codex provider instead. First install refuses that
-optional path on the real server unless bootstrap has prepared the pinned Codex CLI with
+The guided first-owner installer still defaults the self-change prompt to `no` as a safety latch:
+enabling the workers creates a deterministic owner-approved path to commit, push, and deploy.
+For the first real owner-deployment qualification, prepare a fine-grained GitHub token for this
+repository with contents read/write access and a separate Codex/OpenAI API key for planning, then
+answer `yes` and choose `api-key`. The `ollama`/`lmstudio` local provider mode remains available
+for a separately qualified local-model deployment, not for the hosted first path. First install
+refuses the enabled path on the real server unless bootstrap has prepared the pinned Codex CLI with
 `--self-change-tools`. When disabled, activation stops and disables the planner/applier units, and
 the units have an `ExecCondition` gate so an accidental manual start does not run the workers.
 
@@ -182,13 +189,13 @@ sudo /usr/local/libexec/melloa/configure \
   --self-change-disabled
 ```
 
-Input file paths may differ, but the installed paths remain fixed and auditable. To enable
-self-change workers during configuration, replace `--self-change-disabled` with
-`--github-token-file /owner-input/github-token` plus either
-`--codex-api-key-file /owner-input/codex-api-key` or `--codex-local-provider ollama` (or
-`lmstudio`) and ensure that provider is actually reachable from the host service. The two
-conversation routes remain separately configured; Codex planning credentials are never mounted into
-the Melloa application.
+Input file paths may differ, but the installed paths remain fixed and auditable. For the first real
+qualification, replace `--self-change-disabled` with
+`--github-token-file /owner-input/github-token` and
+`--codex-api-key-file /owner-input/codex-api-key`. The lower-level `--codex-local-provider ollama`
+or `--codex-local-provider lmstudio` mode remains available only when that provider is actually
+installed and reachable from the host service. The two conversation routes remain separately
+configured; Codex planning credentials are never mounted into the Melloa application.
 The guided first-owner conversation setup deliberately accepts only hosted OpenAI-compatible routes
 until a local model path has explicit container-networking and recovery proof. Lower-level model
 configuration still validates private-network endpoints for future reviewed use.
