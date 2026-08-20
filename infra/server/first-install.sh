@@ -671,11 +671,11 @@ activate_and_verify() {
     fi
     echo "First-owner setup finished. Telegram conversation has been verified." >&2
     cat >&2 <<'EOF'
-Next qualification steps:
+Next first-server proof steps:
   1. In Telegram, send /status and then one ordinary message to Melli.
   2. If self-change workers are enabled, prove one public-safe /change proposal, exact approval,
-     commit, push, and deployed revision from Telegram. If they are disabled, this is only a
-     conversation bring-up and cannot qualify owner-deployment readiness.
+     commit, push, and deployed revision from Telegram. If they are disabled, this server is a
+     conversation-only bring-up until self-change is enabled and exercised.
   3. Reboot the server, then run: sudo /usr/local/libexec/melloa/verify-owner-journey
   4. Prove the actual backup path: sudo /usr/local/libexec/melloa/restore-drill
   5. Rerun active verification: sudo /usr/local/libexec/melloa/verify-owner-journey
@@ -749,7 +749,7 @@ resume_existing_configuration() {
     echo "Private configuration is already installed. Activation was skipped by request." >&2
     printf 'When ready, run: sudo /usr/local/libexec/melloa/activate --source %q --origin %q --initialize-backup\n' \
       "$SOURCE" "$ORIGIN" >&2
-    echo "Then verify before treating the server as ready: sudo /usr/local/libexec/melloa/verify-owner-journey" >&2
+    echo "Then verify before relying on the server: sudo /usr/local/libexec/melloa/verify-owner-journey" >&2
     exit 0
   fi
 
@@ -879,7 +879,7 @@ unset restic_password
 declare -a SELF_CHANGE_ARGS=(--self-change-disabled)
 readonly SELF_CHANGE_DEFAULT="$(self_change_prompt_default)"
 if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \
-  "Enable bounded self-change workers for readiness qualification" "$SELF_CHANGE_DEFAULT"; then
+  "Enable bounded self-change workers for the first-server proof" "$SELF_CHANGE_DEFAULT"; then
   require_codex_self_change_tools
   SELF_CHANGE_ARGS=()
   github_token="$(
@@ -931,7 +931,7 @@ if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \
   fi
 else
   if [[ "$SELF_CHANGE_DEFAULT" == yes ]]; then
-    echo "Self-change workers were left disabled; this is a conversation-only bring-up, not a readiness qualification." >&2
+    echo "Self-change workers were left disabled; this is a conversation-only bring-up until self-change is enabled and exercised." >&2
   fi
 fi
 
@@ -956,7 +956,7 @@ if [[ "$SKIP_ACTIVATION" == true ]]; then
   echo "Private configuration is installed. Activation was skipped by request." >&2
   printf 'When ready, run: sudo /usr/local/libexec/melloa/activate --source %q --origin %q --initialize-backup\n' \
     "$SOURCE" "$ORIGIN" >&2
-  echo "Then verify before treating the server as ready: sudo /usr/local/libexec/melloa/verify-owner-journey" >&2
+  echo "Then verify before relying on the server: sudo /usr/local/libexec/melloa/verify-owner-journey" >&2
   exit 0
 fi
 

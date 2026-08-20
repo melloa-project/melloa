@@ -70,7 +70,7 @@ def test_codex_cli_is_optional_until_self_change_workers_are_enabled() -> None:
     assert "optional self-change workers require Codex CLI" in first_install
 
 
-def test_guided_first_install_defaults_self_change_for_real_interactive_qualification() -> None:
+def test_guided_first_install_defaults_self_change_for_real_interactive_server_path() -> None:
     first_install = (ROOT / "infra/server/first-install.sh").read_text(
         encoding="utf-8"
     )
@@ -81,10 +81,10 @@ def test_guided_first_install_defaults_self_change_for_real_interactive_qualific
     assert "printf 'no'" in first_install
     assert 'readonly SELF_CHANGE_DEFAULT="$(self_change_prompt_default)"' in first_install
     assert (
-        '"Enable bounded self-change workers for readiness qualification" '
+        '"Enable bounded self-change workers for the first-server proof" '
         '"$SELF_CHANGE_DEFAULT"'
     ) in first_install
-    assert "conversation-only bring-up, not a readiness qualification" in first_install
+    assert "conversation-only bring-up until self-change is enabled and exercised" in first_install
 
 
 def test_guided_first_install_suppresses_lower_level_installer_handoff() -> None:

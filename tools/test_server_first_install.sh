@@ -107,7 +107,7 @@ grep --fixed-strings --quiet \
   "When ready, run: sudo /usr/local/libexec/melloa/activate --source $ROOT --origin https://github.com/melloa-project/melloa.git --initialize-backup" \
   "$LOG"
 grep --fixed-strings --quiet \
-  "Then verify before treating the server as ready: sudo /usr/local/libexec/melloa/verify-owner-journey" \
+  "Then verify before relying on the server: sudo /usr/local/libexec/melloa/verify-owner-journey" \
   "$LOG"
 
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
@@ -162,6 +162,9 @@ grep --fixed-strings --quiet \
   "$RESUME_LOG"
 grep --fixed-strings --quiet \
   "When ready, run: sudo /usr/local/libexec/melloa/activate --source $ROOT --origin https://github.com/melloa-project/melloa.git --initialize-backup" \
+  "$RESUME_LOG"
+grep --fixed-strings --quiet \
+  "Then verify before relying on the server: sudo /usr/local/libexec/melloa/verify-owner-journey" \
   "$RESUME_LOG"
 if grep --fixed-strings --quiet "MELLOA_SETUP_BACKUP_REPOSITORY is required" "$RESUME_LOG"; then
   echo "First-install rerun prompted for setup inputs instead of resuming" >&2
