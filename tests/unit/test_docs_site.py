@@ -10,7 +10,7 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     )
 
     assert "Run Melloa on a home server" in homepage
-    assert "Telegram" in homepage
+    assert "setup discovers your numeric owner ID during private pairing" in homepage
     assert "hosted OpenAI-compatible model routes" in homepage
     assert "You do not need a local GPU or local model to begin" in homepage
     assert "Self-change is core" in homepage
@@ -47,8 +47,16 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
         encoding="utf-8"
     )
 
-    assert "sudo infra/server/bootstrap-debian.sh --self-change-tools" in deploy
+    assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
+    assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
+    assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
+    assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy
+    assert "make preview-state" in deploy
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in deploy
+    assert "Leave blank to pair now" in deploy
+    assert "exact `/start ...` phrase" in deploy
+    assert "sudo /usr/local/libexec/melloa/verify-owner-journey" in deploy
+    assert "sudo /usr/local/libexec/melloa/restore-drill" in deploy
     assert "`api-key`" in deploy
     assert "/change propose" in self_change
     assert "commits, pushes, deploys" in self_change

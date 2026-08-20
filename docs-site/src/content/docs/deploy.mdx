@@ -3,43 +3,103 @@ title: Deploy the server
 description: The first-owner server setup path for Melloa.
 ---
 
-This is the setup path to follow on the actual home server. It is not the old local preview.
+This is the setup path to follow on the actual home server. It goes from a clean Debian machine to
+one persistent Telegram conversation with Melli.
 
-## 1. Prepare the machine
+## 1. Prepare the machine and clone Melloa
 
-Use a dedicated Debian host. Log in with a user that can run `sudo`, then clone the reviewed source:
+Use a dedicated Debian host. Log in with a user that can run `sudo`, then install the two packages
+needed to fetch the reviewed source:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes --no-install-recommends ca-certificates git
+```
+
+Clone Melloa:
 
 ```bash
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
 ```
 
-Install the server prerequisites:
+## 2. Mount backup storage
+
+Attach storage that is independent from the server root disk. The guided path defaults to
+`/mnt/melloa-off-device-backup`.
 
 ```bash
-sudo infra/server/bootstrap-debian.sh --self-change-tools
+sudo mkdir -p /mnt/melloa-off-device-backup
+findmnt --mountpoint /mnt/melloa-off-device-backup
+test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
 ```
 
-That installs the host packages and the pinned tools needed by the owner-approved self-change
-workers. If you are doing a conversation-only bring-up, omit `--self-change-tools`; for the first
-real Melloa server, keep it enabled.
+Both checks should succeed. If the second command fails, the backup path is just a directory on the
+server disk; mount real off-device storage before continuing.
 
-## 2. Have these inputs ready
+## 3. Bootstrap host prerequisites
+
+Run the bootstrap from the Melloa checkout:
+
+```bash
+sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+```
+
+That installs Docker, Compose, Python, Node.js, uv, Go, and the pinned Codex CLI toolchain used by
+the owner-approved self-change workers. Codex is for self-change planning; it is not Melli’s normal
+conversation model.
+
+## 4. Create the Guardian public handoff
+
+Create the public-only Guardian status files beside the Melloa checkout:
+
+```bash
+cd ..
+git clone https://github.com/melloa-project/melloa-guardian.git
+cd melloa-guardian
+make preview-state
+cd ../melloa
+```
+
+`make preview-state` prints two paths. Keep them ready for setup:
+
+```text
+.../melloa-guardian/state/local-preview/status.json
+.../melloa-guardian/state/local-preview/public.pem
+```
+
+Only those public files go into Melloa. Guardian private keys, journals, locks, and control commands
+stay outside Melloa.
+
+## 5. Have these inputs ready
 
 The installer asks for the owner-controlled values. Do not put these into Git.
 
 | Input | What to prepare |
 | --- | --- |
 | Telegram bot token | Create a dedicated bot for Melli. |
-| Telegram owner ID | Use your numeric account ID, not a handle. |
-| Capable model route | HTTPS base URL, model ID, API style, bearer token, and GBP input/output prices. |
-| Economy model route | Same fields for the cheaper route. |
-| Backup repository | Owner-mounted path or repository URL. |
-| Restic password | High-entropy secret retained separately from the server. |
+| Telegram owner ID | Leave blank during guided setup unless you already verified the numeric ID; setup pairs the private chat for you. |
+| Capable model route | HTTPS base URL, model ID, API style, bearer token, GBP input/output prices, and request cost ceiling. |
+| Economy model route | Same fields for the cheaper hosted route. |
+| Backup repository | A mounted absolute path such as `/mnt/melloa-off-device-backup`. |
+| Restic password | 32-128 base64url-safe characters retained separately from the server and backup disk. |
 | GitHub token | Fine-grained token for this repository with contents read/write. |
 | Codex/OpenAI API key | Used by the bounded planner worker, not as Melli’s normal conversation route. |
 
-## 3. Run the guided install
+For the simplest hosted model setup, choose `openai` for the capable route and either `openai` with
+a cheaper model or `external` with a reviewed OpenAI-compatible provider for the economy route.
+External providers must supply an HTTPS base URL, exact model ID, API style
+(`responses` or `chat_completions`), bearer token, and prices converted to GBP.
+
+If you need a restic password generator:
+
+```bash
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+```
+
+Store that output somewhere the server and backup repository cannot both lose.
+
+## 6. Run the guided install
 
 From the repository checkout:
 
@@ -47,26 +107,82 @@ From the repository checkout:
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
-For the first real server, accept the default to enable bounded self-change workers and choose
-`api-key` for the Codex planner credential mode.
+Use these choices for the first home-server path:
+
+| Prompt area | Choice |
+| --- | --- |
+| backup repository | Enter the mounted path, normally `/mnt/melloa-off-device-backup`. |
+| Guardian files | Enter the `status.json` and `public.pem` paths printed by `make preview-state`. |
+| Telegram owner ID | Leave blank to pair now. |
+| Telegram pairing | Send the exact `/start ...` phrase printed by setup to the bot’s private chat. |
+| capable route | Use the stronger hosted model route. |
+| economy route | Use the cheaper hosted model route. |
+| initialize backup | Answer `yes`. |
+| enable bounded self-change | Answer `yes`; this is the default on a real interactive server install. |
+| Codex credential mode | Choose `api-key`. |
 
 The installer writes private configuration under `/etc/melloa/private`, activates the runtime,
-pairs the exact Telegram owner, and asks you to prove the first Telegram conversation.
+pairs the exact Telegram owner, and asks you to prove the first Telegram conversation. During final
+verification, send the exact setup message printed in the terminal. The verifier checks that the
+real Telegram worker accepted the message, got a model reply, and delivered it back to the private
+chat.
 
-## 4. Prove the server is usable
+## 7. First conversation
 
-Before you walk away from the machine, verify:
+When setup finishes, stay in the same Telegram chat and send:
 
-- Telegram receives and replies to the first owner conversation;
-- `/model`, `/model economy`, `/model capable`, `/think`, and `/status` behave as expected;
-- both model routes identify their exact destination and do not silently fall back;
-- backup health is visible from `/status`;
-- the server survives a reboot and Melli resumes through Telegram.
+```text
+/status
+```
 
-## 5. Use self-change for the next improvement
+Then send an ordinary message to Melli. Machine login should become rare after this point; normal
+interaction is Telegram.
+
+Also check the route controls from Telegram:
+
+```text
+/model
+/model economy
+/model capable
+/think Give me one sentence proving the capable route works.
+```
+
+Melloa should report the selected route and exact model destination. It should not silently fall
+back from one route to another.
+
+## 8. Prove the server survived setup
 
 After the first conversation works, make one small owner-approved change through the self-change
 loop. That proves Melloa can help evolve its own server path instead of leaving you to maintain a
 static install by hand.
 
 Open [Self-change loop](../self-change/) for the exact shape.
+
+Then run the two maintenance proofs:
+
+```bash
+sudo reboot
+```
+
+After the server returns:
+
+```bash
+sudo /usr/local/libexec/melloa/verify-owner-journey
+sudo /usr/local/libexec/melloa/restore-drill
+sudo /usr/local/libexec/melloa/verify-owner-journey
+```
+
+## If setup stops
+
+Fix the reported cause and rerun the same command. The guided install is designed to reuse existing
+private configuration instead of overwriting it.
+
+Common stops:
+
+- backup path is not a mount: mount off-device storage at the path and rerun;
+- Codex CLI is missing: rerun `sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools`;
+- Telegram pairing does not complete: make sure the bot is dedicated to Melli, then send the exact
+  `/start ...` phrase to the bot’s private chat;
+- model route check fails: verify the base URL, API style, model ID, bearer token, and GBP prices;
+- final owner verification cannot be completed immediately: rerun
+  `sudo /usr/local/libexec/melloa/verify-owner-journey` when you can send the Telegram phrase.
