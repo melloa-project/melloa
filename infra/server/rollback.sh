@@ -8,6 +8,7 @@ SOURCE=/srv/melloa/release-source
 SKIP_VERIFICATION=false
 VERIFY_BIN="${MELLOA_ROLLBACK_VERIFY_BIN:-/usr/local/libexec/melloa/verify-owner-journey}"
 ACTIVE_REVISION_FILE="${MELLOA_ACTIVE_REVISION_FILE:-/var/lib/melloa/release-state/active-revision}"
+RELEASE_STATE_FILE="${MELLOA_RELEASE_STATE_FILE:-/var/lib/melloa/release-state/release.json}"
 MAINTENANCE_HISTORY_FILE="$(
   printf '%s' "${MELLOA_MAINTENANCE_HISTORY_FILE:-/var/lib/melloa/runtime-state/maintenance-history.jsonl}"
 )"
@@ -63,9 +64,17 @@ validate_plain_absolute_path() {
 read_active_revision() {
   local revision
   validate_plain_absolute_path "$ACTIVE_REVISION_FILE" "active revision file"
-  [[ -f "$ACTIVE_REVISION_FILE" && ! -L "$ACTIVE_REVISION_FILE" ]] ||
-    fail "active release marker is unavailable"
-  revision="$(<"$ACTIVE_REVISION_FILE")"
+  validate_plain_absolute_path "$RELEASE_STATE_FILE" "release state receipt file"
+  if [[ -L "$ACTIVE_REVISION_FILE" ]]; then
+    fail "active release marker must not be a symlink"
+  elif [[ -f "$ACTIVE_REVISION_FILE" ]]; then
+    revision="$(<"$ACTIVE_REVISION_FILE")"
+  else
+    [[ -f "$RELEASE_STATE_FILE" && ! -L "$RELEASE_STATE_FILE" ]] ||
+      fail "release state receipt is unavailable"
+    revision="$(jq -er '.active.revision' "$RELEASE_STATE_FILE")" ||
+      fail "release state receipt is invalid"
+  fi
   validate_revision "$revision" "active release revision"
   printf '%s' "$revision"
 }
