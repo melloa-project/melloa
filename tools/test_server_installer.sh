@@ -17,6 +17,7 @@ trap cleanup EXIT HUP INT TERM
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/activate")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/configure")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/first-install")" == 755 ]]
+[[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/qualification-record")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/rollback")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/restore-drill")" == 755 ]]
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/update")" == 755 ]]

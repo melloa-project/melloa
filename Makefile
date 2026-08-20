@@ -74,6 +74,7 @@ check-generated:
 		infra/server/first-install.sh \
 		infra/server/install.sh \
 		infra/server/preflight.sh \
+		infra/server/qualification-record.sh \
 		infra/server/reconcile-logins.sh \
 		infra/server/rollback.sh \
 		infra/server/restore-drill.sh \
@@ -91,6 +92,7 @@ check-generated:
 		tools/test_server_first_install.sh \
 		tools/test_server_installer.sh \
 		tools/test_server_owner_verification.sh \
+		tools/test_server_qualification_record.sh \
 		tools/test_server_restore_drill.sh \
 		tools/test_server_update_rollback.sh \
 		tools/test_server_runtime.sh
@@ -98,6 +100,7 @@ check-generated:
 	bash tools/test_server_first_install.sh
 	bash tools/test_server_installer.sh
 	bash tools/test_server_owner_verification.sh
+	bash tools/test_server_qualification_record.sh
 	bash tools/test_server_restore_drill.sh
 	bash tools/test_server_update_rollback.sh
 

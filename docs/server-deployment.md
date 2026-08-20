@@ -188,6 +188,13 @@ verification phrase or reply text:
 sudo jq . /var/lib/melloa/runtime-state/owner-verification-status.json
 ```
 
+For a fuller redacted snapshot of the installed release, backup receipt, latest owner verifier
+receipt, and recent release history, run:
+
+```bash
+sudo /usr/local/libexec/melloa/qualification-record
+```
+
 A sufficient private record is:
 
 - the installed Melloa commit SHA from `git -C /srv/melloa/release-source rev-parse HEAD`;

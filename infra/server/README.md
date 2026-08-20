@@ -269,6 +269,8 @@ active release marker, and a fresh Telegram conversation through Melloa's real l
 On success it also updates `/var/lib/melloa/runtime-state/owner-verification-status.json` with a
 redacted receipt containing the verification time, active revision, backup snapshot ID, and internal
 reply message ID; it deliberately does not store the Telegram verification phrase or reply text.
+`/usr/local/libexec/melloa/qualification-record` prints that receipt together with the installed
+revision, backup receipt, backup mount status, and recent release history for private owner notes.
 
 For a non-destructive restore proof against the installed encrypted repository:
 
