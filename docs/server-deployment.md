@@ -208,8 +208,8 @@ A sufficient private record is:
 - the restore-drill receipt values printed by
   `sudo /usr/local/libexec/melloa/qualification-record`;
 - the verifier receipt values after active verification passed again after the restore drill;
-- after a later reviewed commit reaches `main`, the update revision, successful Telegram verifier,
-  rollback result, and final active verification.
+- after a later reviewed commit reaches `main`, the `maintenance_history` entries showing the
+  verified update and rollback wrappers plus the final active owner-verifier receipt.
 
 This record is owner evidence for changing the repository readiness banner later; it is not a
 secret handoff file and Melloa does not need to read it.
@@ -266,7 +266,9 @@ sudo /usr/local/libexec/melloa/update
 
 That command updates the managed `/srv/melloa/release-source` checkout to the current reviewed
 `main`, refreshes installed host assets, activates through the normal backup-protected release path,
-and then asks for one Telegram verification message. If it fails, use the exact wrapper message
+and then asks for one Telegram verification message. After a successful final verification it appends
+a redacted `update` entry to the local maintenance history shown by
+`sudo /usr/local/libexec/melloa/qualification-record`. If it fails, use the exact wrapper message
 first; it names whether to rerun update, start boot recovery, verify the active deployment, or roll
 back. If it fails after stopping owner-facing work, do not improvise; run:
 
@@ -289,7 +291,8 @@ sudo /usr/local/libexec/melloa/rollback
 
 Rollback snapshots current owner data first and refuses an older release if its migration manifest
 cannot accept the current database. It does not silently discard conversations after the update. The
-rollback command also ends with the Telegram verifier.
+rollback command also ends with the Telegram verifier and appends a redacted `rollback` entry to the
+same local maintenance history when that verifier passes.
 
 ## If setup fails
 

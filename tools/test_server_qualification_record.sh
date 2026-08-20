@@ -7,6 +7,7 @@ readonly TARGET="$WORKDIR/target"
 readonly OUTPUT="$WORKDIR/output.log"
 readonly SOURCE_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 readonly PREVIOUS_REVISION=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+readonly UPDATE_FROM_REVISION=cccccccccccccccccccccccccccccccccccccccc
 readonly SNAPSHOT=1111111111111111111111111111111111111111111111111111111111111111
 
 cleanup() {
@@ -129,6 +130,30 @@ jq -cn \
     snapshot_id: $snapshot,
     occurred_at: "2026-08-20T01:00:02Z"
   }' >"$TARGET/var/lib/melloa/release-state/history.jsonl"
+jq -cn \
+  --arg from "$PREVIOUS_REVISION" \
+  --arg active "$UPDATE_FROM_REVISION" \
+  '{
+    contract_version: "1.0.0",
+    operation: "update",
+    result: "verified",
+    completed_at: "2026-08-20T04:00:00Z",
+    from_revision: $from,
+    active_revision: $active,
+    verification_kind: "telegram_conversation"
+  }' >"$TARGET/var/lib/melloa/runtime-state/maintenance-history.jsonl"
+jq -cn \
+  --arg from "$UPDATE_FROM_REVISION" \
+  --arg active "$SOURCE_REVISION" \
+  '{
+    contract_version: "1.0.0",
+    operation: "rollback",
+    result: "verified",
+    completed_at: "2026-08-20T04:30:00Z",
+    from_revision: $from,
+    active_revision: $active,
+    verification_kind: "telegram_conversation"
+  }' >>"$TARGET/var/lib/melloa/runtime-state/maintenance-history.jsonl"
 
 "$ROOT/infra/server/qualification-record.sh" \
   --source "$ROOT" \
@@ -147,6 +172,13 @@ grep --fixed-strings --quiet "requested_snapshot: latest" "$OUTPUT"
 grep --fixed-strings --quiet "telegram_conversation: true" "$OUTPUT"
 grep --fixed-strings --quiet "readonly_role_cannot_mutate: true" "$OUTPUT"
 grep --fixed-strings --quiet "verified_at: 2026-08-20T03:00:00Z" "$OUTPUT"
+grep --fixed-strings --quiet "maintenance_history:" "$OUTPUT"
+grep --fixed-strings --quiet \
+  "update verified from=${PREVIOUS_REVISION:0:12} active=${UPDATE_FROM_REVISION:0:12} verification=telegram_conversation" \
+  "$OUTPUT"
+grep --fixed-strings --quiet \
+  "rollback verified from=${UPDATE_FROM_REVISION:0:12} active=${SOURCE_REVISION:0:12} verification=telegram_conversation" \
+  "$OUTPUT"
 grep --fixed-strings --quiet "deploy succeeded revision=${SOURCE_REVISION:0:12}" "$OUTPUT"
 grep --fixed-strings --quiet "Keep this output private" "$OUTPUT"
 if grep --fixed-strings --quiet "/etc/melloa/private" "$OUTPUT"; then

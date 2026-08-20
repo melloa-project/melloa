@@ -10,6 +10,9 @@ SKIP_VERIFICATION=false
 CA_FILE=""
 ACTIVATE_BIN="${MELLOA_UPDATE_ACTIVATE_BIN:-/usr/local/libexec/melloa/activate}"
 VERIFY_BIN="${MELLOA_UPDATE_VERIFY_BIN:-/usr/local/libexec/melloa/verify-owner-journey}"
+MAINTENANCE_HISTORY_FILE="$(
+  printf '%s' "${MELLOA_MAINTENANCE_HISTORY_FILE:-/var/lib/melloa/runtime-state/maintenance-history.jsonl}"
+)"
 
 usage() {
   cat >&2 <<'EOF'
@@ -88,7 +91,61 @@ validate_revision() {
   [[ "$1" =~ ^[0-9a-f]{40}$ ]] || fail "$2 is not a full lowercase Git commit SHA"
 }
 
-for command in awk git; do
+validate_plain_absolute_path() {
+  local path="$1"
+  [[ "$path" == /*/* && "$path" != *$'\t'* && "$path" != *' '* && \
+    "$path" != */../* && "$path" != */./* && "$path" != */.. && "$path" != */. ]] ||
+    fail "$2 must be a plain absolute path"
+}
+
+write_maintenance_receipt() {
+  local operation="$1"
+  local result="$2"
+  local from_revision="$3"
+  local active_revision="$4"
+  local verification_kind="$5"
+  local receipt_dir
+  local completed_at
+  local receipt
+
+  [[ "$operation" == update ]] || fail "maintenance operation is invalid"
+  [[ "$result" == verified || "$result" == verification_skipped ]] ||
+    fail "maintenance result is invalid"
+  validate_revision "$from_revision" "maintenance from revision"
+  validate_revision "$active_revision" "maintenance active revision"
+  [[ "$verification_kind" == "" || "$verification_kind" == telegram_conversation ]] ||
+    fail "maintenance verification kind is invalid"
+  validate_plain_absolute_path "$MAINTENANCE_HISTORY_FILE" "maintenance history file"
+  receipt_dir="${MAINTENANCE_HISTORY_FILE%/*}"
+  [[ -d "$receipt_dir" && ! -L "$receipt_dir" ]] ||
+    fail "runtime state directory is unavailable for the maintenance receipt"
+  [[ ! -L "$MAINTENANCE_HISTORY_FILE" ]] || fail "maintenance history receipt must not be a symlink"
+
+  completed_at="$(date --utc '+%Y-%m-%dT%H:%M:%SZ')"
+  receipt="$(
+    jq -cn \
+      --arg operation "$operation" \
+      --arg result "$result" \
+      --arg completed_at "$completed_at" \
+      --arg from_revision "$from_revision" \
+      --arg active_revision "$active_revision" \
+      --arg verification_kind "$verification_kind" \
+      '{
+        contract_version: "1.0.0",
+        operation: $operation,
+        result: $result,
+        completed_at: $completed_at,
+        from_revision: $from_revision,
+        active_revision: $active_revision,
+        verification_kind: (if $verification_kind == "" then null else $verification_kind end)
+      }'
+  )"
+  printf '%s\n' "$receipt" >>"$MAINTENANCE_HISTORY_FILE" ||
+    fail "could not write maintenance receipt"
+  chmod 0600 "$MAINTENANCE_HISTORY_FILE" || fail "could not protect maintenance receipt"
+}
+
+for command in awk date git jq; do
   require_command "$command"
 done
 
@@ -138,7 +195,9 @@ if [[ "$SKIP_VERIFICATION" == false ]]; then
   if ! "$VERIFY_BIN" --source "$SOURCE"; then
     fail "owner verification failed after update; run sudo /usr/local/libexec/melloa/verify-owner-journey after fixing the reported cause, or run sudo /usr/local/libexec/melloa/rollback if the active release is bad"
   fi
+  write_maintenance_receipt update verified "$current_revision" "$target_revision" telegram_conversation
   echo "Server update finished and Telegram conversation verification passed."
 else
+  write_maintenance_receipt update verification_skipped "$current_revision" "$target_revision" ""
   echo "Server update finished. Verification was skipped; run sudo /usr/local/libexec/melloa/verify-owner-journey before treating the server as healthy."
 fi

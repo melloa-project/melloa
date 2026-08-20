@@ -10,6 +10,10 @@ readonly CURRENT_REVISION=1111111111111111111111111111111111111111
 readonly TARGET_REVISION=2222222222222222222222222222222222222222
 readonly ORIGIN=https://github.com/melloa-project/melloa.git
 readonly BUILD_CA="$WORKDIR/build-ca.pem"
+readonly RUNTIME_STATE="$WORKDIR/runtime-state"
+readonly RELEASE_STATE="$WORKDIR/release-state"
+readonly ACTIVE_REVISION_FILE="$RELEASE_STATE/active-revision"
+readonly MAINTENANCE_HISTORY_FILE="$RUNTIME_STATE/maintenance-history.jsonl"
 
 cleanup() {
   local status=$?
@@ -49,7 +53,11 @@ run_server_wrapper() {
   for name in \
     MELLOA_UPDATE_ACTIVATE_BIN \
     MELLOA_UPDATE_VERIFY_BIN \
-    MELLOA_ROLLBACK_VERIFY_BIN; do
+    MELLOA_ROLLBACK_VERIFY_BIN \
+    MELLOA_ACTIVE_REVISION_FILE \
+    MELLOA_MAINTENANCE_HISTORY_FILE \
+    MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION \
+    MELLOA_UPDATE_ROLLBACK_TARGET_REVISION; do
     if [[ -n "${!name+x}" ]]; then
       environment+=("$name=${!name}")
     fi
@@ -69,8 +77,11 @@ install -d -m 0700 \
   "$SOURCE/.git" \
   "$SOURCE/infra/server" \
   "$SOURCE/tools" \
-  "$FAKEBIN"
+  "$FAKEBIN" \
+  "$RUNTIME_STATE" \
+  "$RELEASE_STATE"
 install -m 0666 /dev/null "$LOG"
+printf '%s\n' "$CURRENT_REVISION" >"$ACTIVE_REVISION_FILE"
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'update-ca-test' \
   '-----END CERTIFICATE-----' >"$BUILD_CA"
 
@@ -85,6 +96,9 @@ cat >"$SOURCE/tools/server_release.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'server-release %s\n' "$*" >>"$MELLOA_UPDATE_ROLLBACK_FAKE_LOG"
+if [[ "$1" == rollback ]]; then
+  printf '%s\n' "$MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION" >"$MELLOA_ACTIVE_REVISION_FILE"
+fi
 EOF
 chmod +x "$SOURCE/tools/server_release.sh"
 
@@ -92,6 +106,7 @@ cat >"$WORKDIR/activate" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'activate %s\n' "$*" >>"$MELLOA_UPDATE_ROLLBACK_FAKE_LOG"
+printf '%s\n' "$MELLOA_UPDATE_ROLLBACK_TARGET_REVISION" >"$MELLOA_ACTIVE_REVISION_FILE"
 EOF
 chmod +x "$WORKDIR/activate"
 
@@ -159,6 +174,10 @@ EOF
 chmod +x "$FAKEBIN/git"
 
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
+MELLOA_ACTIVE_REVISION_FILE="$ACTIVE_REVISION_FILE" \
+MELLOA_MAINTENANCE_HISTORY_FILE="$MAINTENANCE_HISTORY_FILE" \
+MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION="$CURRENT_REVISION" \
+MELLOA_UPDATE_ROLLBACK_TARGET_REVISION="$TARGET_REVISION" \
 MELLOA_UPDATE_ACTIVATE_BIN="$WORKDIR/activate" \
 MELLOA_UPDATE_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
   run_server_wrapper "$ROOT/infra/server/update.sh" \
@@ -173,9 +192,23 @@ grep --fixed-strings --quiet "install --source $SOURCE --origin $ORIGIN --ca-fil
 grep --fixed-strings --quiet "activate --source $SOURCE --origin $ORIGIN" "$LOG"
 grep --fixed-strings --quiet "verify --source $SOURCE" "$LOG"
 grep --fixed-strings --quiet "Server update finished" "$WORKDIR/update-output.log"
+jq -s -e \
+  --arg from "$CURRENT_REVISION" \
+  --arg active "$TARGET_REVISION" \
+  'length == 1 and
+    .[0].operation == "update" and
+    .[0].result == "verified" and
+    .[0].from_revision == $from and
+    .[0].active_revision == $active and
+    .[0].verification_kind == "telegram_conversation"' \
+  "$MAINTENANCE_HISTORY_FILE" >/dev/null
 
 set +e
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
+MELLOA_ACTIVE_REVISION_FILE="$ACTIVE_REVISION_FILE" \
+MELLOA_MAINTENANCE_HISTORY_FILE="$MAINTENANCE_HISTORY_FILE" \
+MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION="$CURRENT_REVISION" \
+MELLOA_UPDATE_ROLLBACK_TARGET_REVISION="$TARGET_REVISION" \
 MELLOA_UPDATE_ACTIVATE_BIN="$WORKDIR/activate-fail" \
 MELLOA_UPDATE_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
   run_server_wrapper "$ROOT/infra/server/update.sh" \
@@ -192,6 +225,10 @@ grep --fixed-strings --quiet \
 
 set +e
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
+MELLOA_ACTIVE_REVISION_FILE="$ACTIVE_REVISION_FILE" \
+MELLOA_MAINTENANCE_HISTORY_FILE="$MAINTENANCE_HISTORY_FILE" \
+MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION="$CURRENT_REVISION" \
+MELLOA_UPDATE_ROLLBACK_TARGET_REVISION="$TARGET_REVISION" \
 MELLOA_UPDATE_ACTIVATE_BIN="$WORKDIR/activate" \
 MELLOA_UPDATE_VERIFY_BIN="$WORKDIR/verify-fail" \
   run_server_wrapper "$ROOT/infra/server/update.sh" \
@@ -207,6 +244,10 @@ grep --fixed-strings --quiet \
   "$WORKDIR/update-verification-failed.log"
 
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
+MELLOA_ACTIVE_REVISION_FILE="$ACTIVE_REVISION_FILE" \
+MELLOA_MAINTENANCE_HISTORY_FILE="$MAINTENANCE_HISTORY_FILE" \
+MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION="$CURRENT_REVISION" \
+MELLOA_UPDATE_ROLLBACK_TARGET_REVISION="$TARGET_REVISION" \
 MELLOA_ROLLBACK_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
   run_server_wrapper "$ROOT/infra/server/rollback.sh" \
     --source "$SOURCE" \
@@ -215,10 +256,25 @@ MELLOA_ROLLBACK_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
 grep --fixed-strings --quiet \
   "server-release rollback --env-file /etc/melloa/server.env --state-dir /var/lib/melloa/release-state" \
   "$LOG"
+grep --fixed-strings --quiet "verify --source $SOURCE" "$LOG"
 grep --fixed-strings --quiet "Server rollback finished" "$WORKDIR/rollback-output.log"
+jq -s -e \
+  --arg from "$TARGET_REVISION" \
+  --arg active "$CURRENT_REVISION" \
+  'length == 2 and
+    .[1].operation == "rollback" and
+    .[1].result == "verified" and
+    .[1].from_revision == $from and
+    .[1].active_revision == $active and
+    .[1].verification_kind == "telegram_conversation"' \
+  "$MAINTENANCE_HISTORY_FILE" >/dev/null
 
 set +e
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
+MELLOA_ACTIVE_REVISION_FILE="$ACTIVE_REVISION_FILE" \
+MELLOA_MAINTENANCE_HISTORY_FILE="$MAINTENANCE_HISTORY_FILE" \
+MELLOA_UPDATE_ROLLBACK_CURRENT_REVISION="$CURRENT_REVISION" \
+MELLOA_UPDATE_ROLLBACK_TARGET_REVISION="$TARGET_REVISION" \
 MELLOA_ROLLBACK_VERIFY_BIN="$WORKDIR/verify-fail" \
   run_server_wrapper "$ROOT/infra/server/rollback.sh" \
     --source "$SOURCE" \

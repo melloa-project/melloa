@@ -368,6 +368,37 @@ owner_verification:
   backup_snapshot_prefix: $verification_snapshot_prefix
   response_message_id: $verification_response_id
 
+maintenance_history:
+EOF
+
+readonly MAINTENANCE_HISTORY_FILE="$(destination "$RUNTIME_STATE_DIR/maintenance-history.jsonl")"
+if [[ -L "$MAINTENANCE_HISTORY_FILE" ]]; then
+  fail "maintenance history receipt must not be a symlink"
+elif [[ -s "$MAINTENANCE_HISTORY_FILE" ]]; then
+  jq -sr '
+    def valid_event:
+      .contract_version == "1.0.0" and
+      (.operation == "update" or .operation == "rollback") and
+      (.result == "verified" or .result == "verification_skipped") and
+      (.completed_at | type == "string" and length > 0) and
+      (.from_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+      (.active_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+      (.verification_kind == null or .verification_kind == "telegram_conversation");
+    if all(.[]; valid_event) then
+      .[-10:][] |
+      "  - \(.completed_at) \(.operation) \(.result) from=\(.from_revision[0:12]) active=\(.active_revision[0:12]) verification=" +
+      (if .verification_kind == null then "skipped" else .verification_kind end)
+    else
+      error("invalid maintenance history receipt")
+    end
+  ' "$MAINTENANCE_HISTORY_FILE" ||
+    fail "maintenance history receipt is invalid"
+else
+  echo "  - none"
+fi
+
+cat <<'EOF'
+
 recent_release_history:
 EOF
 

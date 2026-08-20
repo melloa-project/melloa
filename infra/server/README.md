@@ -348,8 +348,10 @@ sudo /usr/local/libexec/melloa/rollback
 ```
 
 Both wrappers finish by running `/usr/local/libexec/melloa/verify-owner-journey` unless explicitly
-skipped for a staged test or emergency diagnosis. The lower-level release commands remain available
-for engineering inspection:
+skipped for a staged test or emergency diagnosis. On success they append redacted update/rollback
+entries to `/var/lib/melloa/runtime-state/maintenance-history.jsonl`, and
+`/usr/local/libexec/melloa/qualification-record` includes the latest entries for the owner's private
+deployment notes. The lower-level release commands remain available for engineering inspection:
 
 The operator-shaped commands currently exercised by the disposable proof are:
 
