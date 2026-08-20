@@ -438,12 +438,16 @@ if [[ "$DESTINATION_ROOT" == / ]]; then
   id melloa-runtime >/dev/null 2>&1 || fail "melloa-runtime system user is unavailable"
   [[ "$(id -u melloa-runtime)" == 10001 && "$(id -g melloa-runtime)" == 10001 ]] ||
     fail "melloa-runtime must use UID and GID 10001"
+fi
+if [[ "$DESTINATION_ROOT" == / || "${MELLOA_TEST_VALIDATE_BACKUP_MOUNT:-}" == yes ]]; then
   [[ -d "$BACKUP_REPOSITORY" && ! -L "$BACKUP_REPOSITORY" ]] ||
     fail "backup repository mount is unavailable"
   findmnt --mountpoint "$BACKUP_REPOSITORY" >/dev/null ||
     fail "backup repository must be an explicit mount point"
   [[ "$(stat --format='%d' "$BACKUP_REPOSITORY")" != "$(stat --format='%d' /)" ]] ||
     fail "backup repository must use storage independent from the server root filesystem"
+fi
+if [[ "$DESTINATION_ROOT" == / ]]; then
   if [[ -e "$RELEASE_STATE_DIR/release.json" ]]; then
     fail "an activated deployment cannot be reconfigured by the first-install tool"
   fi

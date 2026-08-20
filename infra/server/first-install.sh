@@ -249,7 +249,7 @@ validate_public_setup_inputs() {
     "Guardian public status.json" 2 1048576
   require_public_input_file "$guardian_public_key_file" \
     "Guardian public.pem" 32 65536
-  if [[ "$DESTINATION_ROOT" != / ]]; then
+  if [[ "$DESTINATION_ROOT" != / && "${MELLOA_TEST_VALIDATE_BACKUP_MOUNT:-}" != yes ]]; then
     return 0
   fi
   [[ -d "$backup_repository" && ! -L "$backup_repository" ]] ||

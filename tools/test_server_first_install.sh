@@ -5,7 +5,9 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly WORKDIR="$(mktemp -d /tmp/melloa-first-install-test.XXXXXX)"
 readonly INPUTS="$WORKDIR/inputs"
 readonly TARGET="$WORKDIR/target"
+readonly MOUNT_TARGET="$WORKDIR/mount-target"
 readonly BAD_TARGET="$WORKDIR/bad-target"
+readonly BAD_MOUNT_TARGET="$WORKDIR/bad-mount-target"
 readonly BAD_SECRET_TARGET="$WORKDIR/bad-secret-target"
 readonly BAD_EXTERNAL_MISSING_TARGET="$WORKDIR/bad-external-missing-target"
 readonly BAD_MODEL_TARGET="$WORKDIR/bad-model-target"
@@ -15,11 +17,13 @@ readonly BAD_LOCAL_TARGET="$WORKDIR/bad-local-target"
 readonly SELF_CHANGE_TARGET="$WORKDIR/self-change-target"
 readonly CA_RESUME_TARGET="$WORKDIR/ca-resume-target"
 readonly LOG="$WORKDIR/first-install.log"
+readonly MOUNT_LOG="$WORKDIR/first-install-mount.log"
 readonly RESUME_LOG="$WORKDIR/first-install-resume.log"
 readonly SELF_CHANGE_LOG="$WORKDIR/first-install-self-change.log"
 readonly CA_RESUME_SETUP_LOG="$WORKDIR/first-install-ca-resume-setup.log"
 readonly CA_RESUME_LOG="$WORKDIR/first-install-ca-resume.log"
 readonly BAD_LOG="$WORKDIR/first-install-bad-input.log"
+readonly BAD_MOUNT_LOG="$WORKDIR/first-install-bad-mount.log"
 readonly BAD_SECRET_LOG="$WORKDIR/first-install-bad-secret.log"
 readonly BAD_EXTERNAL_MISSING_LOG="$WORKDIR/first-install-bad-external-missing.log"
 readonly BAD_MODEL_LOG="$WORKDIR/first-install-bad-model.log"
@@ -29,6 +33,20 @@ readonly BAD_LOCAL_LOG="$WORKDIR/first-install-bad-local.log"
 readonly TEST_UID="$(id -u)"
 readonly TEST_GID="$(id -g)"
 
+select_backup_mount() {
+  local candidate
+  for candidate in /var/tmp /tmp /dev/shm /run /proc; do
+    [[ -d "$candidate" && ! -L "$candidate" ]] || continue
+    findmnt --mountpoint "$candidate" >/dev/null || continue
+    [[ "$(stat --format='%d' "$candidate")" != "$(stat --format='%d' /)" ]] ||
+      continue
+    printf '%s' "$candidate"
+    return 0
+  done
+  echo "No explicit backup-mount candidate is available for the first-install test" >&2
+  return 2
+}
+
 cleanup() {
   if [[ "$WORKDIR" == /tmp/melloa-first-install-test.* && -d "$WORKDIR" ]]; then
     rm -rf -- "$WORKDIR"
@@ -36,7 +54,11 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+readonly REAL_BACKUP_MOUNT="$(select_backup_mount)"
+readonly BAD_MOUNT_REPOSITORY="$WORKDIR/not-mounted-backup"
+
 install -d -m 0700 "$INPUTS"
+install -d -m 0700 "$BAD_MOUNT_REPOSITORY"
 printf '{"contract_version":"1.0.0"}\n' >"$INPUTS/status.json"
 printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'first-install-test' \
   '-----END PUBLIC KEY-----' >"$INPUTS/public.pem"
@@ -129,6 +151,36 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet \
   "Then verify before relying on the server: sudo /usr/local/libexec/melloa/verify-owner-journey" \
   "$LOG"
+
+MELLOA_TEST_VALIDATE_BACKUP_MOUNT=yes \
+MELLOA_SETUP_BACKUP_REPOSITORY="$REAL_BACKUP_MOUNT" \
+MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+MELLOA_SETUP_CAPABLE_MODEL_ID=mount-capable-test-model \
+MELLOA_SETUP_CAPABLE_TOKEN=capable_mount_test_secret \
+MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
+MELLOA_SETUP_ECONOMY_MODEL_ID=mount-economy-test-model \
+MELLOA_SETUP_ECONOMY_TOKEN=economy_mount_test_secret \
+MELLOA_SETUP_ECONOMY_ESTIMATED_MAX_COST_GBP=0.01 \
+MELLOA_SETUP_ECONOMY_INPUT_COST_GBP_PER_MILLION_TOKENS=0.25 \
+MELLOA_SETUP_ECONOMY_OUTPUT_COST_GBP_PER_MILLION_TOKENS=2 \
+MELLOA_SETUP_RESTIC_PASSWORD=restic_mount_test_secret_123456789 \
+  "$ROOT/infra/server/first-install.sh" \
+    --source "$ROOT" \
+    --root "$MOUNT_TARGET" \
+    --skip-activation \
+    </dev/null \
+    >"$MOUNT_LOG" 2>&1
+grep --fixed-strings --quiet "Public path checks passed." "$MOUNT_LOG"
+grep --fixed-strings --quiet \
+  "MELLOA_BACKUP_REPOSITORY_DIR=$REAL_BACKUP_MOUNT" \
+  "$MOUNT_TARGET/etc/melloa/server.env"
 
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
 MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
@@ -271,6 +323,27 @@ fi
 grep --fixed-strings --quiet "backup repository must be a plain absolute path" "$BAD_LOG"
 if grep --fixed-strings --quiet "TELEGRAM_BOT_TOKEN is required" "$BAD_LOG"; then
   echo "First-install setup prompted for secrets before public path validation" >&2
+  exit 1
+fi
+
+if MELLOA_TEST_VALIDATE_BACKUP_MOUNT=yes \
+  MELLOA_SETUP_BACKUP_REPOSITORY="$BAD_MOUNT_REPOSITORY" \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_MOUNT_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_MOUNT_LOG" 2>&1; then
+  echo "First-install setup accepted a backup repository that was not a mount point" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "backup repository must be an explicit mount point; mount off-device storage at $BAD_MOUNT_REPOSITORY and rerun setup" \
+  "$BAD_MOUNT_LOG"
+if grep --fixed-strings --quiet "TELEGRAM_BOT_TOKEN is required" "$BAD_MOUNT_LOG"; then
+  echo "First-install setup prompted for secrets before backup mount validation" >&2
   exit 1
 fi
 
