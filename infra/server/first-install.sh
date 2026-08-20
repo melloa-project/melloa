@@ -651,9 +651,23 @@ activate_and_verify() {
       fail "owner verification failed; fix the reported cause or send the exact Telegram phrase, then rerun sudo /usr/local/libexec/melloa/verify-owner-journey"
     fi
     echo "First-owner setup finished. Telegram conversation has been verified." >&2
-    echo "Next: send /status in Telegram, then reboot and run sudo /usr/local/libexec/melloa/verify-owner-journey." >&2
+    cat >&2 <<'EOF'
+Next qualification steps:
+  1. In Telegram, send /status and then one ordinary message to Melli.
+  2. Reboot the server, then run: sudo /usr/local/libexec/melloa/verify-owner-journey
+  3. Prove the actual backup path: sudo /usr/local/libexec/melloa/restore-drill
+  4. Rerun active verification: sudo /usr/local/libexec/melloa/verify-owner-journey
+
+Keep using the installed update and rollback wrappers for later reviewed releases:
+  sudo /usr/local/libexec/melloa/update
+  sudo /usr/local/libexec/melloa/rollback
+EOF
   else
-    echo "First-owner setup finished. Verification was skipped; run sudo /usr/local/libexec/melloa/verify-owner-journey before treating the server as ready." >&2
+    cat >&2 <<'EOF'
+First-owner setup finished. Verification was skipped.
+Before treating the server as usable, run:
+  sudo /usr/local/libexec/melloa/verify-owner-journey
+EOF
   fi
 }
 

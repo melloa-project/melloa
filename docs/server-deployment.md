@@ -13,6 +13,21 @@ dedicated always-on server, not the owner's everyday laptop or desktop.
 Before cloning Melloa, attach and mount backup storage that is independent from the server's root
 disk. Keep the restic password somewhere the server and backup repository cannot both lose.
 
+Choose the mount path before setup. The guided path defaults to
+`/mnt/melloa-off-device-backup`, but any plain absolute path is acceptable if it is an explicit
+mount on storage independent from `/`. The exact filesystem/device setup is host-specific; after
+mounting it, verify the property Melloa will enforce:
+
+```bash
+sudo mkdir -p /mnt/melloa-off-device-backup
+findmnt --mountpoint /mnt/melloa-off-device-backup
+test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
+```
+
+If either check fails, fix the mount before running first install. Do not continue by creating an
+ordinary directory on the server disk; Melloa will refuse it because that would make a disk loss take
+both the live data and the backup repository.
+
 ## Values to have ready
 
 The guided setup prompts for these values and writes the private files for you:
@@ -157,6 +172,10 @@ After the verifier passes, continue in the same Telegram chat:
 
 Then send the first ordinary message to Melli. Telegram is the normal owner interface; machine login
 should be rare after setup.
+
+Do not treat this as a completed deployment yet. The first real server still has to pass the reboot
+verifier, restore drill, and update/rollback path below before the repository readiness banner can
+change.
 
 ## After reboot or maintenance
 
