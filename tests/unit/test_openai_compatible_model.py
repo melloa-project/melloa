@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from melloa.adapters.models.openai_compatible import (
+    OpenAIAPIStyle,
     OpenAICompatibleModelConfig,
     OpenAICompatibleModelGateway,
     load_openai_compatible_model_config,
@@ -230,6 +231,7 @@ def test_gateway_invokes_bounded_json_completion_and_accounts_usage(fixed_time) 
     body = observed["body"]
     assert isinstance(body, dict)
     assert body["model"] == "qwen-test"
+    assert body["store"] is False
     assert body["response_format"] == {"type": "json_object"}
     prompt = json.loads(body["messages"][1]["content"])
     assert prompt["owner_message"] == "What should I read next?"
@@ -250,6 +252,124 @@ def test_gateway_invokes_bounded_json_completion_and_accounts_usage(fixed_time) 
     assert result.output_tokens == 18
     assert result.cost_gbp == pytest.approx(0.000156)
     assert result.external_disclosure is False
+
+
+def test_gateway_invokes_bounded_responses_api_and_accounts_usage(fixed_time) -> None:
+    observed: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        observed["url"] = str(request.url)
+        observed["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "output": [
+                    {"type": "reasoning", "summary": []},
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": (
+                                    '{"text":"Try a considered essay.",'
+                                    '"citation_ids":[]}'
+                                ),
+                            }
+                        ],
+                    },
+                ],
+                "usage": {"input_tokens": 140, "output_tokens": 22},
+            },
+        )
+
+    config = _config(
+        api_style="responses",
+        input_cost_gbp_per_million_tokens=1.0,
+        output_cost_gbp_per_million_tokens=2.0,
+    )
+    gateway = OpenAICompatibleModelGateway(
+        config,
+        clock=lambda: fixed_time,
+        id_factory=lambda prefix: record_id(prefix, 1),
+        transport=httpx.MockTransport(handler),
+    )
+
+    result = gateway.invoke(_request())
+
+    assert config.api_style is OpenAIAPIStyle.RESPONSES
+    assert observed["url"] == "http://127.0.0.1:11434/v1/responses"
+    body = observed["body"]
+    assert isinstance(body, dict)
+    assert body["model"] == "qwen-test"
+    assert body["store"] is False
+    assert body["max_output_tokens"] == 512
+    assert "instructions" in body
+    assert "temperature" not in body
+    assert body["text"] == {
+        "format": {
+            "type": "json_schema",
+            "name": "melli_conversation_response",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "citation_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["text", "citation_ids"],
+                "additionalProperties": False,
+            },
+        }
+    }
+    prompt = json.loads(body["input"])
+    assert prompt["owner_message"] == "What should I read next?"
+    assert result.output == {
+        "text": "Try a considered essay.",
+        "citation_ids": [],
+    }
+    assert result.input_tokens == 140
+    assert result.output_tokens == 22
+    assert result.cost_gbp == pytest.approx(0.000184)
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        {},
+        {"output": []},
+        {"output": [{"type": "reasoning"}]},
+        {
+            "output": [
+                {"type": "message", "content": []},
+                {"type": "message", "content": []},
+            ]
+        },
+        {"output": [{"type": "message", "content": []}]},
+        {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "refusal", "refusal": "No"}],
+                }
+            ]
+        },
+    ),
+)
+def test_responses_gateway_rejects_missing_or_ambiguous_text(document, fixed_time) -> None:
+    gateway = OpenAICompatibleModelGateway(
+        _config(api_style="responses"),
+        clock=lambda: fixed_time,
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, json=document)
+        ),
+    )
+
+    with pytest.raises(ModelInvocationError):
+        gateway.invoke(_request())
 
 
 def test_gateway_health_requires_exact_configured_model_and_redacts_failures(

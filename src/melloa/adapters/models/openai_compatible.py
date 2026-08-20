@@ -6,6 +6,7 @@ import json
 import stat
 from collections.abc import Callable
 from datetime import datetime
+from enum import StrEnum
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from pathlib import Path
 from time import monotonic
@@ -41,6 +42,24 @@ these keys: text (a non-empty string) and citation_ids (an array of supplied cit
 Never invent a citation ID. If no supplied memory is useful, return an empty citation_ids
 array."""
 
+_CONVERSATION_RESPONSE_SCHEMA: JsonObject = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string"},
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["text", "citation_ids"],
+    "additionalProperties": False,
+}
+
+
+class OpenAIAPIStyle(StrEnum):
+    CHAT_COMPLETIONS = "chat_completions"
+    RESPONSES = "responses"
+
 
 class OpenAICompatibleModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -49,6 +68,7 @@ class OpenAICompatibleModelConfig(BaseModel):
     provider_id: QualifiedName
     model_id: str = Field(min_length=1, max_length=256)
     base_url: str = Field(min_length=1, max_length=2_048)
+    api_style: OpenAIAPIStyle = OpenAIAPIStyle.CHAT_COMPLETIONS
     processing_location: ProcessingLocation = ProcessingLocation.DEVICE
     allowed_sensitivities: frozenset[Sensitivity] = frozenset(Sensitivity)
     max_input_tokens: Annotated[int, Field(gt=0, le=1_000_000)] = 16_384
@@ -114,12 +134,20 @@ class OpenAICompatibleModelGateway:
         try:
             response = self._request(
                 "POST",
-                "chat/completions",
+                (
+                    "responses"
+                    if self.config.api_style is OpenAIAPIStyle.RESPONSES
+                    else "chat/completions"
+                ),
                 timeout_seconds=timeout_seconds,
                 payload=self._request_payload(request),
             )
             document = self._response_document(response)
-            output = _conversation_output(document)
+            output = (
+                _responses_conversation_output(document)
+                if self.config.api_style is OpenAIAPIStyle.RESPONSES
+                else _chat_completions_conversation_output(document)
+            )
             usage = document.get("usage")
             input_tokens = _usage_count(usage, "prompt_tokens", "input_tokens")
             output_tokens = _usage_count(usage, "completion_tokens", "output_tokens")
@@ -227,23 +255,38 @@ class OpenAICompatibleModelGateway:
             raise ValueError(
                 "conversation request is missing text, recent conversation, or memory citations"
             )
+        input_document = json.dumps(
+            {
+                "owner_message": owner_text,
+                "recent_conversation": recent_conversation,
+                "memory_citations": citations,
+            },
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        if self.config.api_style is OpenAIAPIStyle.RESPONSES:
+            return {
+                "model": self.config.model_id,
+                "store": False,
+                "instructions": _DEFAULT_SYSTEM_PROMPT,
+                "input": input_document,
+                "max_output_tokens": request.max_output_tokens,
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "melli_conversation_response",
+                        "strict": True,
+                        "schema": _CONVERSATION_RESPONSE_SCHEMA,
+                    }
+                },
+            }
         return {
             "model": self.config.model_id,
+            "store": False,
             "messages": [
                 {"role": "system", "content": _DEFAULT_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "owner_message": owner_text,
-                            "recent_conversation": recent_conversation,
-                            "memory_citations": citations,
-                        },
-                        ensure_ascii=False,
-                        allow_nan=False,
-                        separators=(",", ":"),
-                    ),
-                },
+                {"role": "user", "content": input_document},
             ],
             "temperature": 0.2,
             "max_tokens": request.max_output_tokens,
@@ -297,7 +340,7 @@ class OpenAICompatibleModelGateway:
         return document
 
 
-def _conversation_output(document: JsonObject) -> JsonObject:
+def _chat_completions_conversation_output(document: JsonObject) -> JsonObject:
     choices = document.get("choices")
     if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
         raise ValueError("model endpoint must return exactly one completion choice")
@@ -319,6 +362,36 @@ def _conversation_output(document: JsonObject) -> JsonObject:
         content = "".join(parts)
     if not isinstance(content, str):
         raise ValueError("model endpoint completion has no textual content")
+    return _parsed_conversation_output(content)
+
+
+def _responses_conversation_output(document: JsonObject) -> JsonObject:
+    output = document.get("output")
+    if not isinstance(output, list):
+        raise ValueError("Responses endpoint returned no output list")
+    messages = [
+        item
+        for item in output
+        if isinstance(item, dict) and item.get("type") == "message"
+    ]
+    if len(messages) != 1:
+        raise ValueError("Responses endpoint must return exactly one output message")
+    content = messages[0].get("content")
+    if not isinstance(content, list):
+        raise ValueError("Responses output message has no content")
+    parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict) or part.get("type") != "output_text":
+            continue
+        text = part.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+    if not parts:
+        raise ValueError("Responses output message has no textual content")
+    return _parsed_conversation_output("".join(parts))
+
+
+def _parsed_conversation_output(content: str) -> JsonObject:
     normalized = content.strip()
     if normalized.startswith("```json") and normalized.endswith("```"):
         normalized = normalized[7:-3].strip()
