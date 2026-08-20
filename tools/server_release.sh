@@ -614,7 +614,7 @@ recover_interrupted_operation() {
     "$RECOVERY_REVISION" \
     "$RECOVERY_APP_IMAGE" \
     "$RECOVERY_BACKUP_IMAGE" \
-    stop melloa backup >/dev/null 2>&1 || true
+    stop melloa backup migrate database-logins >/dev/null 2>&1 || true
   restore_release_files "$RECOVERY_STATE_JSON" || return 1
   if [[ "$mode" == restore-active ]]; then
     if [[ "$RECOVERY_ACTIVE_JSON" == null || -z "$RECOVERY_SNAPSHOT" ]]; then
@@ -705,7 +705,7 @@ recover_failed_candidate() {
   local snapshot="$5"
   local state_json="$6"
   compose_release "$candidate_revision" "$candidate_app" "$candidate_backup" \
-    stop melloa backup >/dev/null 2>&1 || true
+    stop melloa backup migrate database-logins >/dev/null 2>&1 || true
   if [[ "$active_json" == null ]]; then
     restore_release_files "$state_json" || return 1
     record_history deploy failed "$candidate_revision" release.first_deploy_failed "$snapshot" || true
