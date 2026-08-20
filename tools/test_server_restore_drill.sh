@@ -194,9 +194,15 @@ if grep --fixed-strings --quiet "melloa-server --" "$LOG"; then
   exit 1
 fi
 readonly RESTORE_RECEIPT="$TARGET/runtime-state/restore-drill-status.json"
-[[ -f "$RESTORE_RECEIPT" && ! -L "$RESTORE_RECEIPT" ]]
-[[ "$(stat --format='%a' "$RESTORE_RECEIPT")" == 600 ]]
-jq -e \
+if ((EUID == 0)); then
+  receipt_command=()
+else
+  receipt_command=(sudo -n)
+fi
+"${receipt_command[@]}" test -f "$RESTORE_RECEIPT"
+"${receipt_command[@]}" test ! -L "$RESTORE_RECEIPT"
+[[ "$("${receipt_command[@]}" stat --format='%a' "$RESTORE_RECEIPT")" == 600 ]]
+"${receipt_command[@]}" jq -e \
   --arg revision "$SOURCE_REVISION" \
   --arg snapshot "$SNAPSHOT" \
   '{
@@ -222,7 +228,7 @@ jq -e \
   } and
   (.drilled_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' \
   "$RESTORE_RECEIPT" >/dev/null
-if grep --fixed-strings --quiet "$MIGRATION_PASSWORD" "$RESTORE_RECEIPT"; then
+if "${receipt_command[@]}" grep --fixed-strings --quiet "$MIGRATION_PASSWORD" "$RESTORE_RECEIPT"; then
   echo "Restore drill receipt exposed the migration password" >&2
   exit 1
 fi
