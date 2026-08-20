@@ -80,25 +80,65 @@ The installer asks for the owner-controlled values. Do not put these into Git.
 
 | Input | What to prepare |
 | --- | --- |
-| Telegram bot token | Create a dedicated bot for Melli. |
+| Telegram bot token | Create one dedicated BotFather bot for Melli. Do not reuse a bot already connected to another service. |
 | Telegram owner ID | Leave blank during guided setup unless you already verified the numeric ID; setup pairs the private chat for you. |
-| Capable model route | HTTPS base URL, model ID, API style, bearer token, GBP input/output prices, and request cost ceiling. |
-| Economy model route | Same fields for the cheaper hosted route. |
+| Capable model route | Usually the `openai` preset, a reviewed model ID, GBP input/output prices, request cost ceiling, and API key. |
+| Economy model route | The `openai` preset with a cheaper model, or `external` with a reviewed OpenAI-compatible hosted provider. |
 | Backup repository | A mounted absolute path such as `/mnt/melloa-off-device-backup`. |
 | Restic password | 32-128 base64url-safe characters retained separately from the server and backup disk. |
 | GitHub token | Fine-grained token for this repository with contents read/write. |
 | Codex/OpenAI API key | Used by the bounded planner worker, not as Melli’s normal conversation route. |
 
-For the simplest hosted model setup, choose `openai` for the capable route and either `openai` with
-a cheaper model or `external` with a reviewed OpenAI-compatible provider for the economy route.
-External providers must supply an HTTPS base URL, exact model ID, API style
-(`responses` or `chat_completions`), bearer token, and prices converted to GBP.
+### Telegram bot
+
+In Telegram, open `@BotFather` and create a dedicated bot:
+
+```text
+/newbot
+```
+
+Give it a human name such as `Melli`, then a username ending in `bot`. Copy the HTTP API token
+BotFather returns. Do not send `/start` to the bot yet; setup will print an exact `/start ...`
+pairing phrase later.
+
+Keep this bot out of groups for the first deployment. Setup can clear an existing webhook, but no
+other long-polling process should be using the same bot token.
+
+### Hosted model routes
+
+For the simplest hosted model setup, choose `openai` for both routes:
+
+- `capable`: press Enter for the `gpt-5.6-terra` default, or type another reviewed stronger model;
+- `economy`: press Enter for the `gpt-5.6-luna` default, or type another reviewed cheaper model;
+- enter current input/output prices as GBP decimals per million tokens, without a currency symbol;
+- enter a maximum GBP cost per request, also as a decimal;
+- enter the API key only when setup asks for the secret.
+
+The `openai` preset fills the OpenAI HTTPS base URL and Responses API style for you. You do not need
+to type those fields for the first path.
+
+Use `external` only when another hosted provider or router gives you all of these facts: HTTPS
+OpenAI-compatible base URL, exact model ID, API style (`responses` or `chat_completions`), bearer
+token, and input/output prices converted to GBP. A cheaper online frontier-lab provider is fine
+when it exposes that shape; if it does not, defer it rather than guessing.
 
 Examples for the OpenAI route are `gpt-5.6-luna` for economy, `gpt-5.6-terra` for balanced capable
 work, and `gpt-5.6-sol` for the highest-capability route when your account access and reviewed
 pricing justify it. The `openai` setup preset offers `gpt-5.6-luna` as the economy default and
 `gpt-5.6-terra` as the capable default; type another reviewed model ID if needed. Setup accepts the
 exact model ID you enter and does not require a local model.
+
+Do not enter example or zero prices just to get through setup. Melloa stores these values so
+`/status` can report the exact route and cost boundary you approved.
+
+### Self-change credentials
+
+The GitHub token and Codex/OpenAI API key are for the bounded self-change workers. They are separate
+from normal conversation routing:
+
+- the GitHub token is used only by the applier after exact owner approval;
+- the Codex/OpenAI API key is used by the confined planner worker;
+- do not paste a ChatGPT/Codex subscription login artifact into setup.
 
 If you need a restic password generator:
 
@@ -165,8 +205,39 @@ After the first conversation works, make one small owner-approved change through
 loop. That proves Melloa can help evolve its own server path instead of leaving you to maintain a
 static install by hand.
 
+Use a small public-safe test/docs request. Do not use the first proof to change deployment scripts,
+Guardian, Telegram pairing, database roles, migrations, release policy, or self-change policy.
+
+In Telegram:
+
+```text
+/change propose Add a focused unit test for one existing owner-visible /change command message.
+```
+
+When the proposal is ready, inspect it:
+
+```text
+/change
+/change diff <change_id>
+```
+
+Approve only if the retained diff is exactly acceptable:
+
+```text
+/change approve <change_id> <16-character proposal token>
+/change show <change_id>
+```
+
+The proof is successful when `/change show <change_id>` reports the deployed state and deployed
+revision. Then run:
+
+```bash
+sudo /usr/local/libexec/melloa/qualification-record
+sudo /usr/local/libexec/melloa/verify-owner-journey
+```
+
 Open [Runtime loop](../runtime-loop/) for the closed-loop design and [Self-change loop](../self-change/)
-for the exact owner approval path.
+for the safety model.
 
 Then run the two maintenance proofs:
 

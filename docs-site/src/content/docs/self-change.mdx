@@ -48,4 +48,23 @@ Use a small change immediately after first install. Good candidates:
 - clarify one public setup page;
 - add one regression test for a failure you just hit.
 
+For the first server proof, prefer a tests-only command:
+
+```text
+/change propose Add a focused unit test for one existing owner-visible /change command message.
+```
+
+Then inspect and approve from Telegram:
+
+```text
+/change
+/change diff <change_id>
+/change approve <change_id> <16-character proposal token>
+/change show <change_id>
+```
+
+Avoid recovery-spine changes in the first proof: deployment scripts, secrets, Guardian, Telegram
+pairing, database roles, migrations, release policy, and self-change policy need a separate
+hardening pass.
+
 The point is not spectacle. The point is to prove the system can improve itself under owner control.

@@ -20,6 +20,35 @@ make that narrow loop smaller today.
 | AgentTeams / OpenClaw-style orchestration | Manager/worker multi-agent collaboration in visible Matrix rooms, with gateways, shared files, and Kubernetes/Helm deployment. | Manager/worker isolation, auditable rooms, credential gateway, LLM preflight, shared files for lower token cost. | It is optimized for teams of agents and enterprise orchestration. Matrix, MinIO, Kubernetes resources, worker contracts, and team rooms are excess surface for the first home-server path. |
 | GBrain and similar memory layers | Owned memory/knowledge layer for agents and coding assistants. | Markdown-owned memory, synthesis with citations, gap analysis, MCP integration, memory verbs. | It is not a conversation runtime or recovery spine. Memory should be adopted after Melloa proves stable conversation, source provenance, correction, export, and deletion in the owner journey. |
 
+## Hermes is the serious proactive-loop reference
+
+The strongest reason to keep studying Hermes is not generic chat. It is the proactive server-agent
+shape Melloa likely wants after first deployment:
+
+- scheduled checks that decide whether to message the owner;
+- email, calendar, webhook, or filesystem events that trigger a model only when something is worth
+  attention;
+- Telegram delivery from an always-on server instead of a laptop session;
+- provider switching and skill lifecycle machinery;
+- long-running task work that can report back without the owner watching a terminal.
+
+That is close to the intended future: Melli notices something, messages the owner, proposes or runs
+a bounded follow-up, and records what happened. Examples might include filtering important mail,
+creating a small owner-facing task app, updating an external datastore after approval, or reacting
+when a task is completed.
+
+Those loops should not enter Melloa as ambient autonomy. The safe sequence is:
+
+1. prove the base Telegram conversation and recovery spine;
+2. prove one owner-approved self-change through retained diff, exact approval, deploy, and rollback;
+3. run a focused Hermes-adoption spike against one proactive use case;
+4. adopt only the pieces that keep owner approval, event provenance, cost boundaries, rollback, and
+   Guardian independence intact.
+
+If Hermes can make that proactive layer simpler without weakening the spine, it should become a
+serious dependency or fork candidate. Until then, copying its breadth would add surface area before
+Melloa can recover from mistakes.
+
 ## The runtime slice Melloa should own
 
 The first loop is deliberately small:

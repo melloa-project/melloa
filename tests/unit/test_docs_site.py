@@ -22,6 +22,7 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "gpt-5.6-luna" in homepage
     assert "Melloa is not starting as a generic multi-agent harness" in homepage
     assert "Harness comparison" in homepage
+    assert "Hermes is the most relevant reference for the later proactive layer" in homepage
     assert "RuntimeLoop" in homepage
     assert "StatusStrip" in homepage
     assert "Self-change is core" in homepage
@@ -160,18 +161,35 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "sudo /usr/local/libexec/melloa/verify-owner-journey" in deploy
     assert "sudo /usr/local/libexec/melloa/restore-drill" in deploy
     assert "`api-key`" in deploy
+    assert "@BotFather" in deploy
+    assert "/newbot" in deploy
+    assert "Do not send `/start` to the bot yet" in deploy
+    assert "current input/output prices as GBP decimals" in deploy
+    assert "The `openai` preset fills the OpenAI HTTPS base URL" in deploy
     assert "gpt-5.6-luna" in deploy
     assert "gpt-5.6-terra` as the capable default" in deploy
     assert "(../runtime-loop/)" in deploy
+    assert "/change diff <change_id>" in deploy
+    assert "/change approve <change_id> <16-character proposal token>" in deploy
+    assert "qualification-record" in deploy
     assert "/change propose" in self_change
+    assert "/change show <change_id>" in self_change
+    assert "Avoid recovery-spine changes" in self_change
     assert "commits, pushes, deploys" in self_change
     assert "Codex CLI is the confined planner" in self_change
     assert "disposable checkout outside the active runtime" in self_change
     assert "Do not fork Hermes, OpenClaw, AgentTeams" in runtime_loop
     assert "AgentTeams/OpenClaw-style stacks" in runtime_loop
+    assert "Hermes deserves special attention after this base loop" in runtime_loop
+    assert "event hooks and external datastore writes" in runtime_loop
     assert "separate conversation adapter" in runtime_loop
     assert "no source checkout" in runtime_loop
     assert "do not fork OpenClaw, Hermes, AgentTeams, or GBrain" in harnesses
+    assert "Hermes is the serious proactive-loop reference" in harnesses
+    assert "scheduled checks that decide whether to message the owner" in harnesses
+    assert "email, calendar, webhook, or filesystem events" in harnesses
+    assert "creating a small owner-facing task app" in harnesses
+    assert "run a focused Hermes-adoption spike" in harnesses
     assert "exact one-owner Telegram binding" in harnesses
     assert "retained proposal diffs and exact owner approval" in harnesses
     assert "independent Guardian remaining outside" in harnesses
