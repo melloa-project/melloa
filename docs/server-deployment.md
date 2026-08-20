@@ -68,10 +68,9 @@ sudo infra/server/first-install.sh --source "$PWD"
 ```
 
 When setup asks whether to enable self-change workers, answer `yes` for the first real
-qualification run. The installer still defaults that prompt to `no` as a safety latch because
-enabling the workers grants a deterministic path to commit, push, and deploy after exact owner
-approval. Choosing `no` can be useful for a conversation-only bring-up, but that run cannot qualify
-the repository as ready for owner deployment.
+qualification run. On a real interactive server install, `yes` is the default. Choosing `no` can be
+useful for a conversation-only bring-up, but that run cannot qualify the repository as ready for
+owner deployment.
 
 The rest of this document explains what must be ready before those commands and how to prove the
 result afterward.
@@ -155,6 +154,10 @@ the first real qualification, bootstrap with `--self-change-tools` and choose `y
 about self-change workers. If you choose `no`, activation stops and disables those units, and the
 units themselves are condition-gated so accidental manual starts are skipped; that is a
 conversation-only bring-up, not a ready-for-owner-deployment qualification.
+
+For unattended tests and staged dry-runs, setup still defaults self-change to disabled unless
+`MELLOA_SETUP_ENABLE_SELF_CHANGE=yes` is supplied. That noninteractive default is not the owner
+qualification path.
 
 When setup asks for the Codex self-change planner credential mode, choose `api-key` for this hosted
 first path. The `local` mode is retained for separately tested `ollama` or `lmstudio` deployments,

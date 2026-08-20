@@ -106,13 +106,14 @@ Before invoking it, have these owner-controlled values ready:
 - a high-entropy base64url restic password retained separately from this machine and the backup
   repository.
 
-The guided first-owner installer still defaults the self-change prompt to `no` as a safety latch:
-enabling the workers creates a deterministic owner-approved path to commit, push, and deploy.
+On a real interactive server install, the guided self-change prompt defaults to `yes` because the
+first owner-deployment qualification requires that evidence. For noninteractive tests and staged
+dry-runs, it still defaults to disabled unless `MELLOA_SETUP_ENABLE_SELF_CHANGE=yes` is supplied.
 For the first real owner-deployment qualification, prepare a fine-grained GitHub token for this
 repository with contents read/write access and a separate Codex/OpenAI API key for planning, then
-answer `yes` and choose `api-key`. The `ollama`/`lmstudio` local provider mode remains available
-for a separately qualified local-model deployment, not for the hosted first path. First install
-refuses the enabled path on the real server unless bootstrap has prepared the pinned Codex CLI with
+choose `api-key`. The `ollama`/`lmstudio` local provider mode remains available for a separately
+qualified local-model deployment, not for the hosted first path. First install refuses the enabled
+path on the real server unless bootstrap has prepared the pinned Codex CLI with
 `--self-change-tools`. When disabled, activation stops and disables the planner/applier units, and
 the units have an `ExecCondition` gate so an accidental manual start does not run the workers.
 

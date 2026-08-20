@@ -577,6 +577,14 @@ prompt_yes_no() {
   esac
 }
 
+self_change_prompt_default() {
+  if [[ "$DESTINATION_ROOT" == / && -t 0 ]]; then
+    printf 'yes'
+  else
+    printf 'no'
+  fi
+}
+
 codex_self_change_tools_command() {
   local command_line
   local -a bootstrap_command=(
@@ -869,8 +877,9 @@ write_private_text "$STAGE/restic-password" "$restic_password"
 unset restic_password
 
 declare -a SELF_CHANGE_ARGS=(--self-change-disabled)
+readonly SELF_CHANGE_DEFAULT="$(self_change_prompt_default)"
 if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \
-  "Enable bounded self-change workers for readiness qualification" no; then
+  "Enable bounded self-change workers for readiness qualification" "$SELF_CHANGE_DEFAULT"; then
   require_codex_self_change_tools
   SELF_CHANGE_ARGS=()
   github_token="$(
@@ -919,6 +928,10 @@ if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \
   esac
   if [[ -n "$codex_model" ]]; then
     SELF_CHANGE_ARGS+=("--codex-model" "$codex_model")
+  fi
+else
+  if [[ "$SELF_CHANGE_DEFAULT" == yes ]]; then
+    echo "Self-change workers were left disabled; this is a conversation-only bring-up, not a readiness qualification." >&2
   fi
 fi
 
