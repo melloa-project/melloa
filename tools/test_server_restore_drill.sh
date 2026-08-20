@@ -53,6 +53,7 @@ run_restore_drill() {
 }
 
 install -d -m 0700 "$TARGET/etc/melloa/private" "$TARGET/backup-repository" "$FAKEBIN"
+install -m 0666 /dev/null "$LOG"
 install -m 0600 /dev/null "$TARGET/etc/melloa/private/postgres-migration-password"
 printf '%s\n' "$MIGRATION_PASSWORD" >"$TARGET/etc/melloa/private/postgres-migration-password"
 {
