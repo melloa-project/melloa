@@ -69,6 +69,7 @@ check-generated:
 		infra/server/backup.sh \
 		infra/server/reconcile-logins.sh \
 		tools/server_release.sh \
+		tools/self_change_verify.sh \
 		tools/restore_drill.sh \
 		tools/test_postgres_integration.sh \
 		tools/test_server_runtime.sh

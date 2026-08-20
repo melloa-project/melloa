@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 from melloa.domain.base import QualifiedName, RecordId, Sha256Digest
@@ -31,9 +32,38 @@ class SelfChangePlanningError(RuntimeError):
         self.reason_code = reason_code
 
 
+class SelfChangeReleaseError(RuntimeError):
+    """An exact approved candidate could not be safely released."""
+
+    def __init__(self, reason_code: QualifiedName) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+
+
 class SelfChangePlanner(Protocol):
     def plan(self, change: SelfChange) -> PlannedSelfChange:
         """Prepare one untrusted proposal from explicit request text and public source."""
+
+
+class SelfChangeReleaseExecutor(Protocol):
+    def prepare_candidate(self, change: SelfChange) -> GitRevision:
+        """Apply, verify, and commit only the exact approved patch locally."""
+
+    def release_candidate(self, change: SelfChange) -> None:
+        """Push and deploy the retained candidate, rolling back on publication failure."""
+
+
+class SelfChangeCandidateVerifier(Protocol):
+    def verify(self, checkout: Path) -> None:
+        """Test approved code in an environment without deployment or owner credentials."""
+
+
+class SelfChangeDeployment(Protocol):
+    def deploy(self, checkout: Path, revision: GitRevision) -> None:
+        """Activate one exact tested candidate with automatic release recovery."""
+
+    def rollback(self, checkout: Path) -> None:
+        """Restore the previous healthy release without discarding owner data."""
 
 
 class SelfChangeStore(Protocol):
@@ -136,9 +166,13 @@ class SelfChangeStore(Protocol):
 
 
 __all__ = [
+    "SelfChangeCandidateVerifier",
     "SelfChangeConflictError",
+    "SelfChangeDeployment",
     "SelfChangeNotFoundError",
     "SelfChangePlanner",
     "SelfChangePlanningError",
+    "SelfChangeReleaseError",
+    "SelfChangeReleaseExecutor",
     "SelfChangeStore",
 ]

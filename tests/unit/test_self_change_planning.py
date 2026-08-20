@@ -163,6 +163,32 @@ def test_codex_planner_rejects_control_plane_changes(
         raise AssertionError("protected change was accepted")
 
 
+def test_codex_planner_rejects_changes_to_its_own_control_plane(
+    tmp_path: Path,
+    fixed_time,
+) -> None:
+    repository, work_root, git = _repository(tmp_path)
+    codex = _fake_codex(
+        tmp_path,
+        "mkdir -p src/melloa/adapters/coding\n"
+        "printf 'unsafe = True\\n' > src/melloa/adapters/coding/new_control.py\n",
+    )
+    planner = CodexCliSourceChangePlanner(
+        repository=repository,
+        work_root=work_root,
+        codex_executable=codex,
+        git_executable=git,
+        timeout_seconds=10,
+    )
+
+    try:
+        planner.plan(_planning_change(fixed_time))
+    except SelfChangePlanningError as error:
+        assert error.reason_code == "self_change.protected_path_changed"
+    else:
+        raise AssertionError("self-change control-plane change was accepted")
+
+
 def _repository(tmp_path: Path) -> tuple[Path, Path, Path]:
     git_path = shutil.which("git")
     assert git_path is not None

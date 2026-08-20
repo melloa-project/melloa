@@ -16,10 +16,12 @@ from melloa.ports.self_change import SelfChangePlanningError
 _ALLOWED_ROOTS: Final = ("apps/web/src/", "src/melloa/", "tests/")
 _PROTECTED_PATHS: Final = (
     "src/melloa/adapters/guardian/",
+    "src/melloa/adapters/coding/",
     "src/melloa/adapters/postgres/",
     "src/melloa/adapters/telegram.py",
     "src/melloa/application/release_activation.py",
     "src/melloa/application/self_change.py",
+    "src/melloa/application/self_change_applying.py",
     "src/melloa/application/self_change_planning.py",
     "src/melloa/apps/cli.py",
     "src/melloa/apps/core.py",
@@ -43,7 +45,6 @@ _AGENT_ENVIRONMENT: Final = frozenset(
         "HTTPS_PROXY",
         "NO_PROXY",
         "OPENAI_API_KEY",
-        "PATH",
         "SSL_CERT_DIR",
         "SSL_CERT_FILE",
     }
@@ -63,6 +64,8 @@ class CodexCliSourceChangePlanner:
         model: str | None = None,
         local_provider: Literal["ollama", "lmstudio"] | None = None,
         agent_environment: Mapping[str, str] | None = None,
+        agent_uid: int | None = None,
+        agent_gid: int | None = None,
         timeout_seconds: int = 1_800,
     ) -> None:
         for path, label in (
@@ -75,6 +78,12 @@ class CodexCliSourceChangePlanner:
                 raise ValueError(f"{label} path must be absolute")
         if timeout_seconds < 1:
             raise ValueError("Codex planning timeout must be positive")
+        if (agent_uid is None) != (agent_gid is None):
+            raise ValueError("Codex agent UID and GID must be supplied together")
+        if agent_uid is not None and (agent_uid <= 0 or agent_gid is None or agent_gid <= 0):
+            raise ValueError("Codex agent UID and GID must be positive non-root IDs")
+        if agent_uid is not None and os.geteuid() != 0:
+            raise ValueError("a separate Codex agent identity requires a root broker")
         try:
             work_root.resolve().relative_to(repository.resolve())
         except ValueError:
@@ -93,6 +102,8 @@ class CodexCliSourceChangePlanner:
         self._model = model
         self._local_provider = local_provider
         self._environment = environment
+        self._agent_uid = agent_uid
+        self._agent_gid = agent_gid
         self._timeout_seconds = timeout_seconds
 
     def plan(self, change: SelfChange) -> PlannedSelfChange:
@@ -111,10 +122,11 @@ class CodexCliSourceChangePlanner:
         checkout = workspace / "source"
         try:
             self._run_git(("worktree", "add", "--quiet", "--detach", str(checkout), revision))
+            self._prepare_agent_workspace(workspace)
             self._run_codex(checkout, change.request_text)
             self._run_git(("-C", str(checkout), "add", "--intent-to-add", "--all"))
             changed_paths = self._changed_paths(checkout)
-            self._validate_paths(checkout, changed_paths)
+            validate_self_change_paths(checkout, changed_paths)
             self._run_git(("-C", str(checkout), "diff", "--check", "HEAD", "--"))
             binary = self._run_git(
                 ("-C", str(checkout), "diff", "--numstat", "HEAD", "--")
@@ -209,11 +221,29 @@ class CodexCliSourceChangePlanner:
                 stderr=subprocess.DEVNULL,
                 timeout=self._timeout_seconds,
                 start_new_session=True,
+                user=self._agent_uid,
+                group=self._agent_gid,
+                extra_groups=() if self._agent_uid is not None else None,
+                umask=0o077,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             raise SelfChangePlanningError("self_change.coding_agent_unavailable") from error
         if completed.returncode != 0:
             raise SelfChangePlanningError("self_change.coding_agent_failed")
+
+    def _prepare_agent_workspace(self, workspace: Path) -> None:
+        if self._agent_uid is None or self._agent_gid is None:
+            return
+        for root, directories, files in os.walk(workspace, followlinks=False):
+            root_path = Path(root)
+            os.chown(root_path, self._agent_uid, self._agent_gid, follow_symlinks=False)
+            for name in (*directories, *files):
+                os.chown(
+                    root_path / name,
+                    self._agent_uid,
+                    self._agent_gid,
+                    follow_symlinks=False,
+                )
 
     def _changed_paths(self, checkout: Path) -> tuple[str, ...]:
         result = self._run_git(
@@ -230,26 +260,6 @@ class CodexCliSourceChangePlanner:
         if not paths:
             raise SelfChangePlanningError("self_change.empty_proposal")
         return paths
-
-    @staticmethod
-    def _validate_paths(checkout: Path, paths: Sequence[str]) -> None:
-        for raw_path in paths:
-            path = PurePosixPath(raw_path)
-            if (
-                path.is_absolute()
-                or ".." in path.parts
-                or "\\" in raw_path
-                or not any(raw_path.startswith(root) for root in _ALLOWED_ROOTS)
-                or any(
-                    raw_path == protected.rstrip("/")
-                    or raw_path.startswith(protected)
-                    for protected in _PROTECTED_PATHS
-                )
-            ):
-                raise SelfChangePlanningError("self_change.protected_path_changed")
-            filesystem_path = checkout / path
-            if filesystem_path.is_symlink():
-                raise SelfChangePlanningError("self_change.symlink_change_forbidden")
 
     def _require_runtime_paths(self) -> None:
         if (
@@ -287,4 +297,23 @@ class CodexCliSourceChangePlanner:
         return completed
 
 
-__all__ = ["CodexCliSourceChangePlanner"]
+def validate_self_change_paths(checkout: Path, paths: Sequence[str]) -> None:
+    for raw_path in paths:
+        path = PurePosixPath(raw_path)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or "\\" in raw_path
+            or not any(raw_path.startswith(root) for root in _ALLOWED_ROOTS)
+            or any(
+                raw_path == protected.rstrip("/") or raw_path.startswith(protected)
+                for protected in _PROTECTED_PATHS
+            )
+        ):
+            raise SelfChangePlanningError("self_change.protected_path_changed")
+        filesystem_path = checkout / path
+        if filesystem_path.is_symlink():
+            raise SelfChangePlanningError("self_change.symlink_change_forbidden")
+
+
+__all__ = ["CodexCliSourceChangePlanner", "validate_self_change_paths"]
