@@ -1,0 +1,22 @@
+---
+const commands = `sudo apt-get update
+sudo apt-get install --yes --no-install-recommends ca-certificates git
+git clone https://github.com/melloa-project/melloa.git
+cd melloa
+sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/first-install.sh --source "$PWD"`;
+---
+
+<section class="melloa-command-spine" aria-labelledby="melloa-command-spine-title">
+  <div class="melloa-command-copy">
+    <p class="melloa-eyebrow">First server path</p>
+    <h2 id="melloa-command-spine-title">
+      Clone it, pair Telegram, talk to Melli, then improve the system from inside the system.
+    </h2>
+    <p>
+      Start hosted-provider-first. No local GPU is expected for the first deployment. The first
+      proof is a real Telegram conversation followed by one bounded owner-approved self-change.
+    </p>
+  </div>
+  <pre aria-label="Melloa first server command spine"><code>{commands}</code></pre>
+</section>

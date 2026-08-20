@@ -16,6 +16,7 @@ hero:
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
+import CommandSpine from "../../components/CommandSpine.astro";
 
 The current path is intentionally concrete: a dedicated Debian server, a private Telegram bot chat,
 two hosted OpenAI-compatible model routes, encrypted backups, and a bounded self-change loop that
@@ -23,6 +24,8 @@ can propose, commit, push, deploy, and roll back owner-approved changes.
 
 This site is the public front door. It should help you get a working Melli, then use Melli to improve
 the system from there.
+
+<CommandSpine />
 
 <CardGrid>
   <Card title="Telegram first" icon="mobile">

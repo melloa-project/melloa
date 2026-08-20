@@ -8,12 +8,23 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     homepage = (DOCS_SITE / "src/content/docs/index.mdx").read_text(
         encoding="utf-8"
     )
+    command_spine = (DOCS_SITE / "src/components/CommandSpine.astro").read_text(
+        encoding="utf-8"
+    )
 
     assert "Run Melloa on a home server" in homepage
     assert "setup discovers your numeric owner ID during private pairing" in homepage
     assert "hosted OpenAI-compatible model routes" in homepage
     assert "You do not need a local GPU or local model to begin" in homepage
     assert "Self-change is core" in homepage
+    assert "CommandSpine" in homepage
+    assert "First server path" in command_spine
+    assert (
+        'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools'
+        in command_spine
+    )
+    assert 'sudo infra/server/first-install.sh --source "$PWD"' in command_spine
+    assert "owner-approved self-change" in command_spine
 
     stale_claims = [
         "not ready",
