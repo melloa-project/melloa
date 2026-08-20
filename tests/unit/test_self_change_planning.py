@@ -270,7 +270,15 @@ def _repository(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 def _fake_codex(tmp_path: Path, body: str) -> Path:
     executable = tmp_path / f"fake-codex-{len(tuple(tmp_path.glob('fake-codex-*')))}"
-    executable.write_text("#!/bin/sh\nset -eu\n" + body, encoding="utf-8")
+    executable.write_text(
+        "#!/bin/sh\n"
+        "set -eu\n"
+        '[ "$1" = "--ask-for-approval" ]\n'
+        '[ "$2" = "never" ]\n'
+        '[ "$3" = "exec" ]\n'
+        + body,
+        encoding="utf-8",
+    )
     executable.chmod(0o700)
     return executable
 

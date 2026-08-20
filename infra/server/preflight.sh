@@ -158,11 +158,16 @@ version_at_least "$NODE_VERSION" 22.0.0 || fail "Node.js 22 or newer is required
 readonly COMPOSE_VERSION="$(docker compose version --short | sed 's/^v//')"
 version_at_least "$COMPOSE_VERSION" 2.27.0 || fail "Docker Compose 2.27 or newer is required"
 
-readonly CODEX_HELP="$(codex exec --help 2>&1)"
+readonly CODEX_HELP="$(codex --help 2>&1)"
+readonly CODEX_EXEC_HELP="$(codex exec --help 2>&1)"
 [[ -x /usr/local/bin/codex ]] || fail "Codex CLI must be installed at /usr/local/bin/codex"
-for option in --sandbox --ask-for-approval --ephemeral --ignore-user-config --oss --local-provider; do
+for option in --sandbox --ask-for-approval --oss --local-provider; do
   grep --fixed-strings --quiet -- "$option" <<<"$CODEX_HELP" ||
     fail "Codex CLI does not support required option: $option"
+done
+for option in --ephemeral --ignore-user-config; do
+  grep --fixed-strings --quiet -- "$option" <<<"$CODEX_EXEC_HELP" ||
+    fail "Codex CLI exec does not support required option: $option"
 done
 
 [[ -d "$SOURCE/.git" && ! -L "$SOURCE/.git" ]] || fail "source must be a Git checkout"

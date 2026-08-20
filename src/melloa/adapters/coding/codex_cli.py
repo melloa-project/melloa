@@ -233,11 +233,11 @@ class CodexCliSourceChangePlanner:
         )
         command = [
             str(self._codex_executable),
+            "--ask-for-approval",
+            "never",
             "exec",
             "--sandbox",
             "workspace-write",
-            "--ask-for-approval",
-            "never",
             "--ephemeral",
             "--ignore-user-config",
             "--cd",
