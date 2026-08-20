@@ -5,10 +5,10 @@ from unittest.mock import Mock
 
 from melloa.adapters.fakes.conversation import InMemoryConversationStore
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
-from melloa.application.owner_status import OwnerStatusReporter
+from melloa.application.owner_status import OwnerModelRoutes, OwnerStatusReporter
 from melloa.domain.conversation import ConversationProcessingState
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
-from melloa.domain.models import ModelGatewayHealth, ModelHealthState
+from melloa.domain.models import ModelGatewayHealth, ModelHealthState, ModelRoute
 from melloa.ports.telegram import TelegramDeliverySummary
 from tests.conftest import record_id
 
@@ -150,3 +150,34 @@ def test_owner_status_rejects_writable_or_stale_backup_marker(fixed_time, tmp_pa
 
     marker.chmod(0o600)
     assert "Backup: stale (48h 0m old)" in reporter.render()
+
+
+def test_owner_status_reports_selected_route_and_both_targets(fixed_time) -> None:
+    telegram = Mock()
+    telegram.delivery_summary.return_value = TelegramDeliverySummary(0, 0, 0, 0, 0)
+    reporter = OwnerStatusReporter(
+        guardian_reader=_guardian(fixed_time),
+        conversation_store=InMemoryConversationStore(),
+        telegram_store=telegram,
+        thread_id=record_id("thread", 1),
+        model_id=None,
+        model_health=None,
+        model_routes=OwnerModelRoutes(
+            capable_model_id="capable-v1",
+            economy_model_id="economy-v1",
+            health=lambda _route: ModelGatewayHealth(
+                state=ModelHealthState.HEALTHY,
+                checked_at=fixed_time,
+                latency_ms=5,
+                reason_code="model.endpoint_ready",
+            ),
+            selected=lambda: ModelRoute.CAPABLE,
+        ),
+        backup_status_file=None,
+        clock=lambda: fixed_time,
+    )
+
+    status = reporter.render()
+
+    assert "Route: capable" in status
+    assert "Models: economy economy-v1 — healthy; capable capable-v1 — healthy" in status

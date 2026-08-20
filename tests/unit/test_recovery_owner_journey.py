@@ -14,6 +14,7 @@ def test_recovery_expectation_contains_only_record_ids_and_is_private(tmp_path) 
         message_id="message_00000000000000000000000000000001",
         session_id="session_00000000000000000000000000000001",
         assertion_id="assertion_00000000000000000000000000000001",
+        telegram_update_id=9_001,
     )
     path = tmp_path / "expectation.json"
 
@@ -38,6 +39,7 @@ def test_recovery_receipt_tracks_only_current_migrations() -> None:
         "0010_m1_owner_session_retention_cleanup.sql",
         "0011_owner_conversation_deletion.sql",
         "0012_owner_telegram_channel.sql",
+        "0013_owner_model_routes.sql",
     ]
     assert set(receipt["checks"].values()) == {"pass"}
     assert recovery.SENSITIVE_FIXTURE_MARKER not in json.dumps(receipt)

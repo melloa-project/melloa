@@ -18,6 +18,7 @@ from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.owner_telegram import TELEGRAM_THREAD_ID, OwnerTelegramService
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
+from melloa.domain.models import ModelRoute
 from melloa.domain.telegram import (
     TelegramDelivery,
     TelegramDeliveryKind,
@@ -118,6 +119,10 @@ def _service(
         fixed_time,
         response_text=response_text,
     )
+    telegram_store.owner_channel.return_value = _channel(
+        fixed_time,
+        last_update_id=None,
+    )
     service = OwnerTelegramService(
         config=TelegramOwnerConfig(
             owner_user_id=_OWNER_USER_ID,
@@ -160,10 +165,16 @@ def _update(
     )
 
 
-def _channel(fixed_time: datetime, *, last_update_id: int | None) -> TelegramOwnerChannel:
+def _channel(
+    fixed_time: datetime,
+    *,
+    last_update_id: int | None,
+    model_route: ModelRoute = ModelRoute.ECONOMY,
+) -> TelegramOwnerChannel:
     return TelegramOwnerChannel(
         owner_user_id=_OWNER_USER_ID,
         owner_chat_id=_OWNER_CHAT_ID,
+        model_route=model_route,
         last_update_id=last_update_id,
         created_at=fixed_time,
         updated_at=fixed_time,
@@ -236,9 +247,71 @@ def test_only_exact_owner_private_chat_enters_one_canonical_conversation(fixed_t
     ]
     assert all(message.source_client == "client.telegram" for message in messages)
     assert len(model.requests) == 1
+    assert model.requests[0].route is ModelRoute.ECONOMY
     assert telegram_store.advance_update.call_count == 3
     assert telegram_store.accept_conversation_update.call_count == 2
     assert telegram_store.mark_conversation_ready.call_count == 2
+
+
+def test_model_route_commands_do_not_enter_conversation(fixed_time) -> None:
+    telegram_store = Mock()
+    client = FakeTelegramClient()
+    service, conversation_store, model = _service(
+        fixed_time,
+        telegram_store=telegram_store,
+        client=client,
+    )
+    capable_notice = _delivery(
+        fixed_time,
+        update_id=20,
+        kind=TelegramDeliveryKind.MODEL_ROUTE,
+        state=TelegramDeliveryState.READY,
+        notice_code="telegram.model_route.capable",
+    )
+    telegram_store.accept_model_route_update.return_value = capable_notice
+
+    service._accept_update(_update(20, text="/model capable"))
+
+    telegram_store.accept_model_route_update.assert_called_once_with(
+        update_id=20,
+        incoming_message_id=120,
+        model_route=ModelRoute.CAPABLE,
+        now=fixed_time,
+        max_attempts=8,
+    )
+    assert conversation_store.list_threads(record_id("owner", 1)) == ()
+    assert model.requests == []
+    assert "Model route: capable" in service._delivery_parts(capable_notice)[0]
+    assert "silently" in service._delivery_parts(capable_notice)[0]
+
+
+def test_think_uses_capable_once_without_changing_saved_route(fixed_time) -> None:
+    telegram_store = Mock()
+    client = FakeTelegramClient()
+    service, conversation_store, model = _service(
+        fixed_time,
+        telegram_store=telegram_store,
+        client=client,
+    )
+
+    def accept(**kwargs):
+        return _delivery(
+            fixed_time,
+            update_id=kwargs["update_id"],
+            kind=TelegramDeliveryKind.CONVERSATION,
+            state=TelegramDeliveryState.AWAITING_REPLY,
+            inbound_message_id=kwargs["inbound_message_id"],
+        )
+
+    telegram_store.accept_conversation_update.side_effect = accept
+
+    service._accept_update(_update(21, text="/think  Consider this carefully"))
+
+    messages = conversation_store.list_messages(TELEGRAM_THREAD_ID)
+    assert messages[0].parts[0].text == "Consider this carefully"
+    assert messages[0].model_route is ModelRoute.CAPABLE
+    assert model.requests[0].route is ModelRoute.CAPABLE
+    assert telegram_store.owner_channel.return_value.model_route is ModelRoute.ECONOMY
 
 
 def test_poll_uses_durable_offset_and_status_never_enters_conversation(fixed_time) -> None:

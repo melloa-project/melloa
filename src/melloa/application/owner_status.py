@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import stat
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
@@ -15,7 +16,7 @@ from pydantic import ConfigDict, Field, ValidationError
 from melloa.domain.base import AwareDatetime, ContractModel, RecordId, utc_now
 from melloa.domain.conversation import ConversationProcessingState
 from melloa.domain.guardian import GuardianMode
-from melloa.domain.models import ModelGatewayHealth, ModelHealthState
+from melloa.domain.models import ModelGatewayHealth, ModelHealthState, ModelRoute
 from melloa.ports.conversation import ConversationNotFoundError, ConversationStore
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.telegram import TelegramStore
@@ -39,6 +40,14 @@ class BackupMarker(ContractModel):
     reason_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_.-]{1,127}$")
 
 
+@dataclass(frozen=True)
+class OwnerModelRoutes:
+    capable_model_id: str
+    economy_model_id: str
+    health: Callable[[ModelRoute], ModelGatewayHealth]
+    selected: Callable[[], ModelRoute]
+
+
 class OwnerStatusReporter:
     def __init__(
         self,
@@ -50,11 +59,14 @@ class OwnerStatusReporter:
         model_id: str | None,
         model_health: Callable[[], ModelGatewayHealth] | None,
         backup_status_file: Path | None,
+        model_routes: OwnerModelRoutes | None = None,
         clock: Callable[[], datetime] = utc_now,
         backup_stale_after: timedelta = timedelta(hours=26),
     ) -> None:
         if backup_stale_after <= timedelta(0):
             raise ValueError("backup stale interval must be positive")
+        if model_routes is not None and (model_id is not None or model_health is not None):
+            raise ValueError("single-model and routed-model status cannot be combined")
         self._guardian_reader = guardian_reader
         self._conversation_store = conversation_store
         self._telegram_store = telegram_store
@@ -62,6 +74,7 @@ class OwnerStatusReporter:
         self._model_id = model_id
         self._model_health = model_health
         self._backup_status_file = backup_status_file
+        self._model_routes = model_routes
         self._clock = clock
         self._backup_stale_after = backup_stale_after
 
@@ -81,7 +94,7 @@ class OwnerStatusReporter:
             guardian_text = "unverified"
             degraded = True
 
-        model_text, model_degraded = self._model_summary()
+        model_lines, model_degraded = self._model_summary()
         degraded = degraded or model_degraded
 
         conversation_pending, conversation_failed, conversation_unknown = (
@@ -108,24 +121,57 @@ class OwnerStatusReporter:
                 "Melli status",
                 f"Overall: {'degraded' if degraded else 'healthy'}",
                 f"Release: {CURRENT_RELEASE.release_display}",
-                f"Model: {model_text}",
+                *model_lines,
                 f"Backlog: {conversation_pending} replies, {delivery_text}; {failed} failed",
                 f"Guardian: {guardian_text}",
                 f"Backup: {backup_text}",
             )
         )
 
-    def _model_summary(self) -> tuple[str, bool]:
+    def _model_summary(self) -> tuple[tuple[str, ...], bool]:
+        if self._model_routes is not None:
+            return self._routed_model_summary()
         if self._model_id is None or self._model_health is None:
-            return "not configured", True
+            return ("Model: not configured",), True
         model_id = _single_line(self._model_id)
         try:
             health = self._model_health()
         except Exception:
-            return f"{model_id} — unavailable", True
+            return (f"Model: {model_id} — unavailable",), True
         return (
-            f"{model_id} — {health.state.value}",
+            (f"Model: {model_id} — {health.state.value}",),
             health.state is not ModelHealthState.HEALTHY,
+        )
+
+    def _routed_model_summary(self) -> tuple[tuple[str, ...], bool]:
+        routes = self._model_routes
+        if routes is None:
+            raise RuntimeError("routed model status is unavailable")
+        degraded = False
+        try:
+            selected = routes.selected().value
+        except Exception:
+            selected = "unknown"
+            degraded = True
+        summaries: list[str] = []
+        for route, model_id in (
+            (ModelRoute.ECONOMY, routes.economy_model_id),
+            (ModelRoute.CAPABLE, routes.capable_model_id),
+        ):
+            try:
+                health = routes.health(route)
+                state = health.state.value
+                degraded = degraded or health.state is not ModelHealthState.HEALTHY
+            except Exception:
+                state = "unavailable"
+                degraded = True
+            summaries.append(f"{route.value} {_single_line(model_id)} — {state}")
+        return (
+            (
+                f"Route: {selected}",
+                f"Models: {'; '.join(summaries)}",
+            ),
+            degraded,
         )
 
     def _conversation_summary(self) -> tuple[int, int, bool]:
@@ -201,4 +247,9 @@ def _single_line(value: str) -> str:
     return normalized[:256] if normalized else "unnamed model"
 
 
-__all__ = ["BackupMarker", "BackupResult", "OwnerStatusReporter"]
+__all__ = [
+    "BackupMarker",
+    "BackupResult",
+    "OwnerModelRoutes",
+    "OwnerStatusReporter",
+]

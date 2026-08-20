@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from melloa.domain.base import QualifiedName, RecordId
+from melloa.domain.models import ModelRoute
 from melloa.domain.telegram import TelegramDelivery, TelegramOwnerChannel
 
 
@@ -33,6 +34,7 @@ class TelegramStore(Protocol):
         *,
         owner_user_id: int,
         owner_chat_id: int,
+        initial_model_route: ModelRoute,
         now: datetime,
     ) -> TelegramOwnerChannel:
         """Create or validate the permanent exact-owner channel binding."""
@@ -63,6 +65,17 @@ class TelegramStore(Protocol):
         max_attempts: int,
     ) -> TelegramDelivery:
         """Atomically advance the cursor and enqueue an owner status response."""
+
+    def accept_model_route_update(
+        self,
+        *,
+        update_id: int,
+        incoming_message_id: int,
+        model_route: ModelRoute | None,
+        now: datetime,
+        max_attempts: int,
+    ) -> TelegramDelivery:
+        """Persist an optional route change and its exact acknowledgement atomically."""
 
     def awaiting_conversation_deliveries(self, *, limit: int) -> tuple[TelegramDelivery, ...]:
         """Return accepted owner messages whose canonical reply is not ready yet."""

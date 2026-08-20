@@ -22,9 +22,11 @@ architecture and preview machinery, and make conversation with Melli the unmista
 There is no milestone implementation queue and no compatibility promise for preview behavior.
 
 The main branch now has an exact-owner Telegram long-polling path with a PostgreSQL cursor,
-canonical conversation continuity, and restart-safe reply delivery. It is still integration work,
-not an owner deployment path: server installation, backup automation, model routing,
-self-modification, rollback, and real deployed dogfooding remain incomplete.
+canonical conversation continuity, restart-safe reply delivery, and explicit `capable`/`economy`
+model routing. The selected route and actual model destination survive retries and are retained with
+the conversation; Melloa never silently falls back across routes. It is still integration work, not
+an owner deployment path: server installation, automatic backup, policy-bounded self-modification,
+release rollback, real provider configuration, and deployed dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.
@@ -91,6 +93,33 @@ make preview PREVIEW_MODEL=ollama
 ```
 
 This remains disposable and is not the target owner experience.
+
+## Current Telegram model controls
+
+The server integration now requires two distinct model config files whenever Telegram is enabled:
+
+- `--capable-model-config` can target an OpenAI-compatible Responses API by setting
+  `"api_style": "responses"`; this is the bounded path intended for a capable OpenAI model;
+- `--economy-model-config` can target a cheaper hosted router or a private/local compatible model;
+  [the Ollama example](config/model/ollama.example.json) shows the local shape.
+
+Each file declares its exact endpoint, model, processing location, sensitivity allowance, token and
+cost ceilings, timeout, and optional owner-only token file. External owner context is sent only to
+the explicitly selected route. API requests ask the provider not to store responses, and a route
+outage is reported rather than triggering a different provider or cost boundary.
+
+In the exact-owner private Telegram chat:
+
+- `/model` reports the saved route;
+- `/model economy` and `/model capable` change the route for later messages;
+- `/think …` uses the capable route once without changing the saved route;
+- `/status` reports the selected route and health of both configured targets.
+
+Telegram bot chats are not end-to-end encrypted; “private” here means the bot accepts only the
+configured numeric owner and one-to-one chat, not Secret Chat-level secrecy.
+
+These mechanics are tested across PostgreSQL restart and recovery, but no real provider/server
+journey has yet qualified them for the readiness banner above.
 
 ## What must remain true
 

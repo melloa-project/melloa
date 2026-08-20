@@ -4,6 +4,7 @@ import pytest
 
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.models.openai_compatible import OpenAICompatibleModelConfig
+from melloa.adapters.models.routed import ModelRouteConfigs
 from melloa.adapters.telegram import TelegramOwnerConfig
 from melloa.apps.runtime import build_runtime
 from melloa.domain.classification import Sensitivity
@@ -23,11 +24,11 @@ def _guardian(fixed_time):
     )
 
 
-def _model_config() -> OpenAICompatibleModelConfig:
+def _model_config(model_id: str = "runtime-test-v1") -> OpenAICompatibleModelConfig:
     return OpenAICompatibleModelConfig(
         display_name="Local test model",
         provider_id="provider.runtime-test",
-        model_id="runtime-test-v1",
+        model_id=model_id,
         base_url="http://127.0.0.1:11434/v1",
         allowed_sensitivities=frozenset(Sensitivity),
     )
@@ -52,11 +53,29 @@ def test_telegram_runtime_requires_secret_pair_model_and_postgres(fixed_time) ->
             telegram_config=telegram,
             telegram_bot_token=token,
         )
-    with pytest.raises(ValueError, match="conversation model"):
+    with pytest.raises(ValueError, match="capable and economy"):
         build_runtime(
             _guardian(fixed_time),
             "runtime-owner-credential-value-0001",
             database_connection=object(),  # type: ignore[arg-type]
             telegram_config=telegram,
             telegram_bot_token=token,
+        )
+
+
+def test_runtime_rejects_aliased_or_combined_model_routes(fixed_time) -> None:
+    model = _model_config()
+    with pytest.raises(ValueError, match="distinct model targets"):
+        ModelRouteConfigs(capable=model, economy=model)
+
+    routes = ModelRouteConfigs(
+        capable=_model_config("capable-test-v1"),
+        economy=_model_config("economy-test-v1"),
+    )
+    with pytest.raises(ValueError, match="cannot be combined"):
+        build_runtime(
+            _guardian(fixed_time),
+            "runtime-owner-credential-value-0001",
+            model,
+            model_routes=routes,
         )

@@ -22,6 +22,7 @@ from melloa.adapters.models.openai_compatible import (
     OpenAICompatibleModelConfig,
     OpenAICompatibleModelGateway,
 )
+from melloa.adapters.models.routed import ModelRouteConfigs, RoutedModelGateway
 from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
@@ -30,7 +31,7 @@ from melloa.adapters.postgres.telegram import PostgresTelegramStore
 from melloa.adapters.telegram import TelegramBotClient, TelegramOwnerConfig
 from melloa.application.conversation import ConversationModelLimits, ConversationService
 from melloa.application.exports import OwnerExportService
-from melloa.application.owner_status import OwnerStatusReporter
+from melloa.application.owner_status import OwnerModelRoutes, OwnerStatusReporter
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.core import AccessScope, create_app
 from melloa.apps.owner_telegram import TELEGRAM_THREAD_ID, OwnerTelegramService
@@ -64,6 +65,7 @@ class MelloaRuntime:
     owner_sessions: OwnerSessionManager
     event_audit_store: EventAuditStore
     model_id: str | None
+    model_routes: ModelRouteConfigs | None
     persistence: str
     owner_telegram: OwnerTelegramService | None
 
@@ -91,6 +93,7 @@ def build_runtime(
     bootstrap_token: str,
     model_config: OpenAICompatibleModelConfig | None = None,
     *,
+    model_routes: ModelRouteConfigs | None = None,
     database_connection: psycopg.Connection[tuple[Any, ...]] | None = None,
     clock: Callable[[], datetime] = utc_now,
     id_factory: Callable[[str], str] = new_record_id,
@@ -100,12 +103,14 @@ def build_runtime(
     telegram_bot_token: str | None = None,
     backup_status_file: Path | None = None,
 ) -> MelloaRuntime:
+    if model_config is not None and model_routes is not None:
+        raise ValueError("single-model and routed-model configuration cannot be combined")
     if (telegram_config is None) != (telegram_bot_token is None):
         raise ValueError("Telegram owner config and bot token must be supplied together")
     if telegram_config is not None and database_connection is None:
         raise ValueError("Telegram owner service requires PostgreSQL persistence")
-    if telegram_config is not None and model_config is None:
-        raise ValueError("Telegram owner service requires a configured conversation model")
+    if telegram_config is not None and model_routes is None:
+        raise ValueError("Telegram owner service requires capable and economy model routes")
 
     database_lock: RLock | None = None
     if database_connection is None:
@@ -153,24 +158,32 @@ def build_runtime(
         )
         persistence = "postgresql"
 
-    model_gateway = (
-        None
-        if model_config is None
-        else OpenAICompatibleModelGateway(
+    model_gateway: OpenAICompatibleModelGateway | RoutedModelGateway | None
+    routed_model_gateway: RoutedModelGateway | None = None
+    if model_routes is not None:
+        routed_model_gateway = RoutedModelGateway(
+            capable=OpenAICompatibleModelGateway(
+                model_routes.capable,
+                clock=clock,
+                id_factory=id_factory,
+            ),
+            economy=OpenAICompatibleModelGateway(
+                model_routes.economy,
+                clock=clock,
+                id_factory=id_factory,
+            ),
+            clock=clock,
+        )
+        model_gateway = routed_model_gateway
+    elif model_config is not None:
+        model_gateway = OpenAICompatibleModelGateway(
             model_config,
             clock=clock,
             id_factory=id_factory,
         )
-    )
-    model_limits = ConversationModelLimits(
-        latency_deadline_ms=30_000 if model_config is None else model_config.timeout_ms,
-        max_input_tokens=4_096 if model_config is None else model_config.max_input_tokens,
-        max_output_tokens=1_024 if model_config is None else model_config.max_output_tokens,
-        cost_ceiling_gbp=(
-            0.0 if model_config is None else model_config.estimated_max_cost_gbp
-        ),
-        prompt_version="conversation-response-v2",
-    )
+    else:
+        model_gateway = None
+    model_limits = _conversation_model_limits(model_config, model_routes)
     conversation = ConversationService(
         owner_id=OWNER_ID,
         intelligence_id=MELLI_ID,
@@ -200,7 +213,8 @@ def build_runtime(
             database_connection is None
             or database_lock is None
             or model_gateway is None
-            or model_config is None
+            or model_routes is None
+            or routed_model_gateway is None
         ):
             raise ValueError("Telegram owner service dependencies are unavailable")
         telegram_store = cast(
@@ -212,8 +226,14 @@ def build_runtime(
             conversation_store=conversation_store,
             telegram_store=telegram_store,
             thread_id=TELEGRAM_THREAD_ID,
-            model_id=model_config.model_id,
-            model_health=model_gateway.health,
+            model_id=None,
+            model_health=None,
+            model_routes=OwnerModelRoutes(
+                capable_model_id=model_routes.capable.model_id,
+                economy_model_id=model_routes.economy.model_id,
+                health=routed_model_gateway.route_health,
+                selected=lambda: telegram_store.owner_channel().model_route,
+            ),
             backup_status_file=backup_status_file,
             clock=clock,
         )
@@ -251,8 +271,33 @@ def build_runtime(
         owner_sessions=sessions,
         event_audit_store=event_audit_store,
         model_id=None if model_config is None else model_config.model_id,
+        model_routes=model_routes,
         persistence=persistence,
         owner_telegram=owner_telegram,
+    )
+
+
+def _conversation_model_limits(
+    model_config: OpenAICompatibleModelConfig | None,
+    model_routes: ModelRouteConfigs | None,
+) -> ConversationModelLimits:
+    configs = (
+        ()
+        if model_config is None and model_routes is None
+        else (model_config,)
+        if model_config is not None
+        else (model_routes.capable, model_routes.economy)
+        if model_routes is not None
+        else ()
+    )
+    if not configs:
+        return ConversationModelLimits(prompt_version="conversation-response-v2")
+    return ConversationModelLimits(
+        latency_deadline_ms=max(config.timeout_ms for config in configs),
+        max_input_tokens=min(config.max_input_tokens for config in configs),
+        max_output_tokens=min(config.max_output_tokens for config in configs),
+        cost_ceiling_gbp=max(config.estimated_max_cost_gbp for config in configs),
+        prompt_version="conversation-response-v2",
     )
 
 

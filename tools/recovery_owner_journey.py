@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
 from melloa.adapters.postgres.migrations import discover_migrations
+from melloa.adapters.postgres.telegram import PostgresTelegramStore
 from melloa.apps.cli import (
     _read_owner_credential_file,
     _read_secret_file,
@@ -29,6 +30,7 @@ from melloa.apps.runtime import OWNER_ID, build_runtime
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
+from melloa.domain.models import ModelRoute
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "migrations"
@@ -37,6 +39,9 @@ SENSITIVE_FIXTURE_MARKER = "restore-private-owner-marker-v1"
 _FIXTURE_TITLE = "Owner recovery check"
 _FIXTURE_MESSAGE = f"Keep this private recovery context: {SENSITIVE_FIXTURE_MARKER}"
 _FIXTURE_TIME = datetime(2026, 8, 19, 12, 0, tzinfo=UTC)
+_TELEGRAM_OWNER_USER_ID = 1_234_567
+_TELEGRAM_OWNER_CHAT_ID = 7_654_321
+_TELEGRAM_ROUTE_UPDATE_ID = 9_001
 
 
 class JourneyError(RuntimeError):
@@ -50,6 +55,7 @@ class JourneyExpectation(BaseModel):
     message_id: str
     session_id: str
     assertion_id: str
+    telegram_update_id: int
 
 
 class DeterministicIdFactory:
@@ -171,11 +177,26 @@ def seed(args: argparse.Namespace) -> None:
                 None,
             ),
         )
+        telegram = PostgresTelegramStore(connection)
+        telegram.bind_owner_channel(
+            owner_user_id=_TELEGRAM_OWNER_USER_ID,
+            owner_chat_id=_TELEGRAM_OWNER_CHAT_ID,
+            initial_model_route=ModelRoute.ECONOMY,
+            now=_FIXTURE_TIME,
+        )
+        telegram.accept_model_route_update(
+            update_id=_TELEGRAM_ROUTE_UPDATE_ID,
+            incoming_message_id=8_001,
+            model_route=ModelRoute.CAPABLE,
+            now=_FIXTURE_TIME,
+            max_attempts=3,
+        )
         expectation = JourneyExpectation(
             thread_id=thread_id,
             message_id=message.json()["inbound_message"]["message_id"],
             session_id=login.json()["principal"]["session_id"],
             assertion_id=assertion.assertion_id,
+            telegram_update_id=_TELEGRAM_ROUTE_UPDATE_ID,
         )
     _write_expectation(args.expected_file, expectation)
 
@@ -227,6 +248,22 @@ def verify(args: argparse.Namespace) -> None:
         memory = PostgresMemoryRepository(connection).get_assertion(expected.assertion_id)
         if memory.value != {"marker": SENSITIVE_FIXTURE_MARKER}:
             raise JourneyError("restored owner memory is missing")
+        telegram = PostgresTelegramStore(connection)
+        channel = telegram.owner_channel()
+        if (
+            channel.model_route is not ModelRoute.CAPABLE
+            or channel.last_update_id != expected.telegram_update_id
+        ):
+            raise JourneyError("restored Telegram model route is missing")
+        route_delivery = telegram.accept_model_route_update(
+            update_id=expected.telegram_update_id,
+            incoming_message_id=8_001,
+            model_route=ModelRoute.CAPABLE,
+            now=_FIXTURE_TIME,
+            max_attempts=3,
+        )
+        if route_delivery.notice_code != "telegram.model_route.capable":
+            raise JourneyError("restored Telegram route acknowledgement is missing")
 
 
 def recovery_receipt() -> dict[str, object]:
@@ -237,6 +274,7 @@ def recovery_receipt() -> dict[str, object]:
             "authenticated_owner_read": "pass",
             "conversation_round_trip": "pass",
             "memory_round_trip": "pass",
+            "telegram_model_route_round_trip": "pass",
             "encrypted_backup": "pass",
             "clean_restore": "pass",
             "ephemeral_cleanup": "pass",

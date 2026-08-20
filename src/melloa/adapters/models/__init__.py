@@ -6,9 +6,10 @@ from melloa.adapters.models.openai_compatible import (
     OpenAICompatibleModelGateway,
     load_openai_compatible_model_config,
 )
-from melloa.adapters.models.routed import RoutedModelGateway
+from melloa.adapters.models.routed import ModelRouteConfigs, RoutedModelGateway
 
 __all__ = [
+    "ModelRouteConfigs",
     "OpenAIAPIStyle",
     "OpenAICompatibleModelConfig",
     "OpenAICompatibleModelGateway",

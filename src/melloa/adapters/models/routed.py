@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 
+from melloa.adapters.models.openai_compatible import (
+    OpenAICompatibleModelConfig,
+    normalized_base_url,
+)
 from melloa.domain.base import utc_now
 from melloa.domain.models import (
     ModelGatewayHealth,
@@ -18,6 +23,16 @@ from melloa.ports.model import (
     ModelGateway,
     ModelInvocationError,
 )
+
+
+@dataclass(frozen=True)
+class ModelRouteConfigs:
+    capable: OpenAICompatibleModelConfig
+    economy: OpenAICompatibleModelConfig
+
+    def __post_init__(self) -> None:
+        if _configured_target(self.capable) == _configured_target(self.economy):
+            raise ValueError("capable and economy routes must use distinct model targets")
 
 
 class RoutedModelGateway:
@@ -93,4 +108,12 @@ def _maximum_latency(*health: ModelGatewayHealth) -> int | None:
     return max(latencies) if latencies else None
 
 
-__all__ = ["RoutedModelGateway"]
+def _configured_target(config: OpenAICompatibleModelConfig) -> tuple[object, ...]:
+    return (
+        config.provider_id,
+        config.model_id,
+        normalized_base_url(config),
+    )
+
+
+__all__ = ["ModelRouteConfigs", "RoutedModelGateway"]

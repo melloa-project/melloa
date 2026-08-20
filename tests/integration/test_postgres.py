@@ -16,6 +16,7 @@ from psycopg.types.json import Jsonb
 from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.models.openai_compatible import OpenAICompatibleModelConfig
+from melloa.adapters.models.routed import ModelRouteConfigs
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
 from melloa.adapters.postgres.telegram import PostgresTelegramStore
@@ -376,6 +377,7 @@ def test_failed_external_destination_and_disclosed_memory_survive_restart() -> N
             "provider_id": "provider.postgres-approved",
             "model_id": "durable-external-v1",
             "processing_location": "approved_provider",
+            "route": "economy",
         },)
 
 
@@ -391,6 +393,7 @@ def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
         channel = store.bind_owner_channel(
             owner_user_id=1_234_567,
             owner_chat_id=7_654_321,
+            initial_model_route=ModelRoute.ECONOMY,
             now=_NOW,
         )
         assert channel.last_update_id is None
@@ -426,9 +429,11 @@ def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
         channel = store.bind_owner_channel(
             owner_user_id=1_234_567,
             owner_chat_id=7_654_321,
+            initial_model_route=ModelRoute.CAPABLE,
             now=_NOW + timedelta(seconds=4),
         )
         assert channel.last_update_id == 101
+        assert channel.model_route is ModelRoute.ECONOMY
         replay = store.accept_conversation_update(
             update_id=101,
             incoming_message_id=51,
@@ -470,8 +475,45 @@ def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
             store.bind_owner_channel(
                 owner_user_id=111,
                 owner_chat_id=222,
+                initial_model_route=ModelRoute.ECONOMY,
                 now=_NOW + timedelta(seconds=16),
             )
+        route_delivery = store.accept_model_route_update(
+            update_id=102,
+            incoming_message_id=52,
+            model_route=ModelRoute.CAPABLE,
+            now=_NOW + timedelta(seconds=17),
+            max_attempts=3,
+        )
+        assert route_delivery.notice_code == "telegram.model_route.capable"
+
+    with _connect(dsn) as third_connection:
+        store = PostgresTelegramStore(third_connection)
+        channel = store.bind_owner_channel(
+            owner_user_id=1_234_567,
+            owner_chat_id=7_654_321,
+            initial_model_route=ModelRoute.ECONOMY,
+            now=_NOW + timedelta(seconds=18),
+        )
+        assert channel.last_update_id == 102
+        assert channel.model_route is ModelRoute.CAPABLE
+        replay = store.accept_model_route_update(
+            update_id=102,
+            incoming_message_id=52,
+            model_route=ModelRoute.CAPABLE,
+            now=_NOW + timedelta(seconds=19),
+            max_attempts=3,
+        )
+        assert replay.notice_code == "telegram.model_route.capable"
+        current = store.accept_model_route_update(
+            update_id=103,
+            incoming_message_id=53,
+            model_route=None,
+            now=_NOW + timedelta(seconds=20),
+            max_attempts=3,
+        )
+        assert current.notice_code == "telegram.model_route.capable"
+        assert store.owner_channel().model_route is ModelRoute.CAPABLE
 
 
 def test_runtime_composes_persistent_owner_telegram_service() -> None:
@@ -480,11 +522,19 @@ def test_runtime_composes_persistent_owner_telegram_service() -> None:
         runtime = build_runtime(
             _guardian(),
             _OWNER_CREDENTIAL,
-            OpenAICompatibleModelConfig(
-                display_name="Integration model",
-                provider_id="provider.integration-local",
-                model_id="integration-model-v1",
-                base_url="http://127.0.0.1:11434/v1",
+            model_routes=ModelRouteConfigs(
+                capable=OpenAICompatibleModelConfig(
+                    display_name="Integration capable model",
+                    provider_id="provider.integration-local",
+                    model_id="integration-capable-v1",
+                    base_url="http://127.0.0.1:11434/v1",
+                ),
+                economy=OpenAICompatibleModelConfig(
+                    display_name="Integration economy model",
+                    provider_id="provider.integration-local",
+                    model_id="integration-economy-v1",
+                    base_url="http://127.0.0.1:11434/v1",
+                ),
             ),
             database_connection=connection,
             telegram_config=TelegramOwnerConfig(
@@ -495,5 +545,6 @@ def test_runtime_composes_persistent_owner_telegram_service() -> None:
         )
 
     assert runtime.persistence == "postgresql"
-    assert runtime.model_id == "integration-model-v1"
+    assert runtime.model_id is None
+    assert runtime.model_routes is not None
     assert runtime.owner_telegram is not None

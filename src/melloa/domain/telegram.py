@@ -8,10 +8,12 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from melloa.domain.base import AwareDatetime, ContractModel, QualifiedName, RecordId
+from melloa.domain.models import ModelRoute
 
 
 class TelegramDeliveryKind(StrEnum):
     CONVERSATION = "conversation"
+    MODEL_ROUTE = "model_route"
     STATUS = "status"
 
 
@@ -27,6 +29,7 @@ class TelegramOwnerChannel(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     owner_user_id: Annotated[int, Field(gt=0, le=(1 << 63) - 1)]
     owner_chat_id: Annotated[int, Field(gt=0, le=(1 << 63) - 1)]
+    model_route: ModelRoute = ModelRoute.ECONOMY
     last_update_id: Annotated[int, Field(ge=0)] | None = None
     created_at: AwareDatetime
     updated_at: AwareDatetime
@@ -79,7 +82,7 @@ class TelegramDelivery(ContractModel):
                     raise ValueError("awaiting conversation cannot already have a response")
             elif (self.response_message_id is None) == (self.notice_code is None):
                 raise ValueError("conversation delivery requires one response source")
-        elif any(
+        elif self.kind is TelegramDeliveryKind.STATUS and any(
             value is not None
             for value in (
                 self.inbound_message_id,
@@ -88,6 +91,18 @@ class TelegramDelivery(ContractModel):
             )
         ):
             raise ValueError("status delivery cannot reference conversation content")
+        elif self.kind is TelegramDeliveryKind.MODEL_ROUTE:
+            expected_notices = {
+                "telegram.model_route.capable",
+                "telegram.model_route.economy",
+            }
+            if (
+                self.inbound_message_id is not None
+                or self.response_message_id is not None
+                or self.notice_code not in expected_notices
+                or self.state is TelegramDeliveryState.AWAITING_REPLY
+            ):
+                raise ValueError("model-route delivery must contain one durable route notice")
         if self.state is TelegramDeliveryState.SENT:
             if self.delivered_at is None or not self.telegram_message_ids:
                 raise ValueError("sent Telegram delivery requires delivery evidence")

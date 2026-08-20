@@ -18,6 +18,7 @@ from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, new_record_id, utc_now
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import ConversationProcessingState, MessageKind
+from melloa.domain.models import ModelRoute
 from melloa.domain.telegram import TelegramDelivery, TelegramDeliveryKind
 from melloa.ports.conversation import ConversationNotFoundError, ConversationStore
 from melloa.ports.telegram import TelegramStateConflictError, TelegramStore
@@ -29,6 +30,14 @@ _LOGGER = logging.getLogger(__name__)
 _CHUNK_SIZE = 4_000
 _STATUS_LIMIT = 4_096
 _NOTICE_TEXT = {
+    "telegram.model_route.capable": (
+        "Model route: capable. New messages use the capable model. If it is unavailable, "
+        "Melli will report the failure instead of silently sending your message elsewhere."
+    ),
+    "telegram.model_route.economy": (
+        "Model route: economy. New messages use the cheaper or open model. If it is "
+        "unavailable, Melli will report the failure instead of silently changing routes."
+    ),
     "telegram.notice.reply_failed": (
         "I couldn't complete that reply after retrying. Send the message again when /status "
         "shows the model is available."
@@ -127,6 +136,7 @@ class OwnerTelegramService:
         self._store.bind_owner_channel(
             owner_user_id=self._config.owner_user_id,
             owner_chat_id=self._config.owner_chat_id,
+            initial_model_route=ModelRoute.ECONOMY,
             now=self._clock(),
         )
 
@@ -138,7 +148,8 @@ class OwnerTelegramService:
         if message is None or message.text is None:
             self._store.advance_update(update.update_id, now=self._clock())
             return
-        if message.text.strip() == "/status":
+        text = message.text.strip()
+        if text == "/status":
             self._store.accept_status_update(
                 update_id=update.update_id,
                 incoming_message_id=message.message_id,
@@ -146,6 +157,26 @@ class OwnerTelegramService:
                 max_attempts=self._max_delivery_attempts,
             )
             return
+        if text == "/model" or text.startswith("/model "):
+            selected_route = {
+                "/model capable": ModelRoute.CAPABLE,
+                "/model economy": ModelRoute.ECONOMY,
+            }.get(text)
+            self._store.accept_model_route_update(
+                update_id=update.update_id,
+                incoming_message_id=message.message_id,
+                model_route=selected_route,
+                now=self._clock(),
+                max_attempts=self._max_delivery_attempts,
+            )
+            return
+
+        channel = self._store.owner_channel()
+        model_route = channel.model_route
+        conversation_text = message.text
+        if text.startswith("/think ") and text.removeprefix("/think ").strip():
+            model_route = ModelRoute.CAPABLE
+            conversation_text = text.removeprefix("/think ").strip()
 
         principal = self._principal()
         self._conversation.ensure_channel_thread(
@@ -157,9 +188,10 @@ class OwnerTelegramService:
         reply = self._conversation.post_owner_message(
             principal,
             thread_id=TELEGRAM_THREAD_ID,
-            text=message.text,
+            text=conversation_text,
             idempotency_key=f"telegram:update:{update.update_id}",
             source_client=_TELEGRAM_SOURCE,
+            model_route=model_route,
         )
         delivery = self._store.accept_conversation_update(
             update_id=update.update_id,

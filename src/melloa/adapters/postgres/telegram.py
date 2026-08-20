@@ -9,6 +9,7 @@ import psycopg
 from psycopg import sql
 
 from melloa.domain.base import QualifiedName, RecordId
+from melloa.domain.models import ModelRoute
 from melloa.domain.telegram import (
     TelegramDelivery,
     TelegramDeliveryKind,
@@ -37,6 +38,7 @@ class PostgresTelegramStore:
         *,
         owner_user_id: int,
         owner_chat_id: int,
+        initial_model_route: ModelRoute,
         now: datetime,
     ) -> TelegramOwnerChannel:
         with self._connection.transaction():
@@ -45,11 +47,18 @@ class PostgresTelegramStore:
                 """
                 INSERT INTO melloa.telegram_owner_channels (
                     channel_key, owner_user_id, owner_chat_id,
-                    last_update_id, created_at, updated_at
-                ) VALUES (%s, %s, %s, NULL, %s, %s)
+                    model_route, last_update_id, created_at, updated_at
+                ) VALUES (%s, %s, %s, %s, NULL, %s, %s)
                 ON CONFLICT (channel_key) DO NOTHING
                 """,
-                (_CHANNEL_KEY, owner_user_id, owner_chat_id, now, now),
+                (
+                    _CHANNEL_KEY,
+                    owner_user_id,
+                    owner_chat_id,
+                    initial_model_route.value,
+                    now,
+                    now,
+                ),
             )
             channel = self._read_channel(for_update=True)
             if (
@@ -99,6 +108,7 @@ class PostgresTelegramStore:
             inbound_message_id=inbound_message_id,
             now=now,
             max_attempts=max_attempts,
+            model_route=None,
         )
 
     def accept_status_update(
@@ -116,6 +126,26 @@ class PostgresTelegramStore:
             inbound_message_id=None,
             now=now,
             max_attempts=max_attempts,
+            model_route=None,
+        )
+
+    def accept_model_route_update(
+        self,
+        *,
+        update_id: int,
+        incoming_message_id: int,
+        model_route: ModelRoute | None,
+        now: datetime,
+        max_attempts: int,
+    ) -> TelegramDelivery:
+        return self._accept_delivery(
+            update_id=update_id,
+            incoming_message_id=incoming_message_id,
+            kind=TelegramDeliveryKind.MODEL_ROUTE,
+            inbound_message_id=None,
+            now=now,
+            max_attempts=max_attempts,
+            model_route=model_route,
         )
 
     def awaiting_conversation_deliveries(self, *, limit: int) -> tuple[TelegramDelivery, ...]:
@@ -353,6 +383,7 @@ class PostgresTelegramStore:
         inbound_message_id: RecordId | None,
         now: datetime,
         max_attempts: int,
+        model_route: ModelRoute | None,
     ) -> TelegramDelivery:
         if update_id < 0 or incoming_message_id < 0:
             raise ValueError("Telegram update and message IDs cannot be negative")
@@ -366,6 +397,11 @@ class PostgresTelegramStore:
         with self._connection.transaction():
             self._lock_channel()
             channel = self._read_channel(for_update=True)
+            notice_code = (
+                None
+                if kind is not TelegramDeliveryKind.MODEL_ROUTE
+                else f"telegram.model_route.{(model_route or channel.model_route).value}"
+            )
             existing_row = self._connection.execute(
                 sql.SQL("""
                 SELECT {}
@@ -384,9 +420,9 @@ class PostgresTelegramStore:
                     """
                     INSERT INTO melloa.telegram_deliveries (
                         update_id, channel_key, incoming_message_id, delivery_kind,
-                        inbound_message_id, state, max_attempts, available_at,
-                        created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        inbound_message_id, notice_code, state, max_attempts,
+                        available_at, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         update_id,
@@ -394,6 +430,7 @@ class PostgresTelegramStore:
                         incoming_message_id,
                         kind.value,
                         inbound_message_id,
+                        notice_code,
                         initial_state.value,
                         max_attempts,
                         now,
@@ -401,12 +438,27 @@ class PostgresTelegramStore:
                         now,
                     ),
                 )
+                if kind is TelegramDeliveryKind.MODEL_ROUTE and model_route is not None:
+                    self._connection.execute(
+                        """
+                        UPDATE melloa.telegram_owner_channels
+                           SET model_route = %s,
+                               updated_at = GREATEST(updated_at, %s)
+                         WHERE channel_key = %s
+                        """,
+                        (model_route.value, now, _CHANNEL_KEY),
+                    )
             else:
                 existing = self._delivery(existing_row)
                 if (
                     existing.incoming_message_id != incoming_message_id
                     or existing.kind is not kind
                     or existing.inbound_message_id != inbound_message_id
+                    or (
+                        kind is TelegramDeliveryKind.MODEL_ROUTE
+                        and model_route is not None
+                        and existing.notice_code != notice_code
+                    )
                 ):
                     raise TelegramStateConflictError("Telegram update identity conflicts")
             if channel.last_update_id is None or update_id > channel.last_update_id:
@@ -463,7 +515,8 @@ class PostgresTelegramStore:
         suffix = sql.SQL("FOR UPDATE") if for_update else sql.SQL("")
         row = self._connection.execute(
             sql.SQL("""
-            SELECT owner_user_id, owner_chat_id, last_update_id, created_at, updated_at
+            SELECT owner_user_id, owner_chat_id, model_route, last_update_id,
+                   created_at, updated_at
               FROM melloa.telegram_owner_channels
              WHERE channel_key = %s
              {}
@@ -475,9 +528,10 @@ class PostgresTelegramStore:
         return TelegramOwnerChannel(
             owner_user_id=int(row[0]),
             owner_chat_id=int(row[1]),
-            last_update_id=None if row[2] is None else int(row[2]),
-            created_at=cast(datetime, row[3]),
-            updated_at=cast(datetime, row[4]),
+            model_route=ModelRoute(str(row[2])),
+            last_update_id=None if row[3] is None else int(row[3]),
+            created_at=cast(datetime, row[4]),
+            updated_at=cast(datetime, row[5]),
         )
 
     def _read_delivery(self, update_id: int, *, for_update: bool) -> TelegramDelivery:

@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from melloa.adapters.guardian.file import FileGuardianStatusReader, GuardianVerificationError
 from melloa.adapters.models.openai_compatible import load_openai_compatible_model_config
+from melloa.adapters.models.routed import ModelRouteConfigs
 from melloa.adapters.postgres.migrations import (
     apply_migrations,
     discover_migrations,
@@ -176,6 +177,24 @@ def serve(args: argparse.Namespace) -> int:
                 if args.model_config is None
                 else load_openai_compatible_model_config(args.model_config)
             )
+            capable_model_path = getattr(args, "capable_model_config", None)
+            economy_model_path = getattr(args, "economy_model_config", None)
+            if (capable_model_path is None) != (economy_model_path is None):
+                raise ValueError(
+                    "capable and economy model config files must be supplied together"
+                )
+            if model_config is not None and capable_model_path is not None:
+                raise ValueError(
+                    "single-model and routed-model configuration cannot be combined"
+                )
+            model_routes = (
+                None
+                if capable_model_path is None or economy_model_path is None
+                else ModelRouteConfigs(
+                    capable=load_openai_compatible_model_config(capable_model_path),
+                    economy=load_openai_compatible_model_config(economy_model_path),
+                )
+            )
             connection = None
             if args.database_dsn_file is not None:
                 dsn = _validate_private_database_dsn(
@@ -212,8 +231,8 @@ def serve(args: argparse.Namespace) -> int:
             backup_status_file = getattr(args, "backup_status_file", None)
             if telegram_config is not None and connection is None:
                 raise ValueError("Telegram requires a private PostgreSQL database")
-            if telegram_config is not None and model_config is None:
-                raise ValueError("Telegram requires a configured conversation model")
+            if telegram_config is not None and model_routes is None:
+                raise ValueError("Telegram requires capable and economy model routes")
             if backup_status_file is not None and telegram_config is None:
                 raise ValueError("backup status is exposed through the Telegram owner channel")
             access_scope: AccessScope = (
@@ -225,6 +244,7 @@ def serve(args: argparse.Namespace) -> int:
                 _guardian_reader(args),
                 bootstrap_token,
                 model_config,
+                model_routes=model_routes,
                 database_connection=connection,
                 access_scope=access_scope,
                 telegram_config=telegram_config,
@@ -239,12 +259,24 @@ def serve(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "access_scope": access_scope,
-                    "model_configured": model_config is not None,
-                    "model_external_disclosure": (
-                        False
-                        if model_config is None
-                        else model_config.processing_location.value == "approved_provider"
+                    "model_configured": (
+                        model_config is not None or model_routes is not None
                     ),
+                    "model_external_disclosure": (
+                        model_config is not None
+                        and model_config.processing_location.value == "approved_provider"
+                    )
+                    or (
+                        model_routes is not None
+                        and any(
+                            config.processing_location.value == "approved_provider"
+                            for config in (
+                                model_routes.capable,
+                                model_routes.economy,
+                            )
+                        )
+                    ),
+                    "model_routing_enabled": model_routes is not None,
                     "persistence": runtime.persistence,
                     "telegram_enabled": telegram_config is not None,
                 },
@@ -304,6 +336,18 @@ def build_parser() -> argparse.ArgumentParser:
         required="MELLOA_OWNER_CREDENTIAL_FILE" not in os.environ,
     )
     serve_parser.add_argument("--model-config", type=Path)
+    capable_model_path = os.environ.get("MELLOA_CAPABLE_MODEL_CONFIG")
+    serve_parser.add_argument(
+        "--capable-model-config",
+        type=Path,
+        default=None if capable_model_path is None else Path(capable_model_path),
+    )
+    economy_model_path = os.environ.get("MELLOA_ECONOMY_MODEL_CONFIG")
+    serve_parser.add_argument(
+        "--economy-model-config",
+        type=Path,
+        default=None if economy_model_path is None else Path(economy_model_path),
+    )
     database_path = os.environ.get("MELLOA_DATABASE_DSN_FILE")
     serve_parser.add_argument(
         "--database-dsn-file",
