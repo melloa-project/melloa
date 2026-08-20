@@ -6,6 +6,8 @@ readonly WORKDIR="$(mktemp -d /tmp/melloa-configuration-test.XXXXXX)"
 readonly INPUTS="$WORKDIR/inputs"
 readonly TARGET="$WORKDIR/target"
 readonly LOCAL_TARGET="$WORKDIR/local-target"
+readonly TEST_UID="$(id -u)"
+readonly TEST_GID="$(id -g)"
 
 cleanup() {
   if [[ "$WORKDIR" == /tmp/melloa-configuration-test.* && -d "$WORKDIR" ]]; then
@@ -86,12 +88,15 @@ printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'configuration-test' \
   >"$WORKDIR/configure.log"
 
 readonly PRIVATE="$TARGET/etc/melloa/private"
-[[ "$(stat --format='%a:%u:%g' "$PRIVATE")" == 700:0:0 ]]
-[[ "$(stat --format='%a:%u:%g' "$PRIVATE/owner-credential")" == 600:10001:10001 ]]
-[[ "$(stat --format='%a:%u:%g' "$PRIVATE/database-change-planner-dsn")" == 600:0:0 ]]
-[[ "$(stat --format='%a:%u:%g' "$PRIVATE/model-credentials")" == 700:10001:10001 ]]
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE")" == "700:$TEST_UID:$TEST_GID" ]]
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE/owner-credential")" == \
+  "600:$TEST_UID:$TEST_GID" ]]
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE/database-change-planner-dsn")" == \
+  "600:$TEST_UID:$TEST_GID" ]]
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE/model-credentials")" == \
+  "700:$TEST_UID:$TEST_GID" ]]
 [[ "$(stat --format='%a:%u:%g' "$PRIVATE/model-credentials/capable-token")" == \
-  600:10001:10001 ]]
+  "600:$TEST_UID:$TEST_GID" ]]
 [[ "$(jq -r .owner_user_id "$PRIVATE/telegram-owner.json")" == 5678 ]]
 [[ "$(jq -r .owner_chat_id "$PRIVATE/telegram-owner.json")" == 5678 ]]
 grep --fixed-strings --quiet \
@@ -103,7 +108,7 @@ grep --fixed-strings --quiet \
   'https://x-access-token:github_pat_configuration_test_123456789@github.com' \
   "$PRIVATE/git-credentials"
 [[ "$(stat --format='%a:%u:%g' "$TARGET/var/lib/melloa/guardian-handoff/status.json")" == \
-  400:10001:10001 ]]
+  "400:$TEST_UID:$TEST_GID" ]]
 [[ "$(jq -r .contract_version "$TARGET/etc/melloa/configuration.json")" == 1.0.0 ]]
 
 if "$ROOT/infra/server/configure.sh" \

@@ -242,7 +242,25 @@ write_private_text() {
   local gid="$5"
   install -m "$mode" /dev/null "$path"
   printf '%s\n' "$value" >"$path"
-  chown "$uid:$gid" "$path"
+  set_owner "$path" "$uid" "$gid"
+}
+
+set_owner() {
+  local path="$1"
+  local uid="$2"
+  local gid="$3"
+  if [[ "$DESTINATION_ROOT" == / ]]; then
+    chown "$uid:$gid" "$path"
+  fi
+}
+
+install_owned_directory() {
+  local path="$1"
+  local mode="$2"
+  local uid="$3"
+  local gid="$4"
+  install -d -m "$mode" "$path"
+  set_owner "$path" "$uid" "$gid"
 }
 
 random_secret() {
@@ -454,9 +472,9 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-install -d -o 0 -g 0 -m 0700 "$STAGE/private"
-install -d -o "$RUNTIME_UID" -g "$RUNTIME_GID" -m 0700 \
-  "$STAGE/private/model-credentials"
+install_owned_directory "$STAGE/private" 0700 0 0
+install_owned_directory "$STAGE/private/model-credentials" \
+  0700 "$RUNTIME_UID" "$RUNTIME_GID"
 
 admin_password="$(random_secret)"
 app_password="$(random_secret)"
@@ -497,14 +515,14 @@ write_private_text "$STAGE/private/database-change-applier-dsn" \
 printf '{"owner_user_id":%s,"owner_chat_id":%s,"poll_timeout_seconds":20}\n' \
   "$TELEGRAM_OWNER_ID" "$TELEGRAM_OWNER_ID" >"$STAGE/private/telegram-owner.json"
 chmod 0600 "$STAGE/private/telegram-owner.json"
-chown "$RUNTIME_UID:$RUNTIME_GID" "$STAGE/private/telegram-owner.json"
+set_owner "$STAGE/private/telegram-owner.json" "$RUNTIME_UID" "$RUNTIME_GID"
 write_private_text "$STAGE/private/telegram-bot-token" \
   "$telegram_token" 0600 "$RUNTIME_UID" "$RUNTIME_GID"
 
 install -m 0600 "$CAPABLE_MODEL_CONFIG_FILE" "$STAGE/private/capable-model.json"
 install -m 0600 "$ECONOMY_MODEL_CONFIG_FILE" "$STAGE/private/economy-model.json"
-chown "$RUNTIME_UID:$RUNTIME_GID" \
-  "$STAGE/private/capable-model.json" "$STAGE/private/economy-model.json"
+set_owner "$STAGE/private/capable-model.json" "$RUNTIME_UID" "$RUNTIME_GID"
+set_owner "$STAGE/private/economy-model.json" "$RUNTIME_UID" "$RUNTIME_GID"
 for name in "${!MODEL_CREDENTIAL_SOURCES[@]}"; do
   write_private_text "$STAGE/private/model-credentials/$name" \
     "${MODEL_CREDENTIAL_VALUES[$name]}" 0600 "$RUNTIME_UID" "$RUNTIME_GID"
@@ -538,7 +556,7 @@ awk -F= -v revision="$REVISION" -v repository="$BACKUP_REPOSITORY" '
   }
 ' "$SOURCE/infra/server/server.env.example" >"$STAGE/server.env"
 chmod 0600 "$STAGE/server.env"
-chown 0:0 "$STAGE/server.env"
+set_owner "$STAGE/server.env" 0 0
 
 if [[ -n "$CODEX_API_KEY_FILE" ]]; then
   printf 'MELLOA_CODEX_USE_API_KEY=true\nMELLOA_CODEX_MODEL=%s\nMELLOA_CODEX_LOCAL_PROVIDER=\n' \
@@ -550,7 +568,7 @@ else
   codex_mode="$CODEX_LOCAL_PROVIDER"
 fi
 chmod 0600 "$STAGE/self-change.env"
-chown 0:0 "$STAGE/self-change.env"
+set_owner "$STAGE/self-change.env" 0 0
 
 jq -n \
   --arg revision "$REVISION" \
@@ -561,22 +579,23 @@ jq -n \
     backup_repository: $backup_repository, codex_mode: $codex_mode,
     configured_at: $configured_at}' >"$STAGE/configuration.json"
 chmod 0600 "$STAGE/configuration.json"
-chown 0:0 "$STAGE/configuration.json"
+set_owner "$STAGE/configuration.json" 0 0
 
 install -m 0600 "$SERVER_ENV" "$STAGE/server.env.original"
 install -m 0600 "$SELF_CHANGE_ENV" "$STAGE/self-change.env.original"
-chown 0:0 "$STAGE/server.env.original" "$STAGE/self-change.env.original"
+set_owner "$STAGE/server.env.original" 0 0
+set_owner "$STAGE/self-change.env.original" 0 0
 
 install -d -m 0755 "$GUARDIAN_PARENT"
 GUARDIAN_STAGE="$(mktemp -d "$GUARDIAN_PARENT/.configuration-guardian.XXXXXX")"
-install -d -o "$RUNTIME_UID" -g "$RUNTIME_GID" -m 0700 "$GUARDIAN_STAGE/new"
+install_owned_directory "$GUARDIAN_STAGE/new" 0700 "$RUNTIME_UID" "$RUNTIME_GID"
 install -m 0400 "$GUARDIAN_STATUS_FILE" "$GUARDIAN_STAGE/new/status.json"
 install -m 0400 "$GUARDIAN_PUBLIC_KEY_FILE" "$GUARDIAN_STAGE/new/public.pem"
-chown "$RUNTIME_UID:$RUNTIME_GID" \
-  "$GUARDIAN_STAGE/new/status.json" "$GUARDIAN_STAGE/new/public.pem"
+set_owner "$GUARDIAN_STAGE/new/status.json" "$RUNTIME_UID" "$RUNTIME_GID"
+set_owner "$GUARDIAN_STAGE/new/public.pem" "$RUNTIME_UID" "$RUNTIME_GID"
 
 if [[ ! -d "$GUARDIAN_DIR" ]]; then
-  install -d -o "$RUNTIME_UID" -g "$RUNTIME_GID" -m 0700 "$GUARDIAN_DIR"
+  install_owned_directory "$GUARDIAN_DIR" 0700 "$RUNTIME_UID" "$RUNTIME_GID"
 fi
 [[ ! -L "$GUARDIAN_DIR" && -z "$(find "$GUARDIAN_DIR" -mindepth 1 -print -quit)" ]] ||
   fail "Guardian handoff target is not an empty installed directory"
