@@ -196,6 +196,11 @@ services:
       - /tmp:mode=0700
     cap_drop:
       - ALL
+    # Restore is a manual recovery container that must read the runtime-owned
+    # restic password and repository while keeping its backup mount read-only
+    # and without gaining write capabilities.
+    cap_add:
+      - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
     pids_limit: 128
