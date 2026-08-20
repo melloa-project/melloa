@@ -76,9 +76,9 @@ The guided first-owner path does not currently configure a local conversation mo
 networking, model bind addresses, and disclosure classification need a separately tested path
 before that option is safe to make owner-facing.
 
-If the capable and economy targets resolve to the same provider/base URL/model ID, setup refuses the
+If the capable and economy targets resolve to the same base URL and model ID, setup refuses the
 configuration. That is intentional: Melloa must not silently blur quality, cost, or disclosure
-boundaries between routes.
+boundaries between routes just because the route labels differ.
 
 ## Install and activate
 

@@ -332,6 +332,18 @@ validate_model_base_url() {
   esac
 }
 
+model_route_target() {
+  local path="$1"
+  local label="$2"
+  [[ -f "$path" && ! -L "$path" ]] || fail "$label is unavailable"
+  jq -er '
+    select(type == "object") |
+    [.base_url, .model_id] |
+    select(all(.[]; type == "string" and length > 0)) |
+    @json
+  ' "$path" 2>/dev/null || fail "$label must identify one provider, model, and base URL"
+}
+
 write_private_text() {
   local path="$1"
   local value="$2"
@@ -823,6 +835,9 @@ echo "Use openai for the fixed OpenAI preset or external for another hosted Open
 declare -a MODEL_CREDENTIAL_ARGS=()
 write_model_route capable "$STAGE/capable-model.json"
 write_model_route economy "$STAGE/economy-model.json"
+[[ "$(model_route_target "$STAGE/capable-model.json" "capable model config")" != \
+  "$(model_route_target "$STAGE/economy-model.json" "economy model config")" ]] ||
+  fail "capable and economy model targets must differ"
 printf '{"owner_user_id":%s,"owner_chat_id":%s,"poll_timeout_seconds":20}\n' \
   "$telegram_owner_id" "$telegram_owner_id" >"$STAGE/telegram-owner.json"
 chmod 0600 "$STAGE/telegram-owner.json"

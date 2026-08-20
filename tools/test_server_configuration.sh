@@ -6,6 +6,7 @@ readonly WORKDIR="$(mktemp -d /tmp/melloa-configuration-test.XXXXXX)"
 readonly INPUTS="$WORKDIR/inputs"
 readonly TARGET="$WORKDIR/target"
 readonly LOCAL_TARGET="$WORKDIR/local-target"
+readonly DUPLICATE_TARGET="$WORKDIR/duplicate-target"
 readonly DISABLED_TARGET="$WORKDIR/disabled-target"
 readonly TEST_UID="$(id -u)"
 readonly TEST_GID="$(id -g)"
@@ -47,6 +48,24 @@ private_input economy-model.json '{
   "provider_id":"provider.economy-test",
   "model_id":"economy-test",
   "base_url":"https://economy.example/v1",
+  "processing_location":"approved_provider",
+  "allowed_sensitivities":["personal"],
+  "authorization_token_file":"/run/melloa/model-credentials/economy-token"
+}'
+private_input duplicate-capable-model.json '{
+  "display_name":"Duplicate capable test",
+  "provider_id":"provider.duplicate-capable-test",
+  "model_id":"duplicate-test",
+  "base_url":"https://duplicate.example/v1",
+  "processing_location":"approved_provider",
+  "allowed_sensitivities":["personal"],
+  "authorization_token_file":"/run/melloa/model-credentials/capable-token"
+}'
+private_input duplicate-economy-model.json '{
+  "display_name":"Duplicate economy test",
+  "provider_id":"provider.duplicate-economy-test",
+  "model_id":"duplicate-test",
+  "base_url":"https://duplicate.example/v1",
   "processing_location":"approved_provider",
   "allowed_sensitivities":["personal"],
   "authorization_token_file":"/run/melloa/model-credentials/economy-token"
@@ -152,6 +171,34 @@ for secret in \
     exit 1
   fi
 done
+
+"$ROOT/infra/server/install.sh" --source "$ROOT" --root "$DUPLICATE_TARGET" >/dev/null
+if "$ROOT/infra/server/configure.sh" \
+  --source "$ROOT" \
+  --root "$DUPLICATE_TARGET" \
+  --backup-repository /mnt/melloa-off-device-backup \
+  --guardian-status-file "$INPUTS/status.json" \
+  --guardian-public-key-file "$INPUTS/public.pem" \
+  --telegram-owner-id 5678 \
+  --telegram-bot-token-file "$INPUTS/telegram-token" \
+  --capable-model-config-file "$INPUTS/duplicate-capable-model.json" \
+  --economy-model-config-file "$INPUTS/duplicate-economy-model.json" \
+  --model-credential "capable-token=$INPUTS/capable-token" \
+  --model-credential "economy-token=$INPUTS/economy-token" \
+  --restic-password-file "$INPUTS/restic-password" \
+  --self-change-disabled \
+  >"$WORKDIR/configure-duplicate.log" 2>&1; then
+  echo "Configurator accepted duplicate capable/economy model targets" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "capable and economy model targets must differ" \
+  "$WORKDIR/configure-duplicate.log"
+if grep --fixed-strings --quiet 'restic_configuration_test_password_123456789' \
+  "$WORKDIR/configure-duplicate.log"; then
+  echo "Configurator exposed a private input while reporting duplicate model targets" >&2
+  exit 1
+fi
 
 "$ROOT/infra/server/install.sh" --source "$ROOT" --root "$LOCAL_TARGET" >/dev/null
 "$ROOT/infra/server/configure.sh" \

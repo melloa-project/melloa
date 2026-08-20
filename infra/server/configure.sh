@@ -220,7 +220,7 @@ model_target() {
   require_source_file "$path" "$label" 2 65536 true
   jq -er '
     select(type == "object") |
-    [.provider_id, .model_id, .base_url] |
+    [.base_url, .model_id] |
     select(all(.[]; type == "string" and length > 0)) |
     @json
   ' "$path" 2>/dev/null || fail "$label must identify one provider, model, and base URL"
@@ -331,6 +331,10 @@ require_source_file "$GUARDIAN_PUBLIC_KEY_FILE" "Guardian public key" 32 65536 f
 if [[ -n "$BUILD_CA_FILE" ]]; then
   require_source_file "$BUILD_CA_FILE" "build CA bundle" 32 1048576 false
 fi
+capable_target="$(model_target "$CAPABLE_MODEL_CONFIG_FILE" "capable model config")"
+economy_target="$(model_target "$ECONOMY_MODEL_CONFIG_FILE" "economy model config")"
+[[ "$capable_target" != "$economy_target" ]] ||
+  fail "capable and economy model targets must differ"
 
 telegram_token="$(
   read_single_line_secret "$TELEGRAM_BOT_TOKEN_FILE" "Telegram bot token" 37 149
@@ -374,9 +378,6 @@ for specification in "${MODEL_CREDENTIAL_SPECS[@]}"; do
   MODEL_CREDENTIAL_VALUES[$name]="$value"
 done
 
-capable_target="$(model_target "$CAPABLE_MODEL_CONFIG_FILE" "capable model config")"
-economy_target="$(model_target "$ECONOMY_MODEL_CONFIG_FILE" "economy model config")"
-[[ "$capable_target" != "$economy_target" ]] || fail "capable and economy model targets must differ"
 for route_and_path in \
   "capable:$CAPABLE_MODEL_CONFIG_FILE" \
   "economy:$ECONOMY_MODEL_CONFIG_FILE"; do

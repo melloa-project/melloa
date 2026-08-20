@@ -9,6 +9,7 @@ readonly BAD_TARGET="$WORKDIR/bad-target"
 readonly BAD_SECRET_TARGET="$WORKDIR/bad-secret-target"
 readonly BAD_MODEL_TARGET="$WORKDIR/bad-model-target"
 readonly BAD_COST_TARGET="$WORKDIR/bad-cost-target"
+readonly BAD_DUPLICATE_TARGET="$WORKDIR/bad-duplicate-target"
 readonly BAD_LOCAL_TARGET="$WORKDIR/bad-local-target"
 readonly CA_RESUME_TARGET="$WORKDIR/ca-resume-target"
 readonly LOG="$WORKDIR/first-install.log"
@@ -19,6 +20,7 @@ readonly BAD_LOG="$WORKDIR/first-install-bad-input.log"
 readonly BAD_SECRET_LOG="$WORKDIR/first-install-bad-secret.log"
 readonly BAD_MODEL_LOG="$WORKDIR/first-install-bad-model.log"
 readonly BAD_COST_LOG="$WORKDIR/first-install-bad-cost.log"
+readonly BAD_DUPLICATE_LOG="$WORKDIR/first-install-bad-duplicate.log"
 readonly BAD_LOCAL_LOG="$WORKDIR/first-install-bad-local.log"
 readonly TEST_UID="$(id -u)"
 readonly TEST_GID="$(id -g)"
@@ -275,6 +277,46 @@ if grep --fixed-strings --quiet \
   echo "First-install setup exposed a private input while reporting a model cost error" >&2
   exit 1
 fi
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+  MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+  MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+  MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+  MELLOA_SETUP_CAPABLE_MODEL_ID=duplicate-test-model \
+  MELLOA_SETUP_CAPABLE_TOKEN=capable_duplicate_secret \
+  MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+  MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+  MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+  MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
+  MELLOA_SETUP_ECONOMY_MODEL_ID=duplicate-test-model \
+  MELLOA_SETUP_ECONOMY_TOKEN=economy_duplicate_secret \
+  MELLOA_SETUP_ECONOMY_ESTIMATED_MAX_COST_GBP=0.01 \
+  MELLOA_SETUP_ECONOMY_INPUT_COST_GBP_PER_MILLION_TOKENS=0.25 \
+  MELLOA_SETUP_ECONOMY_OUTPUT_COST_GBP_PER_MILLION_TOKENS=2 \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_DUPLICATE_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_DUPLICATE_LOG" 2>&1; then
+  echo "First-install setup accepted duplicate capable/economy model targets" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "capable and economy model targets must differ" \
+  "$BAD_DUPLICATE_LOG"
+if grep --fixed-strings --quiet "MELLOA_SETUP_RESTIC_PASSWORD is required" "$BAD_DUPLICATE_LOG"; then
+  echo "First-install setup continued to backup recovery input after duplicate model targets" >&2
+  exit 1
+fi
+for secret in capable_duplicate_secret economy_duplicate_secret; do
+  if grep --fixed-strings --quiet "$secret" "$BAD_DUPLICATE_LOG"; then
+    echo "First-install setup exposed a private input while reporting duplicate model targets" >&2
+    exit 1
+  fi
+done
 
 if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
   MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
