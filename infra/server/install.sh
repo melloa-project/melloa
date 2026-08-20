@@ -89,6 +89,7 @@ readonly SOURCE_REVISION="$(git -C "$SOURCE" rev-parse HEAD)"
 install -d -m 0755 "$LIBEXEC_DIR" "$SYSTEMD_DIR"
 install -d -m 0700 "$CONFIG_DIR" "$PRIVATE_DIR" "$WORKER_DIR" "$APPLIER_HOME"
 install -m 0755 "$SOURCE/infra/server/activate.sh" "$LIBEXEC_DIR/activate"
+install -m 0755 "$SOURCE/infra/server/configure.sh" "$LIBEXEC_DIR/configure"
 install -m 0755 "$SOURCE/infra/server/codex-wrapper.sh" "$LIBEXEC_DIR/codex"
 install -m 0755 "$SOURCE/infra/server/self-change-plan.sh" "$LIBEXEC_DIR/self-change-plan"
 install -m 0755 "$SOURCE/infra/server/self-change-apply.sh" "$LIBEXEC_DIR/self-change-apply"
@@ -225,4 +226,5 @@ systemd-analyze verify \
 systemctl daemon-reload
 
 echo "Server services installed but not started. Complete private configuration, then run:"
-echo "  sudo infra/server/preflight.sh --source $SOURCE --origin $ORIGIN --installed"
+echo "  See infra/server/README.md for the file-based configure command."
+echo "  sudo /usr/local/libexec/melloa/configure --source $SOURCE [private file arguments]"

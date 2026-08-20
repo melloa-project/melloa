@@ -28,11 +28,86 @@ owner-visible until a complete backup and repository check succeeds.
 
 ## Private deployment inputs
 
-Copy `server.env.example` outside the source checkout and replace only its paths, image tag,
-commit, and private subnet. The environment file contains paths, never values. Every credential
-and owner-specific JSON document is supplied as a separate regular file. Credential files read by
-Melloa or the backup process must be owned by that dedicated UID/GID and mode `0600`; private
-directories should be mode `0700`.
+`configure.sh` is the supported first-install writer for private inputs. It generates the six
+independent database passwords and the local API owner credential, creates matching least-
+privilege DSNs, and installs owner-supplied integration secrets with the exact runtime
+ownership and modes. It never starts a service, accepts secret *paths* rather than secret command-
+line values, refuses to overwrite a configured server, and emits no secret values.
+
+Before invoking it, prepare owner-private mode-`0600` files outside the source checkout for:
+
+- the Telegram bot token, after the owner has opened that bot's private chat;
+- the capable and economy model JSON documents plus each bearer token they name directly below
+  `/run/melloa/model-credentials/`;
+- a high-entropy base64url restic password retained separately from both this machine and the
+  backup repository;
+- a repository-scoped GitHub token able to read and write this repository's branches; and
+- a separate OpenAI API key for Codex self-change planning, or select an explicitly installed
+  `ollama`/`lmstudio` local Codex provider instead.
+
+The current OpenAI chat route uses an API key with the Responses API; it does not claim to persist
+an interactive ChatGPT or Codex subscription login. Official OpenAI documentation recommends the
+[Responses API for new text generation](https://developers.openai.com/api/docs/guides/text) and
+shows bearer-key authentication. Model availability, current pricing, and account access still
+need owner confirmation. A hosted economy/router route uses its own owner-reviewed endpoint,
+model ID, disclosure classification, price ceilings, and token.
+
+Model JSON uses the schema described in the root README. For example, a credential-bearing route
+contains the following path—not the token value itself:
+
+```json
+{
+  "display_name": "Owner-selected capable model",
+  "provider_id": "provider.owner-approved-capable",
+  "model_id": "owner-selected-model-id",
+  "base_url": "https://owner-reviewed-provider.example/v1",
+  "api_style": "responses",
+  "processing_location": "approved_provider",
+  "allowed_sensitivities": ["public", "internal", "personal"],
+  "max_input_tokens": 16384,
+  "max_output_tokens": 2048,
+  "estimated_max_cost_gbp": "REPLACE_WITH_REVIEWED_MAXIMUM",
+  "input_cost_gbp_per_million_tokens": "REPLACE_WITH_CURRENT_RATE",
+  "output_cost_gbp_per_million_tokens": "REPLACE_WITH_CURRENT_RATE",
+  "timeout_ms": 60000,
+  "health_timeout_ms": 5000,
+  "authorization_token_file": "/run/melloa/model-credentials/capable-token"
+}
+```
+
+The cost placeholders deliberately make this example fail validation. Replace all route, model,
+sensitivity, and cost values from current owner-reviewed provider terms; setting real token rates
+to zero would make the retained cost record inaccurate.
+
+With those files ready and the public-only Guardian projection already prepared by Guardian, the
+configuration transaction has this shape:
+
+```bash
+sudo /usr/local/libexec/melloa/configure \
+  --source "$PWD" \
+  --backup-repository /mnt/melloa-off-device-backup \
+  --guardian-status-file /owner-input/guardian/status.json \
+  --guardian-public-key-file /owner-input/guardian/public.pem \
+  --telegram-owner-id 123456789 \
+  --telegram-bot-token-file /owner-input/telegram-bot-token \
+  --capable-model-config-file /owner-input/capable-model.json \
+  --economy-model-config-file /owner-input/economy-model.json \
+  --model-credential capable-token=/owner-input/capable-token \
+  --model-credential economy-token=/owner-input/economy-token \
+  --restic-password-file /owner-recovery/restic-password \
+  --github-token-file /owner-input/github-token \
+  --codex-api-key-file /owner-input/codex-api-key
+```
+
+Input file paths may differ, but the installed paths remain fixed and auditable. For local Codex
+planning, replace the last option with `--codex-local-provider ollama` (or `lmstudio`) and ensure
+that provider is actually reachable from the host service. The two conversation routes remain
+separately configured; Codex planning credentials are never mounted into the Melloa application.
+
+The path-only `server.env` is produced from `server.env.example`. Every credential and owner-
+specific JSON document remains a separate regular file. Credential files read by Melloa or the
+backup process are owned by the dedicated runtime UID/GID and mode `0600`; private directories are
+mode `0700`.
 
 The build receives the host CA bundle as a BuildKit secret so a server with an owner-approved
 outbound TLS proxy can still download locked dependencies. The bundle is not copied into the

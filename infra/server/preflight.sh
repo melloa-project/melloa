@@ -195,6 +195,7 @@ readonly RUNTIME_GID="$(id -g melloa-runtime)"
 
 require_private_file /etc/melloa/server.env "server environment file"
 require_private_file /etc/melloa/self-change.env "self-change environment file"
+require_private_file /etc/melloa/configuration.json "configuration receipt"
 require_private_file /etc/melloa/private/database-change-planner-dsn "planner database DSN"
 require_private_file /etc/melloa/private/database-change-applier-dsn "applier database DSN"
 require_private_file /etc/melloa/private/git-credentials "Git credential"
@@ -252,6 +253,16 @@ readonly RUNTIME_STATE_DIR="$(read_environment_path MELLOA_RUNTIME_STATE_DIR)"
 require_private_directory \
   "$RUNTIME_STATE_DIR" "runtime state directory" "$RUNTIME_UID" "$RUNTIME_GID"
 readonly BACKUP_REPOSITORY_DIR="$(read_environment_path MELLOA_BACKUP_REPOSITORY_DIR)"
+if ! jq -e \
+  --arg backup_repository "$BACKUP_REPOSITORY_DIR" '
+    .contract_version == "1.0.0" and
+    (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    .backup_repository == $backup_repository and
+    (.codex_mode == "api_key" or .codex_mode == "ollama" or .codex_mode == "lmstudio") and
+    (.configured_at | type == "string" and length > 0)
+  ' /etc/melloa/configuration.json >/dev/null; then
+  fail "configuration receipt is invalid or names a different backup repository"
+fi
 require_private_directory \
   "$BACKUP_REPOSITORY_DIR" "backup repository directory" "$RUNTIME_UID" "$RUNTIME_GID"
 findmnt --mountpoint "$BACKUP_REPOSITORY_DIR" >/dev/null ||
@@ -295,9 +306,13 @@ readonly LOCAL_PROVIDER="$(awk -F= '$1 == "MELLOA_CODEX_LOCAL_PROVIDER" {print $
 if [[ "$USE_API_KEY" == true ]]; then
   require_private_file /etc/melloa/private/codex-api-key "Codex API key" 20
   [[ -z "$LOCAL_PROVIDER" ]] || fail "API-key Codex mode cannot select a local provider"
+  [[ "$(jq -r .codex_mode /etc/melloa/configuration.json)" == api_key ]] ||
+    fail "configuration receipt does not match Codex API-key mode"
 else
   [[ "$LOCAL_PROVIDER" == ollama || "$LOCAL_PROVIDER" == lmstudio ]] ||
     fail "non-key Codex mode requires ollama or lmstudio"
+  [[ "$(jq -r .codex_mode /etc/melloa/configuration.json)" == "$LOCAL_PROVIDER" ]] ||
+    fail "configuration receipt does not match the Codex local provider"
 fi
 
 for directory in \
