@@ -66,8 +66,9 @@ The current first-owner server deployment path is the
 not a readiness claim, until it has succeeded on the real dedicated server with reboot, recovery,
 update/rollback, and dogfooding evidence.
 
-The public project website is a small static status page in [docs-site](docs-site), deployed by the
-Pages workflow. It is no longer generated from the old MkDocs architecture bundle.
+The public project website is a Starlight site in [docs-site](docs-site), deployed by the Pages
+workflow. It is the owner-facing setup path; the old MkDocs architecture bundle is not active
+guidance.
 
 ## What “ready” means
 

@@ -1,0 +1,43 @@
+---
+title: Self-change loop
+description: How Melloa safely modifies itself after owner review.
+---
+
+Self-change is core to Melloa. A long-lived AI partner should be able to help improve the system she
+runs through, otherwise every gap turns back into manual maintenance.
+
+The loop is deliberately bounded. Melli can help propose a change; deterministic code and exact
+owner approval decide whether anything leaves the proposal stage.
+
+## The path
+
+1. In Telegram, ask for a change with `/change propose ...`.
+2. The planner creates a retained proposal with a public-safe summary and diff.
+3. You review the exact diff and the expected effect.
+4. If it is right, approve with the exact Telegram approval token.
+5. The applier commits, pushes, deploys the reviewed diff, and records the outcome.
+6. If deployment fails or the result is wrong, rollback evidence remains available.
+
+## Why this is not arbitrary autonomy
+
+The model does not receive general host authority. The server path separates:
+
+- model planning from deployment authority;
+- proposal text from approval;
+- approval from privileged host effects;
+- normal conversation credentials from release credentials;
+- Melloa runtime state from Guardian control.
+
+That separation is what makes self-change practical. The owner can ask for useful evolution without
+handing the model ambient power over the server.
+
+## First useful self-change
+
+Use a small change immediately after first install. Good candidates:
+
+- improve one confusing setup prompt;
+- add one missing `/status` detail;
+- clarify one public setup page;
+- add one regression test for a failure you just hit.
+
+The point is not spectacle. The point is to prove the system can improve itself under owner control.

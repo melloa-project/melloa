@@ -1,0 +1,26 @@
+---
+title: Trust model
+description: The boundaries that make a self-changing Melloa acceptable.
+---
+
+Melloa is allowed to become more capable only while owner control stays structural.
+
+## Durable boundaries
+
+- Melloa is the system. Melli is the persistent intelligence, not a model, process, or provider.
+- Guardian stays independently owner-controlled and outside Melloa’s write, deploy, signing,
+  credential, and recovery authority.
+- Owner data is private by default and remains exportable and correctable within documented limits.
+- Model output is evidence, not authority.
+- High-risk actions require narrow, recent, explicit owner approval.
+- Sensitive external disclosure is explicit and inspectable.
+- Recovery-critical data is backed up under owner-held keys.
+
+## Practical effect
+
+The owner should not have to operate an architecture diagram. These boundaries appear in the setup
+where they matter: exact Telegram pairing, explicit model routes, no silent provider fallback,
+backup proof, exact approval tokens, and rollback evidence.
+
+For the full repository-level statement, read
+[Trust boundaries](https://github.com/melloa-project/melloa/blob/main/docs/trust-boundaries.md).

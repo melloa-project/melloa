@@ -1,0 +1,72 @@
+---
+title: Deploy the server
+description: The first-owner server setup path for Melloa.
+---
+
+This is the setup path to follow on the actual home server. It is not the old local preview.
+
+## 1. Prepare the machine
+
+Use a dedicated Debian host. Log in with a user that can run `sudo`, then clone the reviewed source:
+
+```bash
+git clone https://github.com/melloa-project/melloa.git
+cd melloa
+```
+
+Install the server prerequisites:
+
+```bash
+sudo infra/server/bootstrap-debian.sh --self-change-tools
+```
+
+That installs the host packages and the pinned tools needed by the owner-approved self-change
+workers. If you are doing a conversation-only bring-up, omit `--self-change-tools`; for the first
+real Melloa server, keep it enabled.
+
+## 2. Have these inputs ready
+
+The installer asks for the owner-controlled values. Do not put these into Git.
+
+| Input | What to prepare |
+| --- | --- |
+| Telegram bot token | Create a dedicated bot for Melli. |
+| Telegram owner ID | Use your numeric account ID, not a handle. |
+| Capable model route | HTTPS base URL, model ID, API style, bearer token, and GBP input/output prices. |
+| Economy model route | Same fields for the cheaper route. |
+| Backup repository | Owner-mounted path or repository URL. |
+| Restic password | High-entropy secret retained separately from the server. |
+| GitHub token | Fine-grained token for this repository with contents read/write. |
+| Codex/OpenAI API key | Used by the bounded planner worker, not as Melli’s normal conversation route. |
+
+## 3. Run the guided install
+
+From the repository checkout:
+
+```bash
+sudo infra/server/first-install.sh --source "$PWD"
+```
+
+For the first real server, accept the default to enable bounded self-change workers and choose
+`api-key` for the Codex planner credential mode.
+
+The installer writes private configuration under `/etc/melloa/private`, activates the runtime,
+pairs the exact Telegram owner, and asks you to prove the first Telegram conversation.
+
+## 4. Prove the server is usable
+
+Before you walk away from the machine, verify:
+
+- Telegram receives and replies to the first owner conversation;
+- `/model`, `/model economy`, `/model capable`, `/think`, and `/status` behave as expected;
+- both model routes identify their exact destination and do not silently fall back;
+- backup health is visible from `/status`;
+- the server survives a reboot and Melli resumes through Telegram.
+
+## 5. Use self-change for the next improvement
+
+After the first conversation works, make one small owner-approved change through the self-change
+loop. That proves Melloa can help evolve its own server path instead of leaving you to maintain a
+static install by hand.
+
+Open [Self-change loop](../self-change/) for the exact shape.

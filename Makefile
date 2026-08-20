@@ -2,6 +2,7 @@ UV_CACHE_DIR ?= .cache/uv
 UV_SYSTEM_CERTS ?= true
 UV := UV_CACHE_DIR=$(UV_CACHE_DIR) UV_SYSTEM_CERTS=$(UV_SYSTEM_CERTS) uv
 WEB_INSTALL_STAMP := apps/web/node_modules/.package-lock.json
+DOCS_SITE_INSTALL_STAMP := docs-site/node_modules/.package-lock.json
 GUARDIAN_STATUS ?=
 GUARDIAN_PUBLIC_KEY ?=
 PREVIEW_STATE_DIR ?=
@@ -26,7 +27,7 @@ $(error GUARDIAN_PUBLIC_KEY is required; prepare an owner-controlled public hand
 endif
 endif
 
-.PHONY: bootstrap bootstrap-python check check-generated integration lint preview preview-web recovery server-bootstrap server-runtime test typecheck web
+.PHONY: bootstrap bootstrap-python check check-generated docs-site integration lint preview preview-web recovery server-bootstrap server-runtime test typecheck web
 
 bootstrap: bootstrap-python
 	npm --prefix apps/web ci --ignore-scripts
@@ -61,7 +62,7 @@ bootstrap-python:
 	$(UV) sync --frozen --all-groups --no-install-project
 	$(UV) sync --frozen --all-groups --no-build-isolation-package melloa
 
-check: check-generated lint typecheck test web
+check: check-generated lint typecheck test web docs-site
 
 check-generated:
 	$(UV) run python tools/update_migration_manifest.py --check
@@ -119,6 +120,13 @@ web:
 	npm --prefix apps/web run typecheck
 	npm --prefix apps/web test
 	npm --prefix apps/web run build
+
+docs-site: $(DOCS_SITE_INSTALL_STAMP)
+	npm --prefix docs-site run check
+	npm --prefix docs-site run build
+
+$(DOCS_SITE_INSTALL_STAMP): docs-site/package-lock.json docs-site/package.json .nvmrc
+	npm --prefix docs-site ci --ignore-scripts
 
 integration:
 	bash tools/test_postgres_integration.sh

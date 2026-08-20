@@ -1,0 +1,43 @@
+---
+title: Operate it
+description: Day-to-day commands and proof steps for the Melloa server.
+---
+
+Once the server is installed, normal use should happen from Telegram.
+
+## Telegram commands
+
+| Command | Use |
+| --- | --- |
+| `/status` | Show runtime, route, backup, and owner-journey health. |
+| `/model` | Show the currently selected conversation route. |
+| `/model economy` | Use the cheaper hosted route for later messages. |
+| `/model capable` | Use the capable hosted route for later messages. |
+| `/think ...` | Use the capable route once without changing the saved route. |
+| `/change propose ...` | Ask Melloa to prepare an owner-reviewed code or docs change. |
+
+## Server maintenance
+
+Use the installed wrappers rather than hand-editing runtime state:
+
+```bash
+sudo /usr/local/libexec/melloa/update
+sudo /usr/local/libexec/melloa/rollback
+sudo /usr/local/libexec/melloa/restore-drill
+```
+
+The server keeps release and maintenance history so update, rollback, and restore claims can be
+checked after the fact.
+
+## What to prove after changes
+
+After an update or self-change deployment:
+
+- Telegram still replies to the exact owner;
+- `/status` reports healthy runtime and backup state;
+- the selected model route did not silently change;
+- the release journal records the deployed commit;
+- rollback remains available if the result is wrong.
+
+If a step fails, fix the concrete failed step. Avoid broad rebuilds or secret rotation unless the
+failure points there.
