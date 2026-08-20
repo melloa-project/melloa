@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import signal
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -88,6 +90,10 @@ class _LockedPort:
         return locked
 
 
+def _terminate_for_supervised_restart() -> None:
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
 def build_runtime(
     guardian_reader: GuardianStatusReader,
     bootstrap_token: str,
@@ -102,6 +108,8 @@ def build_runtime(
     telegram_config: TelegramOwnerConfig | None = None,
     telegram_bot_token: str | None = None,
     backup_status_file: Path | None = None,
+    runtime_failure_handler: Callable[[], None] = _terminate_for_supervised_restart,
+    runtime_watchdog_interval: float = 5.0,
 ) -> MelloaRuntime:
     if model_config is not None and model_routes is not None:
         raise ValueError("single-model and routed-model configuration cannot be combined")
@@ -249,6 +257,15 @@ def build_runtime(
             clock=clock,
             id_factory=id_factory,
         )
+
+    def database_health() -> None:
+        if database_connection is None or database_lock is None:
+            return
+        with database_lock:
+            row = database_connection.execute("SELECT 1").fetchone()
+        if row != (1,):
+            raise RuntimeError("PostgreSQL health probe returned an unexpected result")
+
     return MelloaRuntime(
         app=create_app(
             guardian_reader,
@@ -261,6 +278,11 @@ def build_runtime(
             owner_telegram_worker=(
                 None if owner_telegram is None else owner_telegram.run_forever
             ),
+            runtime_health=None if database_connection is None else database_health,
+            runtime_failure_handler=(
+                None if database_connection is None else runtime_failure_handler
+            ),
+            runtime_watchdog_interval=runtime_watchdog_interval,
             access_scope=access_scope,
         ),
         owner_id=OWNER_ID,

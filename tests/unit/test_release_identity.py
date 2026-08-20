@@ -59,3 +59,10 @@ def test_repository_package_metadata_matches_canonical_release() -> None:
             "apps/web/package-lock.json root package",
         )
     }
+
+
+def test_readme_keeps_owner_deployment_readiness_explicit() -> None:
+    readme = (_PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert readme.count("> **Deployment readiness: NOT READY**") == 1
+    assert "> **Deployment readiness: READY FOR OWNER DEPLOYMENT**" not in readme

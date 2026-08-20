@@ -26,7 +26,7 @@ $(error GUARDIAN_PUBLIC_KEY is required; prepare an owner-controlled public hand
 endif
 endif
 
-.PHONY: bootstrap bootstrap-python check check-generated integration lint preview preview-web recovery test typecheck web
+.PHONY: bootstrap bootstrap-python check check-generated integration lint preview preview-web recovery server-runtime test typecheck web
 
 bootstrap: bootstrap-python
 	npm --prefix apps/web ci --ignore-scripts
@@ -65,7 +65,12 @@ check: check-generated lint typecheck test web
 
 check-generated:
 	$(UV) run python tools/update_migration_manifest.py --check
-	bash -n tools/restore_drill.sh tools/test_postgres_integration.sh
+	bash -n \
+		infra/server/postgres-entrypoint.sh \
+		infra/server/postgres-init/002_runtime_logins.sh \
+		tools/restore_drill.sh \
+		tools/test_postgres_integration.sh \
+		tools/test_server_runtime.sh
 
 lint:
 	$(UV) run ruff check src tests \
@@ -88,3 +93,6 @@ integration:
 
 recovery:
 	bash tools/restore_drill.sh
+
+server-runtime:
+	bash tools/test_server_runtime.sh

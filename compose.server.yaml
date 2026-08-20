@@ -1,0 +1,216 @@
+name: ${MELLOA_COMPOSE_PROJECT_NAME:-melloa-server}
+
+x-melloa-image: &melloa-image
+  image: ${MELLOA_IMAGE:-melloa-local/server:development}
+
+x-bounded-logs: &bounded-logs
+  driver: json-file
+  options:
+    max-file: "3"
+    max-size: 10m
+
+services:
+  postgres:
+    image: ${MELLOA_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff}
+    entrypoint: ["/usr/local/bin/melloa-postgres-entrypoint"]
+    command: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: melloa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
+    secrets:
+      - postgres_admin_password
+      - postgres_app_password
+      - postgres_migration_password
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./infra/server/postgres-entrypoint.sh:/usr/local/bin/melloa-postgres-entrypoint:ro
+      - ./infra/postgres/init/001_roles.sql:/docker-entrypoint-initdb.d/001_roles.sql:ro
+      - ./infra/server/postgres-init/002_runtime_logins.sh:/docker-entrypoint-initdb.d/002_runtime_logins.sh:ro
+    networks:
+      state:
+        ipv4_address: ${MELLOA_DATABASE_ADDRESS:-172.30.37.2}
+    healthcheck:
+      test: ["CMD-SHELL", "gosu postgres pg_isready -U postgres -d melloa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *bounded-logs
+
+  migrate:
+    <<: *melloa-image
+    command: ["migrate", "apply"]
+    user: "${MELLOA_RUNTIME_UID:-10001}:${MELLOA_RUNTIME_GID:-10001}"
+    environment:
+      MELLOA_DATABASE_DSN_FILE: /run/melloa/private/migration-dsn
+    volumes:
+      - type: bind
+        source: ${MELLOA_DATABASE_MIGRATION_DSN_FILE:?Set MELLOA_DATABASE_MIGRATION_DSN_FILE}
+        target: /run/melloa/private/migration-dsn
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - state
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    restart: "no"
+    logging: *bounded-logs
+
+  melloa:
+    <<: *melloa-image
+    build:
+      context: .
+      dockerfile: infra/server/Dockerfile
+      args:
+        MELLOA_SOURCE_REVISION: ${MELLOA_SOURCE_REVISION:-uncommitted}
+        MELLOA_UV_IMAGE: ${MELLOA_UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.0@sha256:606e70c71c852d03f611b1e56a195d08648507018a7057fab82c4974c4eae105}
+        MELLOA_PYTHON_IMAGE: ${MELLOA_PYTHON_IMAGE:-python:3.13.7-slim-bookworm@sha256:adafcc17694d715c905b4c7bebd96907a1fd5cf183395f0ebc4d3428bd22d92d}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+      secrets:
+        - build_ca
+    command:
+      - serve
+      - --status
+      - /run/melloa/guardian/status.json
+      - --public-key
+      - /run/melloa/guardian/public.pem
+      - --host
+      - 127.0.0.1
+      - --port
+      - "8000"
+    user: "${MELLOA_RUNTIME_UID:-10001}:${MELLOA_RUNTIME_GID:-10001}"
+    environment:
+      MELLOA_OWNER_CREDENTIAL_FILE: /run/melloa/private/owner-credential
+      MELLOA_DATABASE_DSN_FILE: /run/melloa/private/application-dsn
+      MELLOA_TELEGRAM_OWNER_CONFIG: /run/melloa/private/telegram-owner.json
+      MELLOA_TELEGRAM_BOT_TOKEN_FILE: /run/melloa/private/telegram-bot-token
+      MELLOA_CAPABLE_MODEL_CONFIG: /run/melloa/private/capable-model.json
+      MELLOA_ECONOMY_MODEL_CONFIG: /run/melloa/private/economy-model.json
+      MELLOA_BACKUP_STATUS_FILE: /run/melloa/state/backup-status.json
+    volumes:
+      - type: bind
+        source: ${MELLOA_GUARDIAN_HANDOFF_DIR:?Set MELLOA_GUARDIAN_HANDOFF_DIR}
+        target: /run/melloa/guardian
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_OWNER_CREDENTIAL_FILE:?Set MELLOA_OWNER_CREDENTIAL_FILE}
+        target: /run/melloa/private/owner-credential
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_DATABASE_APPLICATION_DSN_FILE:?Set MELLOA_DATABASE_APPLICATION_DSN_FILE}
+        target: /run/melloa/private/application-dsn
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_TELEGRAM_OWNER_CONFIG_FILE:?Set MELLOA_TELEGRAM_OWNER_CONFIG_FILE}
+        target: /run/melloa/private/telegram-owner.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_TELEGRAM_BOT_TOKEN_FILE:?Set MELLOA_TELEGRAM_BOT_TOKEN_FILE}
+        target: /run/melloa/private/telegram-bot-token
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_CAPABLE_MODEL_CONFIG_FILE:?Set MELLOA_CAPABLE_MODEL_CONFIG_FILE}
+        target: /run/melloa/private/capable-model.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_ECONOMY_MODEL_CONFIG_FILE:?Set MELLOA_ECONOMY_MODEL_CONFIG_FILE}
+        target: /run/melloa/private/economy-model.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_MODEL_CREDENTIALS_DIR:?Set MELLOA_MODEL_CREDENTIALS_DIR}
+        target: /run/melloa/model-credentials
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_RUNTIME_STATE_DIR:?Set MELLOA_RUNTIME_STATE_DIR}
+        target: /run/melloa/state
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - state
+      - egress
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health/runtime', timeout=2).read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 35s
+    logging: *bounded-logs
+
+networks:
+  state:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${MELLOA_STATE_SUBNET:-172.30.37.0/28}
+  egress:
+    internal: ${MELLOA_EGRESS_INTERNAL:-false}
+
+volumes:
+  postgres-data: {}
+
+secrets:
+  build_ca:
+    file: ${MELLOA_BUILD_CA_FILE:?Set MELLOA_BUILD_CA_FILE to the host CA bundle}
+  postgres_admin_password:
+    file: ${MELLOA_POSTGRES_ADMIN_PASSWORD_FILE:?Set MELLOA_POSTGRES_ADMIN_PASSWORD_FILE}
+  postgres_app_password:
+    file: ${MELLOA_POSTGRES_APP_PASSWORD_FILE:?Set MELLOA_POSTGRES_APP_PASSWORD_FILE}
+  postgres_migration_password:
+    file: ${MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE:?Set MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE}

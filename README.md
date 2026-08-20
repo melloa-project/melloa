@@ -24,9 +24,11 @@ There is no milestone implementation queue and no compatibility promise for prev
 The main branch now has an exact-owner Telegram long-polling path with a PostgreSQL cursor,
 canonical conversation continuity, restart-safe reply delivery, and explicit `capable`/`economy`
 model routing. The selected route and actual model destination survive retries and are retained with
-the conversation; Melloa never silently falls back across routes. It is still integration work, not
-an owner deployment path: server installation, automatic backup, policy-bounded self-modification,
-release rollback, real provider configuration, and deployed dogfooding remain incomplete.
+the conversation; Melloa never silently falls back across routes. A generic, unexposed container
+runtime now gates startup on migrations and recovers from application or PostgreSQL restarts, but
+it remains an [engineering checkpoint](infra/server/README.md), not a qualified owner deployment
+path. Automatic encrypted backup, release installation/rollback, policy-bounded self-modification,
+real provider configuration, and deployed dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.

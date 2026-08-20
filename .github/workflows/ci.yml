@@ -39,6 +39,8 @@ jobs:
         run: make check
       - name: Verify PostgreSQL contracts
         run: make integration
+      - name: Prove persistent server restart behavior
+        run: make server-runtime
       - name: Prove encrypted clean restore
         run: make recovery
 

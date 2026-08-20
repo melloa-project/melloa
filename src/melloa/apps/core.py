@@ -167,6 +167,24 @@ async def _run_conversation_worker(service: ConversationService, interval: float
         await asyncio.sleep(interval)
 
 
+async def _run_runtime_watchdog(
+    health_check: Callable[[], None],
+    failure_handler: Callable[[], None],
+    interval: float,
+) -> None:
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await asyncio.to_thread(health_check)
+        except Exception as error:
+            _LOGGER.critical(
+                "A required runtime dependency failed with %s; requesting a supervised restart.",
+                type(error).__name__,
+            )
+            failure_handler()
+            return
+
+
 def create_app(
     guardian_reader: GuardianStatusReader,
     owner_sessions: OwnerSessionManager | None = None,
@@ -178,12 +196,19 @@ def create_app(
     run_conversation_worker: bool = False,
     conversation_worker_interval: float = 1.0,
     owner_telegram_worker: Callable[[], Coroutine[object, object, None]] | None = None,
+    runtime_health: Callable[[], None] | None = None,
+    runtime_failure_handler: Callable[[], None] | None = None,
+    runtime_watchdog_interval: float = 5.0,
     access_scope: AccessScope = "unverified",
 ) -> FastAPI:
     if conversation_worker_interval <= 0:
         raise ValueError("conversation worker interval must be positive")
     if run_conversation_worker and conversation_service is None:
         raise ValueError("conversation worker requires a configured conversation service")
+    if runtime_watchdog_interval <= 0:
+        raise ValueError("runtime watchdog interval must be positive")
+    if runtime_failure_handler is not None and runtime_health is None:
+        raise ValueError("runtime failure handling requires a health check")
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -199,6 +224,16 @@ def create_app(
             )
         if owner_telegram_worker is not None:
             workers.append(asyncio.create_task(owner_telegram_worker()))
+        if runtime_health is not None and runtime_failure_handler is not None:
+            workers.append(
+                asyncio.create_task(
+                    _run_runtime_watchdog(
+                        runtime_health,
+                        runtime_failure_handler,
+                        runtime_watchdog_interval,
+                    )
+                )
+            )
         try:
             yield
         finally:
@@ -334,6 +369,18 @@ def create_app(
     @app.get("/health/live")
     async def liveness() -> dict[str, str]:
         return {"status": "live"}
+
+    @app.get("/health/runtime")
+    async def runtime_readiness() -> dict[str, str]:
+        if runtime_health is not None:
+            try:
+                await asyncio.to_thread(runtime_health)
+            except Exception:
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "A required private runtime dependency is unavailable.",
+                ) from None
+        return {"status": "ready"}
 
     @app.get("/health/ready", response_model=SystemStatus)
     async def readiness() -> SystemStatus:

@@ -1,0 +1,10 @@
+**
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!migrations/
+!migrations/**
+!infra/
+!infra/server/
+!infra/server/Dockerfile

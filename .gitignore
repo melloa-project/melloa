@@ -6,6 +6,7 @@
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+.server-runtime.*/
 .venv/
 __pycache__/
 *.py[cod]
@@ -23,6 +24,7 @@ config/local/
 data/
 exports/
 secrets/
+infra/server/server.env
 *.agekey
 *.pem
 *.key

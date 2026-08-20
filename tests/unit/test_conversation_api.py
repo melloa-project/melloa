@@ -490,3 +490,24 @@ def test_core_lifecycle_starts_and_cleanly_cancels_owner_telegram(fixed_time) ->
         assert started.wait(timeout=1)
 
     assert stopped.wait(timeout=1)
+
+
+def test_runtime_health_is_visible_and_requests_a_supervised_restart(fixed_time) -> None:
+    failed = Event()
+
+    def unavailable() -> None:
+        raise RuntimeError("private dependency unavailable")
+
+    app = create_app(
+        _guardian(fixed_time),
+        runtime_health=unavailable,
+        runtime_failure_handler=failed.set,
+        runtime_watchdog_interval=0.01,
+    )
+
+    with TestClient(app) as client:
+        assert client.get("/health/live").status_code == 200
+        response = client.get("/health/runtime")
+        assert response.status_code == 503
+        assert "private runtime dependency" in response.json()["detail"]
+        assert failed.wait(timeout=1)
