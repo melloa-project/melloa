@@ -30,6 +30,7 @@ usage() {
 Usage:
   tools/server_release.sh deploy --env-file PATH --state-dir PATH [--revision SHA --app-image IMAGE --backup-image IMAGE --no-build]
   tools/server_release.sh rollback --env-file PATH --state-dir PATH
+  tools/server_release.sh recover --env-file PATH --state-dir PATH
   tools/server_release.sh status --state-dir PATH
 EOF
   exit 2
@@ -195,6 +196,10 @@ history_file() {
   printf '%s/history.jsonl' "$STATE_DIR"
 }
 
+operation_file() {
+  printf '%s/operation.json' "$STATE_DIR"
+}
+
 load_state() {
   local path
   path="$(state_file)"
@@ -261,7 +266,9 @@ write_state() {
       predeploy_snapshot: (if $snapshot == "" then null else $snapshot end)}' \
     >"$temporary" || return 1
   chmod 0600 "$temporary"
-  mv -- "$temporary" "$path"
+  sync -f "$temporary" || return 1
+  mv -- "$temporary" "$path" || return 1
+  sync -f "$STATE_DIR"
 }
 
 write_activation() {
@@ -270,7 +277,14 @@ write_activation() {
   temporary="$(mktemp "$STATE_DIR/.active-revision.XXXXXX")" || return 1
   printf '%s\n' "$revision" >"$temporary"
   chmod 0644 "$temporary"
-  mv -- "$temporary" "$STATE_DIR/active-revision"
+  sync -f "$temporary" || return 1
+  mv -- "$temporary" "$STATE_DIR/active-revision" || return 1
+  sync -f "$STATE_DIR"
+}
+
+hold_activation() {
+  rm -f -- "$STATE_DIR/active-revision" || return 1
+  sync -f "$STATE_DIR"
 }
 
 record_history() {
@@ -300,6 +314,104 @@ record_history() {
   )" || return 1
   printf '%s\n' "$document" >>"$path"
   chmod 0600 "$path"
+  sync -f "$path"
+}
+
+load_operation() {
+  local path
+  path="$(operation_file)"
+  if [[ ! -e "$path" ]]; then
+    printf 'null'
+    return 0
+  fi
+  require_protected_file "$path" "Release operation journal" || return 1
+  if [[ "$(stat --format='%s' "$path")" -gt 32768 ]]; then
+    echo "Release operation journal is unexpectedly large" >&2
+    return 1
+  fi
+  if ! jq -e '
+    def release:
+      type == "object" and
+      (.revision | type == "string" and test("^[0-9a-f]{40}$")) and
+      (.app_image | type == "string" and length > 0) and
+      (.backup_image | type == "string" and length > 0) and
+      (.app_image_id | type == "string" and test("^sha256:[0-9a-f]{64}$")) and
+      (.backup_image_id | type == "string" and test("^sha256:[0-9a-f]{64}$")) and
+      (.activated_at | type == "string" and length > 0);
+    def state:
+      type == "object" and
+      .contract_version == "1.0.0" and
+      (.active | release) and
+      (.previous == null or (.previous | release)) and
+      (.predeploy_snapshot == null or
+        (.predeploy_snapshot | type == "string" and test("^[0-9a-f]{64}$")));
+    .contract_version == "1.0.0" and
+    (.mode == "restart-active" or .mode == "restore-active" or .mode == "resume-first") and
+    (.active == null or (.active | release)) and
+    (.prior_state == null or (.prior_state | state)) and
+    (.target_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    (.target_app_image | type == "string" and length > 0) and
+    (.target_backup_image | type == "string" and length > 0) and
+    (.snapshot == null or (.snapshot | type == "string" and test("^[0-9a-f]{64}$"))) and
+    (.event == "deploy" or .event == "rollback") and
+    (.started_at | type == "string" and length > 0) and
+    (if .mode == "resume-first" then
+      .active == null and .prior_state == null and .snapshot == null and .event == "deploy"
+    elif .mode == "restore-active" then
+      .active != null and .prior_state != null and .snapshot != null
+    else
+      .active != null and .prior_state != null
+    end) and
+    (if .active == null then true else .prior_state.active == .active end)
+  ' "$path" >/dev/null; then
+    echo "Release operation journal contract is invalid" >&2
+    return 1
+  fi
+  jq -c . "$path"
+}
+
+write_operation() {
+  local path
+  local temporary
+  path="$(operation_file)"
+  temporary="$(mktemp "$STATE_DIR/.release-operation.XXXXXX")" || return 1
+  jq -n \
+    --arg mode "$RECOVERY_MODE" \
+    --argjson active "$RECOVERY_ACTIVE_JSON" \
+    --argjson prior_state "$RECOVERY_STATE_JSON" \
+    --arg revision "$RECOVERY_REVISION" \
+    --arg app_image "$RECOVERY_APP_IMAGE" \
+    --arg backup_image "$RECOVERY_BACKUP_IMAGE" \
+    --arg snapshot "$RECOVERY_SNAPSHOT" \
+    --arg event "$RECOVERY_EVENT" \
+    --arg started_at "$(date --utc '+%Y-%m-%dT%H:%M:%SZ')" \
+    '{contract_version: "1.0.0", mode: $mode, active: $active,
+      prior_state: $prior_state, target_revision: $revision,
+      target_app_image: $app_image, target_backup_image: $backup_image,
+      snapshot: (if $snapshot == "" then null else $snapshot end),
+      event: $event, started_at: $started_at}' \
+    >"$temporary" || return 1
+  chmod 0600 "$temporary"
+  sync -f "$temporary" || return 1
+  mv -- "$temporary" "$path" || return 1
+  sync -f "$STATE_DIR"
+}
+
+clear_operation() {
+  rm -f -- "$(operation_file)" || return 1
+  sync -f "$STATE_DIR"
+}
+
+hydrate_operation() {
+  local operation_json="$1"
+  RECOVERY_MODE="$(jq -er .mode <<<"$operation_json")" || return 1
+  RECOVERY_ACTIVE_JSON="$(jq -c .active <<<"$operation_json")" || return 1
+  RECOVERY_STATE_JSON="$(jq -c .prior_state <<<"$operation_json")" || return 1
+  RECOVERY_REVISION="$(jq -er .target_revision <<<"$operation_json")" || return 1
+  RECOVERY_APP_IMAGE="$(jq -er .target_app_image <<<"$operation_json")" || return 1
+  RECOVERY_BACKUP_IMAGE="$(jq -er .target_backup_image <<<"$operation_json")" || return 1
+  RECOVERY_SNAPSHOT="$(jq -r '.snapshot // ""' <<<"$operation_json")" || return 1
+  RECOVERY_EVENT="$(jq -er .event <<<"$operation_json")" || return 1
 }
 
 active_field() {
@@ -428,8 +540,10 @@ restart_active_after_abort() {
   revision="$(jq -er .revision <<<"$active_json")"
   app_image="$(jq -er .app_image <<<"$active_json")"
   backup_image="$(jq -er .backup_image <<<"$active_json")"
-  write_activation "$revision" || return 1
-  start_release "$revision" "$app_image" "$backup_image"
+  hold_activation || return 1
+  start_release "$revision" "$app_image" "$backup_image" || return 1
+  disarm_recovery || return 1
+  write_activation "$revision"
 }
 
 restore_release_files() {
@@ -437,14 +551,14 @@ restore_release_files() {
   local path
   if [[ "$state_json" == null ]]; then
     path="$(state_file)"
-    rm -f -- "$path" "$STATE_DIR/active-revision"
+    rm -f -- "$path" "$STATE_DIR/active-revision" || return 1
+    sync -f "$STATE_DIR"
     return
   fi
   write_state \
     "$(jq -c .active <<<"$state_json")" \
     "$(jq -c .previous <<<"$state_json")" \
-    "$(jq -r '.predeploy_snapshot // ""' <<<"$state_json")" &&
-    write_activation "$(jq -er .active.revision <<<"$state_json")"
+    "$(jq -r '.predeploy_snapshot // ""' <<<"$state_json")"
 }
 
 arm_recovery() {
@@ -456,16 +570,45 @@ arm_recovery() {
   RECOVERY_BACKUP_IMAGE="$6"
   RECOVERY_SNAPSHOT="${7:-}"
   RECOVERY_EVENT="$8"
+  write_operation
 }
 
 disarm_recovery() {
+  clear_operation || return 1
   RECOVERY_MODE=""
 }
 
 recover_interrupted_operation() {
   local mode="$RECOVERY_MODE"
+  local candidate_json
   [[ -n "$mode" ]] || return 0
   RECOVERY_MODE=""
+  if [[ "$mode" == resume-first ]]; then
+    echo "Release operation was interrupted; resuming the first deployment." >&2
+    hold_activation || return 1
+    if ! start_release \
+      "$RECOVERY_REVISION" \
+      "$RECOVERY_APP_IMAGE" \
+      "$RECOVERY_BACKUP_IMAGE"; then
+      echo "Interrupted first deployment could not become healthy" >&2
+      return 1
+    fi
+    candidate_json="$(
+      release_object \
+        "$RECOVERY_REVISION" \
+        "$RECOVERY_APP_IMAGE" \
+        "$RECOVERY_BACKUP_IMAGE" \
+        "$(date --utc '+%Y-%m-%dT%H:%M:%SZ')"
+    )" || return 1
+    write_state "$candidate_json" null || return 1
+    record_history \
+      "$RECOVERY_EVENT" recovered "$RECOVERY_REVISION" \
+      release.first_deploy_resumed || true
+    disarm_recovery || return 1
+    write_activation "$RECOVERY_REVISION" || return 1
+    echo "Interrupted first deployment is healthy and active." >&2
+    return 0
+  fi
   echo "Release operation was interrupted; recovering the last active release." >&2
   compose_release \
     "$RECOVERY_REVISION" \
@@ -499,6 +642,49 @@ recover_interrupted_operation() {
   echo "The last active release has been recovered." >&2
 }
 
+reconcile_active_release() {
+  local state_json
+  local active_json
+  local revision
+  local app_image
+  local backup_image
+  state_json="$(load_state)" || return 1
+  if [[ "$state_json" == null ]]; then
+    hold_activation
+    return
+  fi
+  active_json="$(jq -c .active <<<"$state_json")" || return 1
+  verify_recorded_release "$active_json" || return 1
+  revision="$(jq -er .revision <<<"$active_json")" || return 1
+  app_image="$(jq -er .app_image <<<"$active_json")" || return 1
+  backup_image="$(jq -er .backup_image <<<"$active_json")" || return 1
+  hold_activation || return 1
+  start_release "$revision" "$app_image" "$backup_image" || return 1
+  write_activation "$revision"
+}
+
+recover_release() {
+  local operation_json
+  operation_json="$(load_operation)" || return 1
+  [[ "$operation_json" != null ]] || return 0
+  if ! hydrate_operation "$operation_json" ||
+    ! validate_revision "$RECOVERY_REVISION" ||
+    ! validate_image_reference "$RECOVERY_APP_IMAGE" ||
+    ! validate_image_reference "$RECOVERY_BACKUP_IMAGE" ||
+    ! verify_image "$RECOVERY_APP_IMAGE" "$RECOVERY_REVISION" ||
+    ! verify_image "$RECOVERY_BACKUP_IMAGE" "$RECOVERY_REVISION"; then
+    RECOVERY_MODE=""
+    return 1
+  fi
+  if [[ "$RECOVERY_ACTIVE_JSON" != null ]]; then
+    if ! verify_recorded_release "$RECOVERY_ACTIVE_JSON"; then
+      RECOVERY_MODE=""
+      return 1
+    fi
+  fi
+  recover_interrupted_operation
+}
+
 release_exit_trap() {
   local status="$1"
   trap - EXIT HUP INT TERM
@@ -523,7 +709,7 @@ recover_failed_candidate() {
   if [[ "$active_json" == null ]]; then
     restore_release_files "$state_json" || return 1
     record_history deploy failed "$candidate_revision" release.first_deploy_failed "$snapshot" || true
-    disarm_recovery
+    disarm_recovery || return 1
     return 0
   fi
   if [[ -z "$snapshot" ]]; then
@@ -542,7 +728,6 @@ recover_failed_candidate() {
   fi
   record_history deploy rolled_back "$candidate_revision" release.candidate_unhealthy "$snapshot" || true
   echo "Candidate failed; the pre-deployment database and previous release were restored." >&2
-  disarm_recovery
 }
 
 deploy_release() {
@@ -586,15 +771,16 @@ deploy_release() {
       [[ "$(jq -er .app_image_id <<<"$active_json")" == "$(image_id "$APP_IMAGE")" ]] &&
       [[ "$(jq -er .backup_image_id <<<"$active_json")" == "$(image_id "$BACKUP_IMAGE")" ]]; then
       arm_recovery restart-active "$active_json" "$state_json" \
-        "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" "" deploy
-      write_activation "$REVISION" || return 1
+        "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" "" deploy || return 1
+      hold_activation || return 1
       start_release "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" || return 1
-      disarm_recovery
+      disarm_recovery || return 1
+      write_activation "$REVISION" || return 1
       echo "Release $REVISION is already active."
       return 0
     fi
     arm_recovery restart-active "$active_json" "$state_json" \
-      "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" "" deploy
+      "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" "" deploy || return 1
     compose_release \
       "$(jq -er .revision <<<"$active_json")" \
       "$(jq -er .app_image <<<"$active_json")" \
@@ -607,9 +793,7 @@ deploy_release() {
         "$(jq -er .backup_image <<<"$active_json")"
     )" || {
       record_history deploy failed "$REVISION" release.prebackup_failed || true
-      if restart_active_after_abort "$active_json"; then
-        disarm_recovery
-      fi
+      restart_active_after_abort "$active_json" || true
       return 1
     }
   else
@@ -618,15 +802,14 @@ deploy_release() {
   fi
 
   if ! record_history deploy started "$REVISION" release.deploy_started "$snapshot"; then
-    if [[ "$active_json" != null ]] && restart_active_after_abort "$active_json"; then
-      disarm_recovery
-    fi
+    [[ "$active_json" == null ]] || restart_active_after_abort "$active_json" || true
     return 1
   fi
   arm_recovery \
-    "$([[ "$active_json" == null ]] && printf stop-candidate || printf restore-active)" \
+    "$([[ "$active_json" == null ]] && printf resume-first || printf restore-active)" \
     "$active_json" "$state_json" "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" \
-    "$snapshot" deploy
+    "$snapshot" deploy || return 1
+  hold_activation || return 1
   if ! start_release "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE"; then
     recover_failed_candidate \
       "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" \
@@ -638,14 +821,14 @@ deploy_release() {
     release_object "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" \
       "$(date --utc '+%Y-%m-%dT%H:%M:%SZ')"
   )" || return 1
-  if ! write_state "$candidate_json" "$active_json" "$snapshot" ||
-    ! write_activation "$REVISION"; then
+  if ! write_state "$candidate_json" "$active_json" "$snapshot"; then
     recover_failed_candidate \
       "$REVISION" "$APP_IMAGE" "$BACKUP_IMAGE" \
       "$active_json" "$snapshot" "$state_json" || true
     return 1
   fi
-  disarm_recovery
+  disarm_recovery || return 1
+  write_activation "$REVISION" || return 1
   if ! record_history deploy succeeded "$REVISION" release.activated "$snapshot"; then
     echo "Release activated, but its success history could not be appended." >&2
   fi
@@ -682,39 +865,34 @@ rollback_release() {
   previous_backup="$(jq -er .backup_image <<<"$previous_json")"
 
   arm_recovery restart-active "$active_json" "$state_json" \
-    "$previous_revision" "$previous_app" "$previous_backup" "" rollback
+    "$previous_revision" "$previous_app" "$previous_backup" "" rollback || return 1
   compose_release "$active_revision" "$active_app" "$active_backup" \
     stop melloa backup >/dev/null || return 1
   snapshot="$(backup_stopped_release "$active_revision" "$active_app" "$active_backup")" || {
-    if restart_active_after_abort "$active_json"; then
-      disarm_recovery
-    fi
+    restart_active_after_abort "$active_json" || true
     return 1
   }
   if ! compose_release "$previous_revision" "$previous_app" "$previous_backup" \
     run --rm --no-deps migrate migrate check >/dev/null; then
     echo "Previous release is not compatible with the current database; rollback refused." >&2
     record_history rollback refused "$previous_revision" release.schema_incompatible "$snapshot" || true
-    if restart_active_after_abort "$active_json"; then
-      disarm_recovery
-    fi
+    restart_active_after_abort "$active_json" || true
     return 1
   fi
+  hold_activation || return 1
   if ! start_release "$previous_revision" "$previous_app" "$previous_backup"; then
-    if restart_active_after_abort "$active_json"; then
-      disarm_recovery
-    fi
+    restart_active_after_abort "$active_json" || true
     return 1
   fi
   replacement_state="$(
     release_object "$previous_revision" "$previous_app" "$previous_backup" \
       "$(date --utc '+%Y-%m-%dT%H:%M:%SZ')"
   )" || return 1
-  if ! write_state "$replacement_state" "$active_json" "$snapshot" ||
-    ! write_activation "$previous_revision"; then
+  if ! write_state "$replacement_state" "$active_json" "$snapshot"; then
     return 1
   fi
-  disarm_recovery
+  disarm_recovery || return 1
+  write_activation "$previous_revision" || return 1
   if ! record_history \
     rollback succeeded "$previous_revision" release.rollback_activated "$snapshot"; then
     echo "Rollback activated, but its success history could not be appended." >&2
@@ -722,7 +900,7 @@ rollback_release() {
   echo "Rolled back to release $previous_revision without discarding owner data."
 }
 
-for required in docker jq flock awk stat mktemp date; do
+for required in docker jq flock awk stat mktemp date sync; do
   require_command "$required" || exit 2
 done
 validate_positive_integer "$RELEASE_TIMEOUT" || {
@@ -751,12 +929,19 @@ case "$COMMAND" in
   deploy)
     [[ -n "$ENV_FILE" ]] || usage
     require_protected_file "$ENV_FILE" "Server environment file" || exit 2
+    recover_release || exit 1
     deploy_release
     ;;
   rollback)
     [[ -n "$ENV_FILE" ]] || usage
     require_protected_file "$ENV_FILE" "Server environment file" || exit 2
+    recover_release || exit 1
     rollback_release
+    ;;
+  recover)
+    [[ -n "$ENV_FILE" ]] || usage
+    require_protected_file "$ENV_FILE" "Server environment file" || exit 2
+    recover_release && reconcile_active_release
     ;;
   status)
     load_state | jq .

@@ -31,10 +31,11 @@ path. It now streams automatic encrypted snapshots into an owner-mounted reposit
 health through `/status`, and proves a clean restore of representative owner state. A release tool
 now builds reviewed commits, holds Telegram and model work until atomic activation, takes an exact
 pre-deploy snapshot, recovers interrupted or unhealthy candidates, and supports schema-checked
-rollback. This is still only a disposable Docker proof: power-loss resumption,
-supervised installation of the policy-bounded self-change workers, a real off-device repository and
-recovery-key setup, real provider configuration, installation on an actual server, and deployed
-dogfooding remain incomplete.
+rollback. Its durable release journal now also survives an uncatchable process termination and
+recovers through an explicit boot-reconciliation command. This is still only a disposable Docker
+proof: supervised installation of recovery and the policy-bounded self-change workers, a real
+off-device repository and recovery-key setup, real provider configuration, installation on an
+actual server, and deployed dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.

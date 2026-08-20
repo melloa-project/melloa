@@ -16,8 +16,9 @@ route state; streams a custom PostgreSQL dump directly into restic; checks that 
 not expose a known private marker; records success and failure status; retries after a database
 outage; destroys the source volume; and restores into a clean database as the migration role. The
 recovered state is then verified through the authenticated API and storage adapters. It also takes
-pre-release snapshots and verifies owner state after interrupted deployment, failed-candidate
-automatic rollback, and explicit image rollback.
+pre-release snapshots, kills an in-progress release transaction with `SIGKILL`, recovers it from the
+filesystem-synchronized operation journal, and verifies owner state after that recovery,
+failed-candidate automatic rollback, and explicit image rollback.
 
 The server scheduler runs once at startup and daily thereafter. It uses a dedicated read-only
 database login, retains 14 daily, 8 weekly, and 12 monthly snapshots, prunes, runs `restic check`,

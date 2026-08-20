@@ -20,6 +20,7 @@ readonly INTERRUPTED_IMAGE="melloa-local/server-test:${PROJECT}-interrupted"
 readonly INTERRUPTED_BACKUP_IMAGE="melloa-local/backup-test:${PROJECT}-interrupted"
 readonly IMAGE_STAGING_CONTAINER="${PROJECT}-image-staging"
 INTERRUPTED_RELEASE_PID=""
+INTERRUPTED_RELEASE_PGID=""
 
 detect_build_ca() {
   local candidate
@@ -56,8 +57,16 @@ cleanup() {
     echo "Interrupted release diagnostic:" >&2
     tail -n 160 "$WORKDIR/interrupted-release.log" >&2 || true
   fi
+  if ((status != 0)) && [[ -f "$WORKDIR/release-recovery.log" ]]; then
+    echo "Release recovery diagnostic:" >&2
+    tail -n 160 "$WORKDIR/release-recovery.log" >&2 || true
+  fi
   if [[ "$INTERRUPTED_RELEASE_PID" =~ ^[1-9][0-9]*$ ]]; then
-    kill -TERM "$INTERRUPTED_RELEASE_PID" >/dev/null 2>&1 || true
+    if [[ "$INTERRUPTED_RELEASE_PGID" =~ ^[1-9][0-9]*$ ]]; then
+      kill -KILL -- "-$INTERRUPTED_RELEASE_PGID" >/dev/null 2>&1 || true
+    else
+      kill -KILL "$INTERRUPTED_RELEASE_PID" >/dev/null 2>&1 || true
+    fi
     wait "$INTERRUPTED_RELEASE_PID" 2>/dev/null || true
   fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -493,8 +502,9 @@ docker run --rm \
 
 relabel_image "$IMAGE" "$INTERRUPTED_IMAGE" "$INTERRUPTED_REVISION"
 relabel_image "$BACKUP_IMAGE" "$INTERRUPTED_BACKUP_IMAGE" "$INTERRUPTED_REVISION"
-MELLOA_RELEASE_HEALTH_TIMEOUT_SECONDS=60 \
-MELLOA_RELEASE_POLL_SECONDS=30 \
+setsid env \
+  MELLOA_RELEASE_HEALTH_TIMEOUT_SECONDS=60 \
+  MELLOA_RELEASE_POLL_SECONDS=30 \
   "$ROOT/tools/server_release.sh" deploy \
     --env-file "$ENV_FILE" \
     --state-dir "$WORKDIR/release-state" \
@@ -503,6 +513,12 @@ MELLOA_RELEASE_POLL_SECONDS=30 \
     --backup-image "$INTERRUPTED_BACKUP_IMAGE" \
     --no-build >"$WORKDIR/interrupted-release.log" 2>&1 &
 INTERRUPTED_RELEASE_PID=$!
+INTERRUPTED_RELEASE_PGID="$(ps -o pgid= -p "$INTERRUPTED_RELEASE_PID")"
+INTERRUPTED_RELEASE_PGID="${INTERRUPTED_RELEASE_PGID//[[:space:]]/}"
+if [[ "$INTERRUPTED_RELEASE_PGID" != "$INTERRUPTED_RELEASE_PID" ]]; then
+  echo "Interrupted release did not start in an isolated process group" >&2
+  exit 1
+fi
 interrupted_container=""
 for _ in $(seq 1 120); do
   candidate_container="$(compose ps --all --quiet melloa)"
@@ -520,21 +536,34 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 if [[ -z "$interrupted_container" ]]; then
-  kill -TERM "$INTERRUPTED_RELEASE_PID" 2>/dev/null || true
+  kill -KILL -- "-$INTERRUPTED_RELEASE_PGID" 2>/dev/null || true
   wait "$INTERRUPTED_RELEASE_PID" || true
   INTERRUPTED_RELEASE_PID=""
+  INTERRUPTED_RELEASE_PGID=""
   cat "$WORKDIR/interrupted-release.log" >&2
   echo "Candidate release did not enter its pre-activation state" >&2
   exit 1
 fi
-kill -TERM "$INTERRUPTED_RELEASE_PID"
+[[ "$(jq -r .mode "$WORKDIR/release-state/operation.json")" == restore-active ]]
+[[ "$(stat --format='%a' "$WORKDIR/release-state/operation.json")" == 600 ]]
+kill -KILL -- "-$INTERRUPTED_RELEASE_PGID"
 if wait "$INTERRUPTED_RELEASE_PID"; then
   echo "Interrupted release unexpectedly reported success" >&2
   exit 1
+else
+  interrupted_status=$?
+fi
+if ((interrupted_status != 137)); then
+  echo "Interrupted release did not terminate via SIGKILL" >&2
+  exit 1
 fi
 INTERRUPTED_RELEASE_PID=""
+INTERRUPTED_RELEASE_PGID=""
+[[ -f "$WORKDIR/release-state/operation.json" ]]
+release recover >"$WORKDIR/release-recovery.log" 2>&1
 grep --fixed-strings --quiet \
-  'The last active release has been recovered.' "$WORKDIR/interrupted-release.log"
+  'The last active release has been recovered.' "$WORKDIR/release-recovery.log"
+[[ ! -e "$WORKDIR/release-state/operation.json" ]]
 [[ "$(jq -r .active.revision "$WORKDIR/release-state/release.json")" == "$SOURCE_REVISION" ]]
 [[ "$(<"$WORKDIR/release-state/active-revision")" == "$SOURCE_REVISION" ]]
 run_recovery_journey verify >/dev/null
@@ -572,4 +601,4 @@ readonly ACTIVE_MELLOA_CONTAINER="$(compose ps --all --quiet melloa)"
 [[ "$(docker inspect --format '{{.Image}}' "$ACTIVE_MELLOA_CONTAINER")" == "$(docker image inspect --format '{{.Id}}' "$IMAGE")" ]]
 [[ "$(jq -s '[.[].outcome] | index("interrupted") != null and index("rolled_back") != null and index("succeeded") != null' "$WORKDIR/release-state/history.jsonl")" == true ]]
 
-echo "Persistent runtime, encrypted recovery, interruption recovery, failed deploy rollback, and explicit rollback passed."
+echo "Persistent runtime, encrypted recovery, power-loss release recovery, failed deploy rollback, and explicit rollback passed."

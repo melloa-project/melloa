@@ -2,9 +2,9 @@
 
 This is the generic Linux container runtime intended to become Melloa's low-maintenance server
 path. It is **not yet an owner deployment instruction** and does not change the repository's
-`NOT READY` status. Hard-power-loss release resumption, self-change policy, real provider and
-off-device storage configuration, actual server installation, and deployed dogfooding are still
-required.
+`NOT READY` status. Host supervision of the tested release recovery and self-change workers, real
+provider and off-device storage configuration, actual server installation, and deployed dogfooding
+are still required.
 
 The runtime has five bounded roles:
 
@@ -102,9 +102,12 @@ For an existing installation, deployment stops owner-facing work, takes an exact
 snapshot under a separate release-retention tag, and only then runs candidate migrations and health
 checks. The ten newest release snapshots are protected from normal daily pruning. A migration or
 health failure replaces the database from that snapshot and restarts the prior image. `HUP`, `INT`,
-and `TERM` during the transaction take the same recovery path. Explicit rollback first snapshots
-current data and refuses to start an older image unless that image's migration manifest accepts the
-current schema; it does not silently discard post-deployment owner data.
+and `TERM` during the transaction take the same recovery path. Every mutating phase is also recorded
+in an atomically replaced, filesystem-synchronized operation journal before it begins. The `recover`
+command resumes a first deployment or restores the prior database and release after an uncatchable
+termination. Owner-facing work stays held until the journal is durably cleared. Explicit rollback
+first snapshots current data and refuses to start an older image unless that image's migration
+manifest accepts the current schema; it does not silently discard post-deployment owner data.
 
 The operator-shaped commands currently exercised by the disposable proof are:
 
@@ -114,15 +117,19 @@ tools/server_release.sh deploy \
   --state-dir /var/lib/melloa/release-state
 tools/server_release.sh status \
   --state-dir /var/lib/melloa/release-state
+tools/server_release.sh recover \
+  --env-file /etc/melloa/server.env \
+  --state-dir /var/lib/melloa/release-state
 tools/server_release.sh rollback \
   --env-file /etc/melloa/server.env \
   --state-dir /var/lib/melloa/release-state
 ```
 
-These are not yet installation instructions. An untrappable `SIGKILL` or machine power loss during
-the narrow pre-activation window leaves model and Telegram work fail-closed, but automatic boot-time
-transaction resumption has not yet been implemented. That availability gap is one reason the root
-README remains `NOT READY`.
+These are not yet installation instructions. The disposable proof sends an untrappable `SIGKILL`
+during the pre-activation window, confirms that the durable operation journal remains, invokes
+`recover`, and verifies both the previous release and owner data. A hardened boot unit must still run
+that reconciliation before workers start, and that ordering has not yet been installed or reboot
+tested on an actual server. That supervision gap is one reason the root README remains `NOT READY`.
 
 ## Mechanical verification
 
@@ -136,8 +143,9 @@ That check builds both pinned runtime images, reconciles least-privilege databas
 all migrations, and proves application restart and PostgreSQL recovery. It also exercises the real
 scheduler through success, database outage, retry, encrypted-at-rest inspection, destruction of the
 source database, and clean recovery of conversation, memory, session, and Telegram route state. The
-same proof terminates a candidate release before activation, injects a broken release, installs a
-healthy release, and rolls it back while verifying owner data after every recovery. It is
+same proof kills a candidate release process with `SIGKILL` before activation, recovers from the
+durable journal, injects a broken release, installs a healthy release, and rolls it back while
+verifying owner data after every recovery. It is
 infrastructure evidence only—not real off-device storage or Telegram/provider dogfooding.
 The `MELLOA_POSTGRES_IMAGE` and `MELLOA_RESTIC_IMAGE` overrides may name locally cached copies of
 the exact pinned images when a registry is unavailable.
