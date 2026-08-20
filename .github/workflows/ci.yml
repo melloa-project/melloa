@@ -50,12 +50,6 @@ jobs:
     steps:
       - name: Check out reviewed source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Check out independent Guardian source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: melloa-project/melloa-guardian
-          ref: 2006fef8b2f6deeed84da8ba8ccf03fb40672441
-          path: .ci/melloa-guardian
       - name: Install pinned uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
@@ -68,20 +62,14 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - name: Install Go for independent Guardian fixture
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-        with:
-          go-version: "1.24.x"
-          cache-dependency-path: .ci/melloa-guardian/go.mod
-      - name: Install locked application dependencies
-        run: make bootstrap
-      - name: Start canonical signed offline preview
+      - name: Start public-fixture offline preview
         shell: bash
         run: |
           set -euo pipefail
           state="$RUNNER_TEMP/melloa-mvp"
           setsid make preview \
-            GUARDIAN_ROOT=.ci/melloa-guardian \
+            GUARDIAN_STATUS=tests/fixtures/guardian/offline-status.json \
+            GUARDIAN_PUBLIC_KEY=tests/fixtures/guardian/public-key.pub \
             PREVIEW_STATE_DIR="$state" \
             > "$RUNNER_TEMP/melloa-preview.log" 2>&1 &
           echo "$!" > "$RUNNER_TEMP/melloa-preview.pid"
@@ -105,7 +93,7 @@ jobs:
           path: ${{ runner.temp }}/melloa-screenshots
           if-no-files-found: error
           retention-days: 14
-      - name: Stop canonical preview
+      - name: Stop public-fixture preview
         if: always()
         shell: bash
         run: |

@@ -187,6 +187,8 @@ def test_parser_exposes_only_current_operator_commands() -> None:
             "/run/guardian/status.json",
             "--public-key",
             "/etc/guardian/public.pem",
+            "--expected-guardian-receipt",
+            "sha256:" + "0" * 64,
             "--owner-credential-file",
             "/run/melloa/owner-credential",
         ]
@@ -197,6 +199,7 @@ def test_parser_exposes_only_current_operator_commands() -> None:
 
     assert guardian.handler is cli.guardian_status
     assert serve.handler is cli.serve
+    assert serve.expected_guardian_receipt == "sha256:" + "0" * 64
     assert migrate.handler is cli.migrate
     with pytest.raises(SystemExit):
         parser.parse_args(["serve-mvp"])

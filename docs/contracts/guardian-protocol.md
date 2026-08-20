@@ -55,6 +55,12 @@ identity or key change, and a directly consecutive receipt whose predecessor is 
 observed. A jump of more than one sequence remains valid because Melloa may legitimately miss
 intermediate Guardian transitions. A rejected read does not replace the last good observation.
 
+When one Melloa process verifies a projection before launching another, it passes the verified
+receipt hash as an expected initial receipt. The child rejects its first read unless that exact
+receipt still verifies, so swapping both the status and public key between launcher validation and
+core startup fails closed. This public launch anchor binds those two reads; it is not a persistent
+freshness anchor.
+
 These checks establish only observed continuity within one running reader. They detect a lower
 sequence, an alternate receipt at an already observed sequence, and a broken adjacent link. They do
 not prove ancestry when sequences were skipped. Calling this general fork detection would overstate

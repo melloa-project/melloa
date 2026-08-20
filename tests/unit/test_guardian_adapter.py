@@ -104,6 +104,45 @@ def test_file_reader_accepts_repeat_and_contiguous_successor(tmp_path, fixed_tim
     assert reader.read_status().payload.sequence == 2
 
 
+def test_file_reader_rejects_projection_substituted_before_first_read(
+    tmp_path,
+    fixed_time,
+) -> None:
+    offline, offline_public_key = signed_status(
+        fixed_time,
+        mode=GuardianMode.OFFLINE,
+    )
+    offline_receipt = verify_guardian_envelope(
+        offline,
+        offline_public_key,
+    ).receipt_hash
+    status_path = tmp_path / "status.json"
+    public_key_path = tmp_path / "public.pem"
+    status_path.write_bytes(offline)
+    public_key_path.write_bytes(offline_public_key)
+    matching_reader = FileGuardianStatusReader(
+        status_path,
+        public_key_path,
+        expected_initial_receipt_hash=offline_receipt,
+    )
+    assert matching_reader.read_status().receipt_hash == offline_receipt
+    reader = FileGuardianStatusReader(
+        status_path,
+        public_key_path,
+        expected_initial_receipt_hash=offline_receipt,
+    )
+
+    replacement, replacement_public_key = signed_status(
+        fixed_time,
+        mode=GuardianMode.NORMAL,
+    )
+    status_path.write_bytes(replacement)
+    public_key_path.write_bytes(replacement_public_key)
+
+    with pytest.raises(GuardianVerificationError, match="launch anchor"):
+        reader.read_status()
+
+
 def test_file_reader_rejects_rollback_and_retains_last_good_status(
     tmp_path,
     fixed_time,

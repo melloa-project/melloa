@@ -1,7 +1,9 @@
 UV_CACHE_DIR ?= .cache/uv
 UV_SYSTEM_CERTS ?= true
 UV := UV_CACHE_DIR=$(UV_CACHE_DIR) UV_SYSTEM_CERTS=$(UV_SYSTEM_CERTS) uv
-GUARDIAN_ROOT ?= ../melloa-guardian
+WEB_INSTALL_STAMP := apps/web/node_modules/.package-lock.json
+GUARDIAN_STATUS ?=
+GUARDIAN_PUBLIC_KEY ?=
 PREVIEW_STATE_DIR ?=
 PREVIEW_STATE_ARG := $(if $(strip $(PREVIEW_STATE_DIR)),--state-dir "$(PREVIEW_STATE_DIR)")
 PREVIEW_MODEL ?=
@@ -16,23 +18,44 @@ ifneq ($(strip $(PREVIEW_MODEL)),ollama)
 $(error Unknown PREVIEW_MODEL '$(PREVIEW_MODEL)'. Supported value: ollama; leave it empty for a preview without conversation)
 endif
 endif
+ifeq ($(strip $(GUARDIAN_STATUS)),)
+$(error GUARDIAN_STATUS is required; prepare an owner-controlled public handoff first (docs/getting-started.md))
+endif
+ifeq ($(strip $(GUARDIAN_PUBLIC_KEY)),)
+$(error GUARDIAN_PUBLIC_KEY is required; prepare an owner-controlled public handoff first (docs/getting-started.md))
+endif
 endif
 
-.PHONY: bootstrap bootstrap-python check check-generated integration lint preview recovery test typecheck web
+.PHONY: bootstrap bootstrap-python check check-generated integration lint preview preview-web recovery test typecheck web
 
 bootstrap: bootstrap-python
 	npm --prefix apps/web ci --ignore-scripts
 
 preview:
-	@test -f "$(GUARDIAN_ROOT)/go.mod" || { \
-		echo "Guardian checkout not found at $(GUARDIAN_ROOT). Clone https://github.com/melloa-project/melloa-guardian.git beside this repository." >&2; \
+	@test -f "$(GUARDIAN_STATUS)" && test ! -L "$(GUARDIAN_STATUS)" && test -r "$(GUARDIAN_STATUS)" || { \
+		echo "GUARDIAN_STATUS must be a readable regular file, not a symlink." >&2; \
 		exit 2; \
 	}
-	$(MAKE) bootstrap
-	$(MAKE) -C "$(GUARDIAN_ROOT)" check build
+	@test -f "$(GUARDIAN_PUBLIC_KEY)" && test ! -L "$(GUARDIAN_PUBLIC_KEY)" && test -r "$(GUARDIAN_PUBLIC_KEY)" || { \
+		echo "GUARDIAN_PUBLIC_KEY must be a readable regular file, not a symlink." >&2; \
+		exit 2; \
+	}
+	$(MAKE) bootstrap-python
+	$(UV) run --frozen --no-sync python -m melloa.apps.local_preview \
+		--guardian-status "$(GUARDIAN_STATUS)" \
+		--guardian-public-key "$(GUARDIAN_PUBLIC_KEY)" \
+		--verify-guardian-only
+	$(MAKE) preview-web
 	npm --prefix apps/web run build
 	$(UV) run --frozen --no-sync python -m melloa.apps.local_preview \
-		--guardian-root "$(GUARDIAN_ROOT)" $(PREVIEW_STATE_ARG) $(PREVIEW_MODEL_ARG)
+		--guardian-status "$(GUARDIAN_STATUS)" \
+		--guardian-public-key "$(GUARDIAN_PUBLIC_KEY)" \
+		$(PREVIEW_STATE_ARG) $(PREVIEW_MODEL_ARG)
+
+preview-web: $(WEB_INSTALL_STAMP)
+
+$(WEB_INSTALL_STAMP): apps/web/package-lock.json apps/web/package.json .nvmrc
+	npm --prefix apps/web ci --ignore-scripts
 
 bootstrap-python:
 	$(UV) sync --frozen --all-groups --no-install-project

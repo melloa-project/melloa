@@ -100,9 +100,16 @@ def _read_regular_file(path: Path, maximum_size: int) -> bytes:
 
 
 class FileGuardianStatusReader:
-    def __init__(self, status_path: Path, public_key_path: Path) -> None:
+    def __init__(
+        self,
+        status_path: Path,
+        public_key_path: Path,
+        *,
+        expected_initial_receipt_hash: str | None = None,
+    ) -> None:
         self._status_path = status_path
         self._public_key_path = public_key_path
+        self._expected_initial_receipt_hash = expected_initial_receipt_hash
         self._lock = Lock()
         self._pinned_public_key: bytes | None = None
         self._last_status: VerifiedGuardianStatus | None = None
@@ -124,6 +131,14 @@ class FileGuardianStatusReader:
             raise GuardianVerificationError("Guardian public key changed during this process")
 
         previous = self._last_status
+        if (
+            previous is None
+            and self._expected_initial_receipt_hash is not None
+            and current.receipt_hash != self._expected_initial_receipt_hash
+        ):
+            raise GuardianVerificationError(
+                "Guardian initial receipt does not match the launch anchor"
+            )
         if previous is not None:
             if current.receipt_hash == previous.receipt_hash:
                 return

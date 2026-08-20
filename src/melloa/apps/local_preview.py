@@ -1,8 +1,7 @@
 """Owner-invoked orchestration for the disposable local product preview.
 
-This process may invoke the separately built Guardian CLI to create temporary
-preview state. It never passes the Guardian private key, journal, lock, or a
-mutation command to the Melloa core.
+Guardian state is an owner-supplied, read-only input. This process verifies the
+signed projection but does not initialize, transition, or remove Guardian state.
 """
 
 from __future__ import annotations
@@ -24,17 +23,20 @@ from typing import IO, NoReturn
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from melloa.adapters.guardian.file import FileGuardianStatusReader
+from melloa.adapters.guardian.file import (
+    FileGuardianStatusReader,
+    GuardianVerificationError,
+)
 from melloa.adapters.models.openai_compatible import (
     OpenAICompatibleModelConfig,
     OpenAICompatibleModelGateway,
     load_openai_compatible_model_config,
 )
+from melloa.domain.guardian import GuardianMode
 from melloa.domain.models import ModelHealthState, ProcessingLocation
 from melloa.release import CURRENT_RELEASE
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_GUARDIAN_ROOT = ROOT.parent / "melloa-guardian"
 _STATE_MARKER = ".melloa-local-preview"
 
 
@@ -46,13 +48,15 @@ class PreviewError(RuntimeError):
 class PreviewPaths:
     root: Path
     owner_credential: Path
-    guardian_status: Path
-    guardian_audit: Path
-    guardian_private_key: Path
-    guardian_public_key: Path
-    guardian_lock: Path
     core_log: Path
     web_log: Path
+
+
+@dataclass(frozen=True)
+class GuardianHandoff:
+    status: Path
+    public_key: Path
+    receipt_hash: str
 
 
 @dataclass
@@ -67,11 +71,6 @@ def _paths(root: Path) -> PreviewPaths:
     return PreviewPaths(
         root=root,
         owner_credential=root / "owner-credential",
-        guardian_status=root / "guardian-status.json",
-        guardian_audit=root / "guardian-audit.jsonl",
-        guardian_private_key=root / "guardian-private.pem",
-        guardian_public_key=root / "guardian-public.pem",
-        guardian_lock=root / "guardian.lock",
         core_log=root / "core.log",
         web_log=root / "owner-console.log",
     )
@@ -115,68 +114,41 @@ def remove_preview_state(paths: PreviewPaths) -> None:
     shutil.rmtree(paths.root)
 
 
-def guardian_commands(binary: Path, paths: PreviewPaths) -> tuple[tuple[str, ...], ...]:
-    flags = (
-        "--status-file",
-        str(paths.guardian_status),
-        "--audit-file",
-        str(paths.guardian_audit),
-        "--private-key-file",
-        str(paths.guardian_private_key),
-        "--public-key-file",
-        str(paths.guardian_public_key),
-        "--lock-file",
-        str(paths.guardian_lock),
-    )
-    return (
-        (
-            str(binary),
-            "init",
-            "--instance-id",
-            "local-preview-guardian",
-            "--key-id",
-            "guardian.status-v1",
-            *flags,
-        ),
-        (
-            str(binary),
-            "transition",
-            "--mode",
-            "offline",
-            "--reason",
-            "owner.local_preview",
-            *flags,
-        ),
-    )
-
-
-def initialize_guardian(
-    binary: Path,
-    paths: PreviewPaths,
-    *,
-    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-) -> None:
-    for command in guardian_commands(binary, paths):
-        try:
-            runner(command, check=True, capture_output=True, text=True)
-        except (OSError, subprocess.CalledProcessError) as error:
-            detail = ""
-            if isinstance(error, subprocess.CalledProcessError) and error.stderr:
-                detail = f": {error.stderr.strip().splitlines()[-1]}"
-            raise PreviewError(f"Guardian preview setup failed{detail}") from error
+def validate_guardian_projection(
+    status_path: Path,
+    public_key_path: Path,
+) -> GuardianHandoff:
+    status = Path(os.path.abspath(status_path.expanduser()))
+    public_key = Path(os.path.abspath(public_key_path.expanduser()))
     try:
-        verified = FileGuardianStatusReader(
-            paths.guardian_status,
-            paths.guardian_public_key,
-        ).read_status()
-    except (OSError, ValueError) as error:
-        raise PreviewError("Guardian signed preview status could not be verified") from error
-    if verified.payload.mode.value != "offline":
-        raise PreviewError("Guardian preview did not enter the required offline mode")
+        verified = FileGuardianStatusReader(status, public_key).read_status()
+    except GuardianVerificationError as error:
+        raise PreviewError(f"Guardian signed status was rejected: {error}") from error
+    if verified.payload.mode is not GuardianMode.OFFLINE:
+        raise PreviewError("Guardian status must already be in offline mode")
+    return GuardianHandoff(
+        status=status,
+        public_key=public_key,
+        receipt_hash=verified.receipt_hash,
+    )
+
+
+def verify_guardian_handoff(args: argparse.Namespace) -> int:
+    guardian = validate_guardian_projection(
+        args.guardian_status,
+        args.guardian_public_key,
+    )
+    print(
+        "Guardian handoff verified offline "
+        f"(receipt {guardian.receipt_hash}).",
+        flush=True,
+    )
+    return 0
 
 
 def core_command(
     paths: PreviewPaths,
+    guardian: GuardianHandoff,
     port: int,
     model_config: Path | None = None,
 ) -> tuple[str, ...]:
@@ -186,9 +158,11 @@ def core_command(
         "melloa.apps.cli",
         "serve",
         "--status",
-        str(paths.guardian_status),
+        str(guardian.status),
         "--public-key",
-        str(paths.guardian_public_key),
+        str(guardian.public_key),
+        "--expected-guardian-receipt",
+        guardian.receipt_hash,
         "--owner-credential-file",
         str(paths.owner_credential),
         "--host",
@@ -233,12 +207,13 @@ def preflight_model(config: OpenAICompatibleModelConfig) -> None:
 def preview_contract(config: OpenAICompatibleModelConfig | None) -> str:
     if config is None:
         return (
-            "Preview contract: loopback only · signed Guardian offline · no external "
-            "model calls · process-local disposable state · conversation unavailable."
+            "Preview contract: loopback only · Guardian verified offline at launch · "
+            "no external model calls · process-local disposable state · "
+            "conversation unavailable."
         )
     return (
-        "Preview contract: loopback services · signed Guardian offline · owner text and "
-        f"selected memory go to the on-device {config.display_name} model "
+        "Preview contract: loopback services · Guardian verified offline at launch · "
+        f"owner text and selected memory go to the on-device {config.display_name} model "
         f"({config.model_id}) · no external disclosure · process-local disposable state."
     )
 
@@ -402,13 +377,10 @@ def run_preview(args: argparse.Namespace) -> int:
         model_path, model_config = load_preview_model(model_paths[0])
         preflight_model(model_config)
 
-    guardian_root = args.guardian_root.expanduser().resolve()
-    guardian_binary = _required_file(
-        guardian_root / "bin/guardianctl",
-        "Guardian is not built. Run `make -C ../melloa-guardian check build` and retry.",
+    guardian = validate_guardian_projection(
+        args.guardian_status,
+        args.guardian_public_key,
     )
-    if not os.access(guardian_binary, os.X_OK):
-        raise PreviewError(f"Guardian binary is not executable: {guardian_binary}")
     _required_file(
         ROOT / "apps/web/dist/index.html",
         "Owner Console is not built. Run `npm --prefix apps/web run build` and retry.",
@@ -423,12 +395,15 @@ def run_preview(args: argparse.Namespace) -> int:
     processes: list[ManagedProcess] = []
     try:
         paths, credential = create_preview_state(args.state_dir)
-        print("Preparing signed offline Guardian state…", flush=True)
-        initialize_guardian(guardian_binary, paths)
 
         core = _start_process(
             "Melloa core",
-            core_command(paths, args.core_port, model_path),
+            core_command(
+                paths,
+                guardian,
+                args.core_port,
+                model_path,
+            ),
             paths.core_log,
         )
         processes.append(core)
@@ -462,7 +437,8 @@ def run_preview(args: argparse.Namespace) -> int:
             f"\n  Owner credential:  {credential}"
             f"\n\n{preview_next_action(model_config)}"
             f"\n\n{preview_contract(model_config)}"
-            "\nPress Ctrl-C to stop both services and delete the credential and preview state.\n",
+            "\nPress Ctrl-C to stop both services and delete only Melloa's "
+            "credential and logs. Guardian state remains owner-managed.\n",
             flush=True,
         )
         _monitor(processes)
@@ -474,7 +450,16 @@ def run_preview(args: argparse.Namespace) -> int:
             _stop_process(process)
         if paths is not None and paths.root.exists():
             remove_preview_state(paths)
-            print("Disposable preview state removed.", flush=True)
+            print(
+                "Melloa's disposable credential and logs were removed; "
+                "Guardian state was not changed.",
+                flush=True,
+            )
+            print(
+                "From the Guardian checkout, run `make preview-state-clean` "
+                "when this public handoff is no longer needed.",
+                flush=True,
+            )
     return 0
 
 
@@ -484,16 +469,29 @@ def build_parser() -> argparse.ArgumentParser:
         description="Start the complete disposable Melloa Owner Console journey.",
     )
     parser.add_argument(
-        "--guardian-root",
+        "--guardian-status",
+        dest="guardian_status",
         type=Path,
-        default=DEFAULT_GUARDIAN_ROOT,
-        help="Path to the independently built melloa-guardian checkout.",
+        required=True,
+        help="Path to the owner-supplied signed Guardian status projection.",
+    )
+    parser.add_argument(
+        "--guardian-public-key",
+        dest="guardian_public_key",
+        type=Path,
+        required=True,
+        help="Path to the owner-supplied Guardian verification key.",
     )
     parser.add_argument(
         "--state-dir",
         type=Path,
         default=None,
         help="Create preview state at this new path instead of a secure temporary path.",
+    )
+    parser.add_argument(
+        "--verify-guardian-only",
+        action="store_true",
+        help="Verify the signed offline Guardian handoff, then exit.",
     )
     parser.add_argument(
         "--model-config",
@@ -521,7 +519,11 @@ def main() -> None:
     previous_term = signal.signal(signal.SIGTERM, _signal_as_interrupt)
     try:
         try:
-            result = run_preview(args)
+            result = (
+                verify_guardian_handoff(args)
+                if args.verify_guardian_only
+                else run_preview(args)
+            )
         except PreviewError as error:
             print(f"Melloa preview could not start: {error}", file=sys.stderr)
             result = 2

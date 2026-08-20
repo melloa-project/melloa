@@ -6,6 +6,7 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import stat
 import sys
 from contextlib import ExitStack
@@ -52,6 +53,12 @@ def _private_bind_address(value: str) -> str:
         or not (address.is_loopback or address.is_private or is_tailscale)
     ):
         raise argparse.ArgumentTypeError("bind address must be loopback or private")
+    return value
+
+
+def _sha256_digest(value: str) -> str:
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
+        raise argparse.ArgumentTypeError("expected a tagged SHA-256 digest")
     return value
 
 
@@ -126,7 +133,15 @@ def _validate_database_targets(value: str, *, allow_unix_socket: bool) -> None:
 
 
 def _guardian_reader(args: argparse.Namespace) -> FileGuardianStatusReader:
-    return FileGuardianStatusReader(args.guardian_status, args.guardian_public_key)
+    return FileGuardianStatusReader(
+        args.guardian_status,
+        args.guardian_public_key,
+        expected_initial_receipt_hash=getattr(
+            args,
+            "expected_guardian_receipt",
+            None,
+        ),
+    )
 
 
 def guardian_status(args: argparse.Namespace) -> int:
@@ -235,6 +250,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="guardian_public_key",
         type=Path,
         required=True,
+    )
+    serve_parser.add_argument(
+        "--expected-guardian-receipt",
+        type=_sha256_digest,
+        help="Require the core's first Guardian read to match this verified receipt.",
     )
     serve_parser.add_argument(
         "--owner-credential-file",

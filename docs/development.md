@@ -17,7 +17,7 @@ longitudinal conversations; fixtures establish mechanics only.
 - uv 0.12.0
 - Node.js 22 with the committed npm lock
 - Docker for PostgreSQL integration and recovery checks
-- Go 1.24+ for the separate Guardian repository
+- Go 1.24+ only when the owner prepares a handoff in the separate Guardian repository
 
 No model key, Telegram token, personal data, or private deployment repository is needed for local
 verification. Put any local secret file outside the checkout with mode `0600`; never put secret
@@ -30,8 +30,12 @@ make bootstrap       # install locked Python and web dependencies
 make check           # migration manifest, lint, types, unit tests, and web build/tests
 make integration     # PostgreSQL integration; requires Docker
 make recovery        # encrypted clean-restore exercise; requires Docker
-make preview         # current disposable baseline; requires sibling Guardian checkout
+make preview         # requires owner-supplied GUARDIAN_STATUS and GUARDIAN_PUBLIC_KEY
 ```
+
+The preview target verifies those two public Guardian inputs. It does not receive the Guardian
+checkout, build or invoke `guardianctl`, choose private state paths, or remove Guardian state. Follow
+[getting started](getting-started.md) for the disposable owner handoff.
 
 Use the narrowest relevant checks while iterating, then run the complete affected gate. A green old
 test is not a reason to retain rejected behavior; delete or rewrite it when product semantics change.
