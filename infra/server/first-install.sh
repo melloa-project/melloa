@@ -379,8 +379,18 @@ explain_model_route_inputs() {
   echo "Configure the $route model route: $purpose." >&2
   echo "Choose openai for api.openai.com/v1. Choose external only for another hosted provider or router that documents:" >&2
   echo "  HTTPS OpenAI-compatible base URL, exact model ID, API style, bearer token, and reviewed GBP token prices." >&2
+  echo "OpenAI preset defaults: capable uses gpt-5.6-terra; economy uses gpt-5.6-luna. Type a different reviewed model ID if needed." >&2
   echo "Do not guess zero prices; use the current provider pricing you reviewed for this account." >&2
   echo "Token limits and timeouts use setup defaults unless a staged environment override is supplied." >&2
+}
+
+openai_default_model_id() {
+  local route="$1"
+  case "$route" in
+    capable) printf '%s' gpt-5.6-terra ;;
+    economy) printf '%s' gpt-5.6-luna ;;
+    *) fail "unknown model route: $route" ;;
+  esac
 }
 
 write_model_route() {
@@ -418,7 +428,8 @@ write_model_route() {
       provider_id="provider.openai-$route"
       model_id="$(
         prompt_text "$(route_environment_name "$route" MODEL_ID)" \
-          "$route OpenAI model ID"
+          "$route OpenAI model ID" \
+          "$(openai_default_model_id "$route")"
       )"
       validate_model_id "$model_id" "$route OpenAI model ID"
       base_url="https://api.openai.com/v1"

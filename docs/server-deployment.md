@@ -188,9 +188,9 @@ For the model prompts, use one of these hosted patterns:
 - simplest hosted path: choose `openai` for both routes, use a stronger model ID for `capable`, a
   cheaper distinct model ID for `economy`, and enter the current GBP token prices and per-request
   ceilings you have reviewed for your account;
-- OpenAI GPT-5.6-family path: use `gpt-5.6-luna` for economy, `gpt-5.6-terra` for balanced capable
-  work, or `gpt-5.6-sol` for the highest-capability route when your account access and reviewed
-  prices justify it;
+- OpenAI GPT-5.6-family path: press Enter for the `openai` preset defaults, `gpt-5.6-luna` for
+  economy and `gpt-5.6-terra` for capable, or type `gpt-5.6-sol` for the capable route when your
+  account access and reviewed prices justify it;
 - mixed hosted path: choose `openai` for `capable` and `external` for `economy` when the cheaper
   provider exposes a reviewed OpenAI-compatible HTTPS endpoint, model ID, API style, bearer token,
   and price ceilings;

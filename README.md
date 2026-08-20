@@ -74,6 +74,10 @@ rollback evidence. The currently implemented unattended server credential modes 
 API key or an explicitly configured local provider; an interactive ChatGPT/Codex subscription login
 is not supported as unattended server auth for this path.
 
+For the `openai` conversation preset, guided setup offers `gpt-5.6-luna` as the economy default and
+`gpt-5.6-terra` as the capable default. Type a different reviewed model ID, such as `gpt-5.6-sol`
+for higher-capability turns, when account access and pricing justify it.
+
 If Codex CLI becomes the preferred economics for ordinary conversation, that should be implemented
 as a separate conversation adapter with no source checkout, no file-write authority, no release
 credentials, and its own unattended-service proof. It should not reuse the confined self-change

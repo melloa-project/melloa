@@ -147,6 +147,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "sudo /usr/local/libexec/melloa/restore-drill" in deploy
     assert "`api-key`" in deploy
     assert "gpt-5.6-luna" in deploy
+    assert "gpt-5.6-terra` as the capable default" in deploy
     assert "(../runtime-loop/)" in deploy
     assert "/change propose" in self_change
     assert "commits, pushes, deploys" in self_change

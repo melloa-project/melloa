@@ -6,6 +6,7 @@ readonly WORKDIR="$(mktemp -d /tmp/melloa-first-install-test.XXXXXX)"
 readonly INPUTS="$WORKDIR/inputs"
 readonly TARGET="$WORKDIR/target"
 readonly MOUNT_TARGET="$WORKDIR/mount-target"
+readonly DEFAULT_MODEL_TARGET="$WORKDIR/default-model-target"
 readonly BAD_TARGET="$WORKDIR/bad-target"
 readonly BAD_MOUNT_TARGET="$WORKDIR/bad-mount-target"
 readonly BAD_SECRET_TARGET="$WORKDIR/bad-secret-target"
@@ -18,6 +19,7 @@ readonly SELF_CHANGE_TARGET="$WORKDIR/self-change-target"
 readonly CA_RESUME_TARGET="$WORKDIR/ca-resume-target"
 readonly LOG="$WORKDIR/first-install.log"
 readonly MOUNT_LOG="$WORKDIR/first-install-mount.log"
+readonly DEFAULT_MODEL_LOG="$WORKDIR/first-install-default-model.log"
 readonly RESUME_LOG="$WORKDIR/first-install-resume.log"
 readonly SELF_CHANGE_LOG="$WORKDIR/first-install-self-change.log"
 readonly CA_RESUME_SETUP_LOG="$WORKDIR/first-install-ca-resume-setup.log"
@@ -139,6 +141,9 @@ grep --fixed-strings --quiet \
   "Do not guess zero prices; use the current provider pricing you reviewed for this account." \
   "$LOG"
 grep --fixed-strings --quiet \
+  "OpenAI preset defaults: capable uses gpt-5.6-terra; economy uses gpt-5.6-luna." \
+  "$LOG"
+grep --fixed-strings --quiet \
   "Token limits and timeouts use setup defaults unless a staged environment override is supplied." \
   "$LOG"
 if grep --fixed-strings --quiet "model max input tokens" "$LOG"; then
@@ -181,6 +186,35 @@ grep --fixed-strings --quiet "Public path checks passed." "$MOUNT_LOG"
 grep --fixed-strings --quiet \
   "MELLOA_BACKUP_REPOSITORY_DIR=$REAL_BACKUP_MOUNT" \
   "$MOUNT_TARGET/etc/melloa/server.env"
+
+MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+MELLOA_SETUP_CAPABLE_TOKEN=capable_default_model_secret \
+MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
+MELLOA_SETUP_ECONOMY_TOKEN=economy_default_model_secret \
+MELLOA_SETUP_ECONOMY_ESTIMATED_MAX_COST_GBP=0.01 \
+MELLOA_SETUP_ECONOMY_INPUT_COST_GBP_PER_MILLION_TOKENS=0.25 \
+MELLOA_SETUP_ECONOMY_OUTPUT_COST_GBP_PER_MILLION_TOKENS=2 \
+MELLOA_SETUP_RESTIC_PASSWORD=restic_default_model_secret_123456789 \
+  "$ROOT/infra/server/first-install.sh" \
+    --source "$ROOT" \
+    --root "$DEFAULT_MODEL_TARGET" \
+    --skip-activation \
+    </dev/null \
+    >"$DEFAULT_MODEL_LOG" 2>&1
+readonly DEFAULT_MODEL_PRIVATE="$DEFAULT_MODEL_TARGET/etc/melloa/private"
+[[ "$(jq -r .model_id "$DEFAULT_MODEL_PRIVATE/capable-model.json")" == gpt-5.6-terra ]]
+[[ "$(jq -r .model_id "$DEFAULT_MODEL_PRIVATE/economy-model.json")" == gpt-5.6-luna ]]
+grep --fixed-strings --quiet \
+  "OpenAI preset defaults: capable uses gpt-5.6-terra; economy uses gpt-5.6-luna." \
+  "$DEFAULT_MODEL_LOG"
 
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
 MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
@@ -297,12 +331,20 @@ for secret in \
   capable_first_install_secret \
   economy_first_install_secret \
   restic_first_install_secret_123456789 \
+  capable_mount_test_secret \
+  economy_mount_test_secret \
+  restic_mount_test_secret_123456789 \
+  capable_default_model_secret \
+  economy_default_model_secret \
+  restic_default_model_secret_123456789 \
   capable_self_change_secret \
   economy_self_change_secret \
   restic_self_change_secret_123456789 \
   githubpatfirstinstall1234567890 \
   sk-first-install-codex-key-1234567890; do
-  if grep --fixed-strings --quiet "$secret" "$LOG" "$SELF_CHANGE_LOG"; then
+  if grep --fixed-strings --quiet \
+    "$secret" "$LOG" "$MOUNT_LOG" "$DEFAULT_MODEL_LOG" \
+    "$SELF_CHANGE_LOG" "$CA_RESUME_SETUP_LOG"; then
     echo "First-install setup exposed a private input" >&2
     exit 1
   fi
