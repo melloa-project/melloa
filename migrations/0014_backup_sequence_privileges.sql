@@ -1,0 +1,4 @@
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA melloa TO melloa_backup;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE melloa_migrate IN SCHEMA melloa
+    GRANT SELECT ON SEQUENCES TO melloa_backup;

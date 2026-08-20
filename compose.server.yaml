@@ -3,6 +3,9 @@ name: ${MELLOA_COMPOSE_PROJECT_NAME:-melloa-server}
 x-melloa-image: &melloa-image
   image: ${MELLOA_IMAGE:-melloa-local/server:development}
 
+x-postgres-image: &postgres-image
+  image: ${MELLOA_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff}
+
 x-bounded-logs: &bounded-logs
   driver: json-file
   options:
@@ -11,9 +14,7 @@ x-bounded-logs: &bounded-logs
 
 services:
   postgres:
-    image: ${MELLOA_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff}
-    entrypoint: ["/usr/local/bin/melloa-postgres-entrypoint"]
-    command: ["postgres"]
+    <<: *postgres-image
     restart: unless-stopped
     environment:
       POSTGRES_DB: melloa
@@ -22,13 +23,9 @@ services:
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=peer
     secrets:
       - postgres_admin_password
-      - postgres_app_password
-      - postgres_migration_password
     volumes:
       - postgres-data:/var/lib/postgresql
-      - ./infra/server/postgres-entrypoint.sh:/usr/local/bin/melloa-postgres-entrypoint:ro
       - ./infra/postgres/init/001_roles.sql:/docker-entrypoint-initdb.d/001_roles.sql:ro
-      - ./infra/server/postgres-init/002_runtime_logins.sh:/docker-entrypoint-initdb.d/002_runtime_logins.sh:ro
     networks:
       state:
         ipv4_address: ${MELLOA_DATABASE_ADDRESS:-172.30.37.2}
@@ -41,6 +38,33 @@ services:
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 30s
+    logging: *bounded-logs
+
+  database-logins:
+    <<: *postgres-image
+    entrypoint: ["/usr/local/bin/melloa-reconcile-logins"]
+    user: "0:0"
+    secrets:
+      - postgres_admin_password
+      - postgres_app_password
+      - postgres_migration_password
+      - postgres_backup_password
+    volumes:
+      - ./infra/server/reconcile-logins.sh:/usr/local/bin/melloa-reconcile-logins:ro
+    networks:
+      - state
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    restart: "no"
     logging: *bounded-logs
 
   migrate:
@@ -59,11 +83,114 @@ services:
     networks:
       - state
     depends_on:
-      postgres:
-        condition: service_healthy
+      database-logins:
+        condition: service_completed_successfully
     read_only: true
     tmpfs:
       - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    restart: "no"
+    logging: *bounded-logs
+
+  backup:
+    image: ${MELLOA_BACKUP_IMAGE:-melloa-local/backup:development}
+    build:
+      context: .
+      dockerfile: infra/server/backup.Dockerfile
+      args:
+        MELLOA_SOURCE_REVISION: ${MELLOA_SOURCE_REVISION:-uncommitted}
+        MELLOA_POSTGRES_IMAGE: ${MELLOA_POSTGRES_IMAGE:-pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff}
+        MELLOA_RESTIC_IMAGE: ${MELLOA_RESTIC_IMAGE:-restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}
+    command: ["run"]
+    user: "${MELLOA_RUNTIME_UID:-10001}:${MELLOA_RUNTIME_GID:-10001}"
+    environment:
+      MELLOA_BACKUP_INTERVAL_SECONDS: ${MELLOA_BACKUP_INTERVAL_SECONDS:-86400}
+      MELLOA_BACKUP_RETRY_SECONDS: ${MELLOA_BACKUP_RETRY_SECONDS:-900}
+      MELLOA_BACKUP_STATUS_FILE: /run/melloa/state/backup-status.json
+      RESTIC_REPOSITORY: /run/melloa/repository
+      RESTIC_PASSWORD_FILE: /run/melloa/private/restic-password
+    volumes:
+      - type: bind
+        source: ${MELLOA_POSTGRES_BACKUP_PASSWORD_FILE:?Set MELLOA_POSTGRES_BACKUP_PASSWORD_FILE}
+        target: /run/melloa/private/postgres-backup-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_RESTIC_PASSWORD_FILE:?Set MELLOA_RESTIC_PASSWORD_FILE}
+        target: /run/melloa/private/restic-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_BACKUP_REPOSITORY_DIR:?Set MELLOA_BACKUP_REPOSITORY_DIR}
+        target: /run/melloa/repository
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_RUNTIME_STATE_DIR:?Set MELLOA_RUNTIME_STATE_DIR}
+        target: /run/melloa/state
+        bind:
+          create_host_path: false
+    networks:
+      - state
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging: *bounded-logs
+
+  restore:
+    image: ${MELLOA_BACKUP_IMAGE:-melloa-local/backup:development}
+    profiles: ["recovery"]
+    command: ["restore-database", "latest"]
+    user: "0:0"
+    environment:
+      RESTIC_REPOSITORY: /run/melloa/repository
+      RESTIC_PASSWORD_FILE: /run/melloa/private/restic-password
+    volumes:
+      - type: bind
+        source: ${MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE:?Set MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE}
+        target: /run/melloa/private/postgres-migration-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_RESTIC_PASSWORD_FILE:?Set MELLOA_RESTIC_PASSWORD_FILE}
+        target: /run/melloa/private/restic-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MELLOA_BACKUP_REPOSITORY_DIR:?Set MELLOA_BACKUP_REPOSITORY_DIR}
+        target: /run/melloa/repository
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - state
+    depends_on:
+      database-logins:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:mode=0700
     cap_drop:
       - ALL
     security_opt:
@@ -214,3 +341,5 @@ secrets:
     file: ${MELLOA_POSTGRES_APP_PASSWORD_FILE:?Set MELLOA_POSTGRES_APP_PASSWORD_FILE}
   postgres_migration_password:
     file: ${MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE:?Set MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE}
+  postgres_backup_password:
+    file: ${MELLOA_POSTGRES_BACKUP_PASSWORD_FILE:?Set MELLOA_POSTGRES_BACKUP_PASSWORD_FILE}

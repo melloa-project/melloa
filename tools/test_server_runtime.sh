@@ -5,7 +5,9 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly WORKDIR="$(mktemp -d "$ROOT/.server-runtime.XXXXXX")"
 readonly PROJECT="melloa-server-test-${RANDOM}-$$"
 readonly IMAGE="melloa-local/server-test:${PROJECT}"
+readonly BACKUP_IMAGE="melloa-local/backup-test:${PROJECT}"
 readonly ENV_FILE="$WORKDIR/server.env"
+readonly SENSITIVE_FIXTURE_MARKER='restore-private-owner-marker-v1'
 
 detect_build_ca() {
   local candidate
@@ -39,6 +41,7 @@ compose() {
 cleanup() {
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm "$IMAGE" >/dev/null 2>&1 || true
+  docker image rm "$BACKUP_IMAGE" >/dev/null 2>&1 || true
   if [[ "$WORKDIR" == "$ROOT"/.server-runtime.* && -d "$WORKDIR" ]]; then
     rm -rf "$WORKDIR"
   fi
@@ -98,23 +101,85 @@ wait_for_restart() {
   return 1
 }
 
+wait_for_login_reconciliation() {
+  local container
+  local state
+  container="$(compose ps --all --quiet database-logins)"
+  for _ in $(seq 1 90); do
+    state="$(docker inspect --format '{{.State.Status}}' "$container")"
+    if [[ "$state" == exited ]]; then
+      [[ "$(docker inspect --format '{{.State.ExitCode}}' "$container")" == 0 ]]
+      return
+    fi
+    sleep 1
+  done
+  echo "Database login reconciliation did not complete" >&2
+  compose logs --no-color --tail=120 database-logins >&2 || true
+  return 1
+}
+
+wait_for_backup_result() {
+  local expected="$1"
+  local previous_snapshot="${2:-}"
+  local marker="$WORKDIR/runtime-state/backup-status.json"
+  local result
+  local snapshot
+  for _ in $(seq 1 120); do
+    if [[ -s "$marker" ]]; then
+      result="$(jq -r '.result // empty' "$marker" 2>/dev/null || true)"
+      snapshot="$(jq -r '.snapshot_id // empty' "$marker" 2>/dev/null || true)"
+      if [[ "$result" == "$expected" ]]; then
+        if [[ "$expected" != success || -z "$previous_snapshot" || "$snapshot" != "$previous_snapshot" ]]; then
+          return 0
+        fi
+      fi
+    fi
+    sleep 1
+  done
+  echo "Scheduled backup did not report $expected" >&2
+  compose ps --all >&2 || true
+  compose logs --no-color --tail=160 backup postgres >&2 || true
+  return 1
+}
+
+run_recovery_journey() {
+  local operation="$1"
+  compose run --rm --no-deps \
+    --entrypoint python \
+    --volume "$ROOT/tools/recovery_owner_journey.py:/opt/melloa/tools/recovery_owner_journey.py:ro" \
+    --volume "$WORKDIR/journey:/run/melloa/journey" \
+    melloa \
+    /opt/melloa/tools/recovery_owner_journey.py "$operation" \
+    --dsn-file /run/melloa/private/application-dsn \
+    --owner-credential-file /run/melloa/private/owner-credential \
+    --expected-file /run/melloa/journey/expected-owner-state.json
+}
+
 mkdir -p \
   "$WORKDIR/private/model-credentials" \
   "$WORKDIR/guardian-handoff" \
-  "$WORKDIR/runtime-state"
+  "$WORKDIR/runtime-state" \
+  "$WORKDIR/backup-repository" \
+  "$WORKDIR/journey"
 chmod 0700 \
   "$WORKDIR/private" \
   "$WORKDIR/private/model-credentials" \
   "$WORKDIR/guardian-handoff" \
-  "$WORKDIR/runtime-state"
+  "$WORKDIR/runtime-state" \
+  "$WORKDIR/backup-repository" \
+  "$WORKDIR/journey"
 
 readonly ADMIN_PASSWORD="admin_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 readonly APP_PASSWORD="app_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 readonly MIGRATION_PASSWORD="migration_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+readonly BACKUP_PASSWORD="backup_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+readonly RESTIC_PASSWORD="restic_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
 
 write_private "$WORKDIR/private/postgres-admin-password" "$ADMIN_PASSWORD"
 write_private "$WORKDIR/private/postgres-app-password" "$APP_PASSWORD"
 write_private "$WORKDIR/private/postgres-migration-password" "$MIGRATION_PASSWORD"
+write_private "$WORKDIR/private/postgres-backup-password" "$BACKUP_PASSWORD"
+write_private "$WORKDIR/private/restic-password" "$RESTIC_PASSWORD"
 write_private "$WORKDIR/private/database-application-dsn" \
   "host=172.30.37.2 port=5432 dbname=melloa user=melloa_app password=$APP_PASSWORD"
 write_private "$WORKDIR/private/database-migration-dsn" \
@@ -124,7 +189,7 @@ write_private "$WORKDIR/private/owner-credential" \
 write_private "$WORKDIR/private/telegram-bot-token" \
   "123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456"
 write_private "$WORKDIR/private/telegram-owner.json" \
-  '{"owner_user_id":1234,"owner_chat_id":5678,"poll_timeout_seconds":1}'
+  '{"owner_user_id":1234567,"owner_chat_id":7654321,"poll_timeout_seconds":1}'
 write_private "$WORKDIR/private/capable-model.json" \
   '{"display_name":"Server capable test","provider_id":"provider.server-capable-test","model_id":"server-capable-test-v1","base_url":"https://capable.invalid/v1","api_style":"responses","processing_location":"approved_provider","allowed_sensitivities":["public","internal","personal"],"max_input_tokens":4096,"max_output_tokens":512,"estimated_max_cost_gbp":1.0,"input_cost_gbp_per_million_tokens":1.0,"output_cost_gbp_per_million_tokens":1.0,"timeout_ms":5000,"health_timeout_ms":1000}'
 write_private "$WORKDIR/private/economy-model.json" \
@@ -140,6 +205,7 @@ install -m 0600 /dev/null "$ENV_FILE"
 {
   printf 'MELLOA_COMPOSE_PROJECT_NAME=%s\n' "$PROJECT"
   printf 'MELLOA_IMAGE=%s\n' "$IMAGE"
+  printf 'MELLOA_BACKUP_IMAGE=%s\n' "$BACKUP_IMAGE"
   printf 'MELLOA_SOURCE_REVISION=server-runtime-test\n'
   printf 'MELLOA_RUNTIME_UID=%s\n' "$(id -u)"
   printf 'MELLOA_RUNTIME_GID=%s\n' "$(id -g)"
@@ -153,6 +219,9 @@ install -m 0600 /dev/null "$ENV_FILE"
     "$WORKDIR/private/postgres-app-password"
   printf 'MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE=%s\n' \
     "$WORKDIR/private/postgres-migration-password"
+  printf 'MELLOA_POSTGRES_BACKUP_PASSWORD_FILE=%s\n' \
+    "$WORKDIR/private/postgres-backup-password"
+  printf 'MELLOA_RESTIC_PASSWORD_FILE=%s\n' "$WORKDIR/private/restic-password"
   printf 'MELLOA_DATABASE_APPLICATION_DSN_FILE=%s\n' \
     "$WORKDIR/private/database-application-dsn"
   printf 'MELLOA_DATABASE_MIGRATION_DSN_FILE=%s\n' \
@@ -165,16 +234,21 @@ install -m 0600 /dev/null "$ENV_FILE"
   printf 'MELLOA_MODEL_CREDENTIALS_DIR=%s\n' "$WORKDIR/private/model-credentials"
   printf 'MELLOA_GUARDIAN_HANDOFF_DIR=%s\n' "$WORKDIR/guardian-handoff"
   printf 'MELLOA_RUNTIME_STATE_DIR=%s\n' "$WORKDIR/runtime-state"
+  printf 'MELLOA_BACKUP_REPOSITORY_DIR=%s\n' "$WORKDIR/backup-repository"
+  printf 'MELLOA_BACKUP_INTERVAL_SECONDS=4\n'
+  printf 'MELLOA_BACKUP_RETRY_SECONDS=2\n'
 } >"$ENV_FILE"
 
 compose config --quiet
-compose build melloa
+compose build melloa backup
+compose run --rm --no-deps backup init >/dev/null
 if ! compose up --detach --no-build; then
   compose ps --all >&2 || true
   compose logs --no-color --tail=160 >&2 || true
   exit 1
 fi
 
+wait_for_login_reconciliation
 readonly MIGRATION_CONTAINER="$(compose ps --all --quiet migrate)"
 for _ in $(seq 1 90); do
   migration_state="$(docker inspect --format '{{.State.Status}}' "$MIGRATION_CONTAINER")"
@@ -186,17 +260,47 @@ done
 [[ "$(docker inspect --format '{{.State.ExitCode}}' "$MIGRATION_CONTAINER")" == 0 ]]
 
 readonly MELLOA_CONTAINER="$(wait_for_melloa)"
+readonly BACKUP_CONTAINER="$(compose ps --all --quiet backup)"
 [[ "$(docker inspect --format '{{.Config.User}}' "$MELLOA_CONTAINER")" == "$(id -u):$(id -g)" ]]
 [[ -z "$(docker port "$MELLOA_CONTAINER")" ]]
+[[ "$(docker inspect --format '{{.Config.User}}' "$BACKUP_CONTAINER")" == "$(id -u):$(id -g)" ]]
+[[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$BACKUP_CONTAINER")" == true ]]
+[[ "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$BACKUP_CONTAINER")" == 1 ]]
+if docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "$BACKUP_CONTAINER" |
+  grep --fixed-strings --quiet '/var/run/docker.sock'; then
+  echo "Backup runtime unexpectedly received the Docker control socket" >&2
+  exit 1
+fi
+backup_process_metadata="$(
+  docker inspect --format '{{json .Config.Env}} {{json .Config.Cmd}} {{json .Args}}' \
+    "$BACKUP_CONTAINER"
+)"
+for secret_value in \
+  "$ADMIN_PASSWORD" \
+  "$APP_PASSWORD" \
+  "$MIGRATION_PASSWORD" \
+  "$BACKUP_PASSWORD" \
+  "$RESTIC_PASSWORD"; do
+  if grep --fixed-strings --quiet "$secret_value" <<<"$backup_process_metadata"; then
+    echo "A database or recovery secret appeared in backup process metadata" >&2
+    exit 1
+  fi
+done
 
 readonly ROLE_ROWS="$(
   compose exec --no-TTY --user postgres postgres \
     psql --tuples-only --no-align --field-separator=, \
     --username postgres --dbname melloa \
-    --command="SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolinherit FROM pg_roles WHERE rolname IN ('melloa_app', 'melloa_migrator') ORDER BY rolname"
+    --command="SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolinherit FROM pg_roles WHERE rolname IN ('melloa_app', 'melloa_backup_login', 'melloa_migrator') ORDER BY rolname"
 )"
 grep -qx 'melloa_app,f,f,f,f' <<<"$ROLE_ROWS"
+grep -qx 'melloa_backup_login,f,f,f,f' <<<"$ROLE_ROWS"
 grep -qx 'melloa_migrator,f,f,f,f' <<<"$ROLE_ROWS"
+[[ "$(
+  compose exec --no-TTY --user postgres postgres psql --tuples-only --no-align \
+    --username postgres --dbname melloa \
+    --command="SELECT pg_has_role('melloa_backup_login', 'melloa_backup', 'MEMBER') AND NOT pg_has_role('melloa_backup_login', 'melloa_core', 'MEMBER')"
+)" == t ]]
 [[ "$(
   compose exec --no-TTY --user postgres postgres psql --tuples-only --no-align \
     --username postgres --dbname melloa \
@@ -204,6 +308,12 @@ grep -qx 'melloa_migrator,f,f,f,f' <<<"$ROLE_ROWS"
 )" == melloa_migrate ]]
 
 compose run --rm --no-deps migrate migrate check >/dev/null
+wait_for_backup_result success
+[[ "$(stat --format='%a' "$WORKDIR/runtime-state/backup-status.json")" == 600 ]]
+docker exec "$MELLOA_CONTAINER" python -c \
+  "from pathlib import Path; from melloa.application.owner_status import BackupResult, _read_backup_marker; assert _read_backup_marker(Path('/run/melloa/state/backup-status.json')).result is BackupResult.SUCCESS"
+initial_snapshot="$(jq -r .snapshot_id "$WORKDIR/runtime-state/backup-status.json")"
+[[ "$initial_snapshot" =~ ^[0-9a-f]{64}$ ]]
 
 restart_count="$(docker inspect --format '{{.RestartCount}}' "$MELLOA_CONTAINER")"
 docker exec --interactive "$MELLOA_CONTAINER" python - <<'PY' || [[ $? -eq 137 ]]
@@ -227,8 +337,52 @@ PY
 wait_for_restart "$MELLOA_CONTAINER" "$restart_count"
 
 restart_count="$(docker inspect --format '{{.RestartCount}}' "$MELLOA_CONTAINER")"
+compose pause postgres >/dev/null
+wait_for_backup_result failed
+[[ "$(jq -r .reason_code "$WORKDIR/runtime-state/backup-status.json")" == backup.database_dump_failed ]]
+compose unpause postgres >/dev/null
+wait_for_backup_result success "$initial_snapshot"
 compose restart postgres >/dev/null
 wait_for_restart "$MELLOA_CONTAINER" "$restart_count"
 compose run --rm --no-deps migrate migrate check >/dev/null
 
-echo "Persistent server runtime, migration gate, and supervised database recovery passed."
+snapshot_before_seed="$(jq -r .snapshot_id "$WORKDIR/runtime-state/backup-status.json")"
+compose stop backup >/dev/null
+run_recovery_journey seed >/dev/null
+compose start backup >/dev/null
+wait_for_backup_result success "$snapshot_before_seed"
+compose stop backup >/dev/null
+readonly RECOVERY_SNAPSHOT="$(jq -r .snapshot_id "$WORKDIR/runtime-state/backup-status.json")"
+[[ "$RECOVERY_SNAPSHOT" =~ ^[0-9a-f]{64}$ ]]
+
+if grep --recursive --binary-files=text --fixed-strings --quiet \
+  "$SENSITIVE_FIXTURE_MARKER" "$WORKDIR/backup-repository"; then
+  echo "Encrypted scheduled backup exposed owner data in plaintext" >&2
+  exit 1
+else
+  plaintext_scan_status=$?
+  if ((plaintext_scan_status != 1)); then
+    echo "Encrypted scheduled backup could not be scanned completely" >&2
+    exit 1
+  fi
+fi
+
+compose down --volumes --remove-orphans >/dev/null
+compose up --detach --no-build postgres database-logins >/dev/null
+wait_for_login_reconciliation
+
+compose run --rm --no-deps restore restore-database "$RECOVERY_SNAPSHOT"
+compose run --rm --no-deps migrate migrate check >/dev/null
+run_recovery_journey verify >/dev/null
+
+readonly BACKUP_HAS_MUTATION_PRIVILEGE="$(
+  compose exec --no-TTY --user postgres postgres \
+    psql --tuples-only --no-align --username postgres --dbname melloa \
+    --command="SELECT has_table_privilege('melloa_backup', 'melloa.conversation_threads', 'INSERT') OR has_table_privilege('melloa_backup', 'melloa.conversation_threads', 'UPDATE') OR has_table_privilege('melloa_backup', 'melloa.conversation_threads', 'DELETE')"
+)"
+if [[ "$BACKUP_HAS_MUTATION_PRIVILEGE" != f ]]; then
+  echo "Backup role unexpectedly holds owner-data mutation privileges" >&2
+  exit 1
+fi
+
+echo "Persistent runtime, supervised recovery, scheduled encrypted backup, and clean restore passed."

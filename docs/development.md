@@ -30,6 +30,7 @@ make bootstrap       # install locked Python and web dependencies
 make check           # migration manifest, lint, types, unit tests, and web build/tests
 make integration     # PostgreSQL integration; requires Docker
 make recovery        # encrypted clean-restore exercise; requires Docker
+make server-runtime  # persistent runtime, scheduled backup, outage, and clean restore
 make preview         # requires owner-supplied GUARDIAN_STATUS and GUARDIAN_PUBLIC_KEY
 ```
 

@@ -36,7 +36,8 @@ def test_owner_status_reports_release_model_backlog_guardian_and_backup(
           "contract_version": "1.0.0",
           "result": "success",
           "checked_at": "2026-08-16T12:00:00Z",
-          "completed_at": "2026-08-16T11:40:00Z"
+          "completed_at": "2026-08-16T11:40:00Z",
+          "snapshot_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         }""",
         encoding="utf-8",
     )
@@ -128,7 +129,8 @@ def test_owner_status_rejects_writable_or_stale_backup_marker(fixed_time, tmp_pa
           "contract_version": "1.0.0",
           "result": "success",
           "checked_at": "2026-08-16T12:00:00Z",
-          "completed_at": "2026-08-14T12:00:00Z"
+          "completed_at": "2026-08-14T12:00:00Z",
+          "snapshot_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         }""",
         encoding="utf-8",
     )

@@ -66,8 +66,8 @@ check: check-generated lint typecheck test web
 check-generated:
 	$(UV) run python tools/update_migration_manifest.py --check
 	bash -n \
-		infra/server/postgres-entrypoint.sh \
-		infra/server/postgres-init/002_runtime_logins.sh \
+		infra/server/backup.sh \
+		infra/server/reconcile-logins.sh \
 		tools/restore_drill.sh \
 		tools/test_postgres_integration.sh \
 		tools/test_server_runtime.sh

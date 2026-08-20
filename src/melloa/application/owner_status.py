@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError, model_validator
 
 from melloa.domain.base import AwareDatetime, ContractModel, RecordId, utc_now
 from melloa.domain.conversation import ConversationProcessingState
@@ -37,7 +37,25 @@ class BackupMarker(ContractModel):
     result: BackupResult
     checked_at: AwareDatetime
     completed_at: AwareDatetime | None = None
+    snapshot_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     reason_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_.-]{1,127}$")
+
+    @model_validator(mode="after")
+    def validate_result_details(self) -> BackupMarker:
+        if self.result is BackupResult.SUCCESS:
+            if (
+                self.completed_at is None
+                or self.snapshot_id is None
+                or self.reason_code is not None
+            ):
+                raise ValueError("successful backup marker requires completion and snapshot")
+        elif (
+            self.completed_at is not None
+            or self.snapshot_id is not None
+            or self.reason_code is None
+        ):
+            raise ValueError("failed backup marker requires only a reason code")
+        return self
 
 
 @dataclass(frozen=True)

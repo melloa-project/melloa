@@ -27,8 +27,10 @@ model routing. The selected route and actual model destination survive retries a
 the conversation; Melloa never silently falls back across routes. A generic, unexposed container
 runtime now gates startup on migrations and recovers from application or PostgreSQL restarts, but
 it remains an [engineering checkpoint](infra/server/README.md), not a qualified owner deployment
-path. Automatic encrypted backup, release installation/rollback, policy-bounded self-modification,
-real provider configuration, and deployed dogfooding remain incomplete.
+path. It now streams automatic encrypted snapshots into an owner-mounted repository, reports backup
+health through `/status`, and proves a clean restore of representative owner state. Release
+installation/rollback, policy-bounded self-modification, a real off-device repository and recovery
+key setup, real provider configuration, and deployed dogfooding remain incomplete.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.
