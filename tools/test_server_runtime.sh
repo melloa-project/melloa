@@ -484,6 +484,13 @@ else
   fi
 fi
 
+# GitHub-hosted Docker can expose bind mounts through a user namespace where
+# container root is not the host owner that wrote the restic repository. The
+# dedicated-server path still keeps the real repository owner-only; this
+# synthetic encrypted repository is widened only so the restore service can
+# exercise the production root/read-only restore path in CI.
+chmod -R u+rwX,go+rX,go-w "$WORKDIR/backup-repository"
+
 compose down --volumes --remove-orphans >/dev/null
 compose up --detach --no-build postgres database-logins >/dev/null
 wait_for_login_reconciliation
