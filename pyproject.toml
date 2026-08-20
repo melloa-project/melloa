@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 melloa = "melloa.apps.cli:main"
+melloa-pair-telegram = "melloa.apps.telegram_pairing:main"
 
 [dependency-groups]
 build = [

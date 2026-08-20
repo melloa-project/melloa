@@ -22,6 +22,10 @@ trap cleanup EXIT HUP INT TERM
 [[ "$(stat --format='%a' "$WORKDIR/etc/melloa/private/codex-api-key")" == 600 ]]
 [[ "$(stat --format='%a' "$WORKDIR/var/lib/melloa/applier-home/.gitconfig")" == 600 ]]
 [[ "$(stat --format='%a' "$WORKDIR/opt/melloa/worker/src/melloa/__init__.py")" == 644 ]]
+[[ -f "$WORKDIR/opt/melloa/worker/src/melloa/apps/telegram_pairing.py" ]]
+grep --fixed-strings --quiet \
+  'melloa-pair-telegram = "melloa.apps.telegram_pairing:main"' \
+  "$WORKDIR/opt/melloa/worker/pyproject.toml"
 cmp --silent \
   "$ROOT/infra/server/systemd/melloa-self-change-planner.service" \
   "$WORKDIR/etc/systemd/system/melloa-self-change-planner.service"

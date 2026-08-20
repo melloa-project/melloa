@@ -226,5 +226,6 @@ systemd-analyze verify \
 systemctl daemon-reload
 
 echo "Server services installed but not started. Complete private configuration, then run:"
+echo "  Pair the dedicated Telegram bot with /opt/melloa/worker/.venv/bin/melloa-pair-telegram."
 echo "  See infra/server/README.md for the file-based configure command."
 echo "  sudo /usr/local/libexec/melloa/configure --source $SOURCE [private file arguments]"

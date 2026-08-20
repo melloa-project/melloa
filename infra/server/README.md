@@ -36,7 +36,7 @@ line values, refuses to overwrite a configured server, and emits no secret value
 
 Before invoking it, prepare owner-private mode-`0600` files outside the source checkout for:
 
-- the Telegram bot token, after the owner has opened that bot's private chat;
+- a dedicated Telegram bot token;
 - the capable and economy model JSON documents plus each bearer token they name directly below
   `/run/melloa/model-credentials/`;
 - a high-entropy base64url restic password retained separately from both this machine and the
@@ -79,6 +79,25 @@ The cost placeholders deliberately make this example fail validation. Replace al
 sensitivity, and cost values from current owner-reviewed provider terms; setting real token rates
 to zero would make the retained cost record inaccurate.
 
+After the host assets are installed, discover the exact numeric Telegram owner ID without using a
+third-party ID bot or copying it from Telegram metadata. The command verifies that the supplied bot
+is available for long polling, prints a random one-time `/start` phrase to the terminal, and waits
+for that exact phrase in a one-to-one chat. Instructions go to the terminal while stdout contains
+only the verified numeric ID, so it can be captured directly:
+
+```bash
+TELEGRAM_OWNER_ID="$(
+  sudo /opt/melloa/worker/.venv/bin/melloa-pair-telegram \
+    --bot-token-file /owner-input/telegram-bot-token
+)"
+```
+
+Use a dedicated bot with no webhook and no other active long poller. Before an owner is bound,
+unrelated pending updates have no authority and are discarded; the exact pairing update is also
+acknowledged so it does not become the first conversation message after activation. The bot token
+is read only from the owner-private file and never printed. Telegram bot chats still are not
+end-to-end encrypted.
+
 With those files ready and the public-only Guardian projection already prepared by Guardian, the
 configuration transaction has this shape:
 
@@ -88,7 +107,7 @@ sudo /usr/local/libexec/melloa/configure \
   --backup-repository /mnt/melloa-off-device-backup \
   --guardian-status-file /owner-input/guardian/status.json \
   --guardian-public-key-file /owner-input/guardian/public.pem \
-  --telegram-owner-id 123456789 \
+  --telegram-owner-id "$TELEGRAM_OWNER_ID" \
   --telegram-bot-token-file /owner-input/telegram-bot-token \
   --capable-model-config-file /owner-input/capable-model.json \
   --economy-model-config-file /owner-input/economy-model.json \
