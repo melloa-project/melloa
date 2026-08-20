@@ -171,6 +171,19 @@ prompt_optional_text() {
   printf '%s' "${value:-$default}"
 }
 
+defaulted_text() {
+  local name="$1"
+  local default="$2"
+  local value
+  if [[ -n "${!name+x}" ]]; then
+    value="${!name}"
+    [[ -n "$value" ]] || fail "$name cannot be empty"
+    printf '%s' "$value"
+    return 0
+  fi
+  printf '%s' "$default"
+}
+
 prompt_secret() {
   local name="$1"
   local prompt="$2"
@@ -367,6 +380,7 @@ explain_model_route_inputs() {
   echo "Choose openai for api.openai.com/v1. Choose external only for another hosted provider or router that documents:" >&2
   echo "  HTTPS OpenAI-compatible base URL, exact model ID, API style, bearer token, and reviewed GBP token prices." >&2
   echo "Do not guess zero prices; use the current provider pricing you reviewed for this account." >&2
+  echo "Token limits and timeouts use setup defaults unless a staged environment override is supplied." >&2
 }
 
 write_model_route() {
@@ -497,26 +511,10 @@ write_model_route() {
       ;;
   esac
 
-  max_input_tokens="$(
-    prompt_text "$(route_environment_name "$route" MAX_INPUT_TOKENS)" \
-      "$route model max input tokens" \
-      16384
-  )"
-  max_output_tokens="$(
-    prompt_text "$(route_environment_name "$route" MAX_OUTPUT_TOKENS)" \
-      "$route model max output tokens" \
-      2048
-  )"
-  timeout_ms="$(
-    prompt_text "$(route_environment_name "$route" TIMEOUT_MS)" \
-      "$route model request timeout in milliseconds" \
-      60000
-  )"
-  health_timeout_ms="$(
-    prompt_text "$(route_environment_name "$route" HEALTH_TIMEOUT_MS)" \
-      "$route model health-check timeout in milliseconds" \
-      5000
-  )"
+  max_input_tokens="$(defaulted_text "$(route_environment_name "$route" MAX_INPUT_TOKENS)" 16384)"
+  max_output_tokens="$(defaulted_text "$(route_environment_name "$route" MAX_OUTPUT_TOKENS)" 2048)"
+  timeout_ms="$(defaulted_text "$(route_environment_name "$route" TIMEOUT_MS)" 60000)"
+  health_timeout_ms="$(defaulted_text "$(route_environment_name "$route" HEALTH_TIMEOUT_MS)" 5000)"
   validate_bounded_integer "$max_input_tokens" "$route max input tokens" 1000000
   validate_bounded_integer "$max_output_tokens" "$route max output tokens" 1000000
   validate_bounded_integer "$timeout_ms" "$route request timeout" 3600000

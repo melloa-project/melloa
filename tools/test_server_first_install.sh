@@ -76,6 +76,10 @@ readonly PRIVATE="$TARGET/etc/melloa/private"
 [[ "$(jq -r .provider_id "$PRIVATE/capable-model.json")" == provider.openai-capable ]]
 [[ "$(jq -r .base_url "$PRIVATE/capable-model.json")" == https://api.openai.com/v1 ]]
 [[ "$(jq -r .api_style "$PRIVATE/capable-model.json")" == responses ]]
+[[ "$(jq -r .max_input_tokens "$PRIVATE/capable-model.json")" == 16384 ]]
+[[ "$(jq -r .max_output_tokens "$PRIVATE/capable-model.json")" == 2048 ]]
+[[ "$(jq -r .timeout_ms "$PRIVATE/capable-model.json")" == 60000 ]]
+[[ "$(jq -r .health_timeout_ms "$PRIVATE/capable-model.json")" == 5000 ]]
 [[ "$(jq -r .authorization_token_file "$PRIVATE/capable-model.json")" == \
   /run/melloa/model-credentials/capable-token ]]
 [[ "$(jq -r .provider_id "$PRIVATE/economy-model.json")" == provider.openai-economy ]]
@@ -113,6 +117,13 @@ grep --fixed-strings --quiet \
   "Do not guess zero prices; use the current provider pricing you reviewed for this account." \
   "$LOG"
 grep --fixed-strings --quiet \
+  "Token limits and timeouts use setup defaults unless a staged environment override is supplied." \
+  "$LOG"
+if grep --fixed-strings --quiet "model max input tokens" "$LOG"; then
+  echo "First-install setup prompted for advanced model token defaults" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
   "When ready, run: sudo /usr/local/libexec/melloa/activate --source $ROOT --origin https://github.com/melloa-project/melloa.git --initialize-backup" \
   "$LOG"
 grep --fixed-strings --quiet \
@@ -130,6 +141,8 @@ MELLOA_SETUP_CAPABLE_TOKEN=capable_self_change_secret \
 MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
 MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
 MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+MELLOA_SETUP_CAPABLE_MAX_INPUT_TOKENS=32768 \
+MELLOA_SETUP_CAPABLE_TIMEOUT_MS=45000 \
 MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
 MELLOA_SETUP_ECONOMY_MODEL_ID=self-change-economy-model \
 MELLOA_SETUP_ECONOMY_TOKEN=economy_self_change_secret \
@@ -157,6 +170,8 @@ grep --fixed-strings --quiet 'MELLOA_CODEX_USE_API_KEY=true' \
 grep --fixed-strings --quiet 'MELLOA_CODEX_MODEL=codex-first-install-test' \
   "$SELF_CHANGE_TARGET/etc/melloa/self-change.env"
 [[ "$(jq -r .codex_mode "$SELF_CHANGE_TARGET/etc/melloa/configuration.json")" == api_key ]]
+[[ "$(jq -r .max_input_tokens "$SELF_CHANGE_PRIVATE/capable-model.json")" == 32768 ]]
+[[ "$(jq -r .timeout_ms "$SELF_CHANGE_PRIVATE/capable-model.json")" == 45000 ]]
 grep --fixed-strings --quiet \
   'https://x-access-token:githubpatfirstinstall1234567890@github.com' \
   "$SELF_CHANGE_PRIVATE/git-credentials"
