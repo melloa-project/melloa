@@ -7,6 +7,7 @@ readonly INPUTS="$WORKDIR/inputs"
 readonly TARGET="$WORKDIR/target"
 readonly BAD_TARGET="$WORKDIR/bad-target"
 readonly BAD_SECRET_TARGET="$WORKDIR/bad-secret-target"
+readonly BAD_EXTERNAL_MISSING_TARGET="$WORKDIR/bad-external-missing-target"
 readonly BAD_MODEL_TARGET="$WORKDIR/bad-model-target"
 readonly BAD_COST_TARGET="$WORKDIR/bad-cost-target"
 readonly BAD_DUPLICATE_TARGET="$WORKDIR/bad-duplicate-target"
@@ -20,6 +21,7 @@ readonly CA_RESUME_SETUP_LOG="$WORKDIR/first-install-ca-resume-setup.log"
 readonly CA_RESUME_LOG="$WORKDIR/first-install-ca-resume.log"
 readonly BAD_LOG="$WORKDIR/first-install-bad-input.log"
 readonly BAD_SECRET_LOG="$WORKDIR/first-install-bad-secret.log"
+readonly BAD_EXTERNAL_MISSING_LOG="$WORKDIR/first-install-bad-external-missing.log"
 readonly BAD_MODEL_LOG="$WORKDIR/first-install-bad-model.log"
 readonly BAD_COST_LOG="$WORKDIR/first-install-bad-cost.log"
 readonly BAD_DUPLICATE_LOG="$WORKDIR/first-install-bad-duplicate.log"
@@ -265,6 +267,36 @@ if grep --fixed-strings --quiet "Configure the two conversation model routes." "
 fi
 if grep --fixed-strings --quiet "not-a-token" "$BAD_SECRET_LOG"; then
   echo "First-install setup exposed an invalid private input" >&2
+  exit 1
+fi
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+  MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+  MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+  MELLOA_SETUP_CAPABLE_ROUTE_KIND=external \
+  MELLOA_SETUP_CAPABLE_MODEL_ID=capable-test-model \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_EXTERNAL_MISSING_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_EXTERNAL_MISSING_LOG" 2>&1; then
+  echo "First-install setup accepted an external route without an explicit base URL" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "MELLOA_SETUP_CAPABLE_BASE_URL is required when setup is not running interactively" \
+  "$BAD_EXTERNAL_MISSING_LOG"
+if grep --fixed-strings --quiet "MELLOA_SETUP_CAPABLE_TOKEN is required" \
+  "$BAD_EXTERNAL_MISSING_LOG"; then
+  echo "First-install setup asked for a model token before external URL selection" >&2
+  exit 1
+fi
+if grep --fixed-strings --quiet \
+  '123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' "$BAD_EXTERNAL_MISSING_LOG"; then
+  echo "First-install setup exposed a private input while reporting a missing external URL" >&2
   exit 1
 fi
 

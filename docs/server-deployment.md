@@ -120,6 +120,25 @@ The guided setup prompts for these values and writes the private files for you:
 Do not paste secret values into shell commands. The setup prompts read them without echoing and
 stores them as owner-private files.
 
+Use this worksheet before starting the server install:
+
+| Setup prompt area | What to have ready | What to enter for this first path |
+| --- | --- | --- |
+| Backup repository | Mounted off-device directory, normally `/mnt/melloa-off-device-backup` | The exact mount path |
+| Guardian handoff | Public `status.json` and `public.pem` from the sibling Guardian checkout | The two printed public file paths |
+| Telegram | Dedicated BotFather bot token; no other long poller using the bot | The bot token, then the exact `/start ...` phrase printed by setup |
+| Capable model route | Hosted OpenAI-compatible model for higher-quality replies | Usually `openai`, then the model ID, reviewed GBP prices, cost ceiling, and API key |
+| Economy model route | Cheaper hosted OpenAI-compatible model/provider for routine replies | `openai` with a cheaper model, or `external` with explicit provider URL, API style, model ID, bearer token, and GBP prices |
+| Restic recovery | 32-128 character base64url password stored away from this server and backup disk | The exact retained password |
+| Self-change | GitHub repository token plus Codex/OpenAI API key | `yes`, `api-key`, optional model override blank unless reviewed |
+
+For external hosted model routes, do not guess. The provider must give you an HTTPS
+OpenAI-compatible base URL, exact model ID, whether to use `responses` or `chat_completions`,
+bearer token, input price per million tokens, and output price per million tokens. If the provider
+lists prices in another currency, convert them to GBP before setup so Melloa can retain one
+auditable cost boundary. A cheaper frontier-lab or router provider is acceptable only when those
+facts are explicit.
+
 Generate and store the restic password before setup in a password manager or another owner-retained
 place that is not the server and not the backup disk. If you need a command, run this on a trusted
 machine and store the exact output:
@@ -291,6 +310,15 @@ In Telegram:
 ```text
 /change propose <one small public-safe source/test improvement>
 ```
+
+For the first proof, prefer a tests-only request. Example shape:
+
+```text
+/change propose Add a focused unit test for one existing owner-visible /change command message.
+```
+
+Do not ask the self-change worker to alter deployment scripts, secrets, Guardian, Telegram pairing,
+database roles, migrations, release policy, or self-change policy during this first proof.
 
 Wait for the planner to return a proposal, then inspect it:
 

@@ -446,8 +446,7 @@ write_model_route() {
       validate_model_id "$model_id" "$route model ID"
       base_url="$(
         prompt_text "$(route_environment_name "$route" BASE_URL)" \
-          "$route model OpenAI-compatible base URL" \
-          "https://api.openai.com/v1"
+          "$route model OpenAI-compatible base URL"
       )"
       validate_model_base_url "$base_url" "$route model base URL" approved_provider
       api_style="$(
@@ -835,6 +834,7 @@ validate_telegram_owner_id "$telegram_owner_id"
 
 echo "Configure the two conversation model routes." >&2
 echo "Use openai for the fixed OpenAI preset or external for another hosted OpenAI-compatible provider." >&2
+echo "External routes require an explicit HTTPS provider base URL, model ID, API style, bearer token, and reviewed prices." >&2
 declare -a MODEL_CREDENTIAL_ARGS=()
 write_model_route capable "$STAGE/capable-model.json"
 write_model_route economy "$STAGE/economy-model.json"
