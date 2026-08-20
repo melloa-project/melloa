@@ -29,6 +29,12 @@ sudo apt-get update
 sudo apt-get install --yes --no-install-recommends ca-certificates git
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
+
+# After attaching and mounting off-device backup storage:
+sudo mkdir -p /mnt/melloa-off-device-backup
+findmnt --mountpoint /mnt/melloa-off-device-backup
+test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
+
 sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
 
 cd ..
@@ -40,10 +46,10 @@ cd ../melloa
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
-Before running it, have a mounted off-device backup path, a dedicated Telegram bot token, two hosted
-model route choices with reviewed pricing, a restic password retained away from the server, a GitHub
-token for this repository, and a Codex/OpenAI API key for the bounded planner worker. The public
-deploy page explains each input and the exact setup prompts.
+Before running `first-install.sh`, have that off-device backup path mounted, a dedicated Telegram
+bot token, two hosted model route choices with reviewed pricing, a restic password retained away
+from the server, a GitHub token for this repository, and a Codex/OpenAI API key for the bounded
+planner worker. The public deploy page explains each input and the exact setup prompts.
 
 ## Evidence status
 

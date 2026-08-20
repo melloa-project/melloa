@@ -3,6 +3,12 @@ const commands = `sudo apt-get update
 sudo apt-get install --yes --no-install-recommends ca-certificates git
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
+
+# After attaching and mounting off-device backup storage:
+sudo mkdir -p /mnt/melloa-off-device-backup
+findmnt --mountpoint /mnt/melloa-off-device-backup
+test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
+
 sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
 
 cd ..

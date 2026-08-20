@@ -19,6 +19,8 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "Self-change is core" in homepage
     assert "CommandSpine" in homepage
     assert "First server path" in command_spine
+    assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in command_spine
+    assert 'stat --format=\'%d\' /mnt/melloa-off-device-backup' in command_spine
     assert (
         'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools'
         in command_spine
@@ -50,6 +52,7 @@ def test_readme_opens_with_first_owner_server_path() -> None:
 
     assert "## Start here: first-owner home server" in opening
     assert "https://melloa-project.github.io/melloa/deploy/" in opening
+    assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in opening
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in opening
     assert "## Evidence status" in opening
@@ -68,6 +71,7 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
 
     assert "Follow it on\nthe real server" in opening
     assert "The current gap is evidence, not a second hidden installation path" in opening
+    assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert "Self-change proof" in guide
     assert "readiness banner" not in guide
     assert "NOT READY" not in guide
