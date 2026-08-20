@@ -246,13 +246,18 @@ write_private_text() {
 }
 
 random_secret() {
-  python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
+  "$PYTHON_EXECUTABLE" -c 'import secrets; print(secrets.token_urlsafe(48))'
 }
 
 for command in awk basename chmod chown date find findmnt git id install jq mktemp mv \
-  python3.13 rm stat sync; do
+  rm stat sync; do
   require_command "$command"
 done
+PYTHON_EXECUTABLE=python3.13
+if [[ "$DESTINATION_ROOT" != / ]]; then
+  PYTHON_EXECUTABLE=python3
+fi
+require_command "$PYTHON_EXECUTABLE"
 
 [[ "$SOURCE" == /* && -d "$SOURCE/.git" && ! -L "$SOURCE" && ! -L "$SOURCE/.git" ]] ||
   fail "source must be an absolute Git checkout"
