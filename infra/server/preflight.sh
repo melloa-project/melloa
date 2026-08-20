@@ -7,10 +7,11 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"
 INSTALLED=false
+CA_FILE=""
 
 usage() {
   cat >&2 <<'EOF'
-Usage: infra/server/preflight.sh [--source PATH] [--origin HTTPS_URL] [--installed]
+Usage: infra/server/preflight.sh [--source PATH] [--origin HTTPS_URL] [--ca-file PATH] [--installed]
 EOF
   exit 2
 }
@@ -25,6 +26,11 @@ while (($#)); do
     --origin)
       [[ $# -ge 2 ]] || usage
       ORIGIN="$2"
+      shift 2
+      ;;
+    --ca-file)
+      [[ $# -ge 2 ]] || usage
+      CA_FILE="$2"
       shift 2
       ;;
     --installed)
@@ -44,6 +50,16 @@ fail() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command is unavailable: $1"
+}
+
+apply_ca_file() {
+  local path="$1"
+  [[ "$path" == /* && -f "$path" && ! -L "$path" && -r "$path" ]] ||
+    fail "CA bundle must be an absolute readable regular file, not a symlink"
+  export CURL_CA_BUNDLE="$path"
+  export GIT_SSL_CAINFO="$path"
+  export NODE_EXTRA_CA_CERTS="$path"
+  export SSL_CERT_FILE="$path"
 }
 
 version_at_least() {
@@ -120,6 +136,20 @@ read_private_environment_path() {
   printf '%s' "$value"
 }
 
+read_self_change_value() {
+  local key="$1"
+  local count
+  local value
+  count="$(awk -F= -v key="$key" '$1 == key {count += 1} END {print count + 0}' \
+    /etc/melloa/self-change.env)"
+  [[ "$count" == 1 ]] || fail "$key must occur exactly once in the self-change environment file"
+  value="$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' \
+    /etc/melloa/self-change.env)"
+  [[ "$value" != *$'\r'* && "$value" != *$'\n'* ]] ||
+    fail "$key has an invalid value"
+  printf '%s' "$value"
+}
+
 require_password_file() {
   local path="$1"
   local label="$2"
@@ -137,11 +167,15 @@ require_password_file() {
 [[ "$ORIGIN" == https://* && "$ORIGIN" != *'@'* && "$ORIGIN" != *'?'* && "$ORIGIN" != *'#'* ]] ||
   fail "origin must be a credential-free HTTPS URL"
 [[ -f "$SOURCE/pyproject.toml" && -f "$SOURCE/uv.lock" ]] || fail "source checkout is incomplete"
+readonly TOOLCHAIN_LOCK="$SOURCE/infra/server/toolchain.lock"
+[[ -f "$TOOLCHAIN_LOCK" && ! -L "$TOOLCHAIN_LOCK" ]] || fail "toolchain lock is unavailable"
+# shellcheck disable=SC1090
+source "$TOOLCHAIN_LOCK"
 
 for command in \
-  awk basename bash bwrap chown codex docker find findmnt getent git grep groupadd head id install \
-  jq mktemp node npm python3.13 rm rsync runuser sed sort stat sync systemctl systemd-analyze \
-  tar uname useradd uv wc; do
+  awk basename bash bwrap chown docker find findmnt getent git grep groupadd head id install \
+  flock jq make mktemp node npm python3.13 rm rsync runuser sed sha256sum sort stat sync \
+  systemctl systemd-analyze tar timeout uname useradd uv wc; do
   require_command "$command"
 done
 
@@ -150,25 +184,37 @@ readonly SYSTEMD_VERSION="$(systemd-analyze --version | awk 'NR == 1 {print $2}'
 ((SYSTEMD_VERSION >= 249)) || fail "systemd 249 or newer is required"
 
 readonly UV_VERSION="$(uv --version | awk 'NR == 1 {print $2}')"
-[[ "$UV_VERSION" == 0.12.0 ]] || fail "uv 0.12.0 is required"
+[[ "$UV_VERSION" == "$MELLOA_UV_VERSION" ]] ||
+  fail "uv $MELLOA_UV_VERSION is required"
 readonly PYTHON_VERSION="$(python3.13 -c 'import platform; print(platform.python_version())')"
 version_at_least "$PYTHON_VERSION" 3.13 || fail "Python 3.13 or newer is required"
 readonly NODE_VERSION="$(node --version | sed 's/^v//; s/+.*//')"
-version_at_least "$NODE_VERSION" 22.0.0 || fail "Node.js 22 or newer is required"
+[[ "$NODE_VERSION" == "$MELLOA_NODE_VERSION" ]] ||
+  fail "Node.js $MELLOA_NODE_VERSION is required"
 readonly COMPOSE_VERSION="$(docker compose version --short | sed 's/^v//')"
 version_at_least "$COMPOSE_VERSION" 2.27.0 || fail "Docker Compose 2.27 or newer is required"
 
-readonly CODEX_HELP="$(codex --help 2>&1)"
-readonly CODEX_EXEC_HELP="$(codex exec --help 2>&1)"
-[[ -x /usr/local/bin/codex ]] || fail "Codex CLI must be installed at /usr/local/bin/codex"
-for option in --sandbox --ask-for-approval --oss --local-provider; do
-  grep --fixed-strings --quiet -- "$option" <<<"$CODEX_HELP" ||
-    fail "Codex CLI does not support required option: $option"
-done
-for option in --ephemeral --ignore-user-config; do
-  grep --fixed-strings --quiet -- "$option" <<<"$CODEX_EXEC_HELP" ||
-    fail "Codex CLI exec does not support required option: $option"
-done
+verify_codex_cli() {
+  local codex_exec_help
+  local codex_help
+  local codex_version
+  local option
+  [[ -x /usr/local/bin/codex ]] || fail "Codex CLI must be installed at /usr/local/bin/codex"
+  codex_version="$(/usr/local/bin/codex --version | awk 'NR == 1 {print $2}')"
+  [[ "$codex_version" == "$MELLOA_CODEX_CLI_VERSION" ]] ||
+    fail "Codex CLI $MELLOA_CODEX_CLI_VERSION is required"
+
+  codex_help="$(/usr/local/bin/codex --help 2>&1)"
+  codex_exec_help="$(/usr/local/bin/codex exec --help 2>&1)"
+  for option in --sandbox --ask-for-approval --oss --local-provider; do
+    grep --fixed-strings --quiet -- "$option" <<<"$codex_help" ||
+      fail "Codex CLI does not support required option: $option"
+  done
+  for option in --ephemeral --ignore-user-config; do
+    grep --fixed-strings --quiet -- "$option" <<<"$codex_exec_help" ||
+      fail "Codex CLI exec does not support required option: $option"
+  done
+}
 
 [[ -d "$SOURCE/.git" && ! -L "$SOURCE/.git" ]] || fail "source must be a Git checkout"
 [[ -z "$(git -C "$SOURCE" status --porcelain --untracked-files=normal)" ]] ||
@@ -177,8 +223,17 @@ readonly REVISION="$(git -C "$SOURCE" rev-parse HEAD)"
 [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || fail "source revision is invalid"
 [[ "$(git -C "$SOURCE" remote get-url origin)" == "$ORIGIN" ]] ||
   fail "source origin does not match the selected public origin"
+
+if [[ -z "$CA_FILE" && "$INSTALLED" == true && -f /etc/melloa/server.env && \
+  ! -L /etc/melloa/server.env ]]; then
+  CA_FILE="$(read_environment_path MELLOA_BUILD_CA_FILE)"
+fi
+if [[ -n "$CA_FILE" ]]; then
+  apply_ca_file "$CA_FILE"
+fi
+
 readonly REMOTE_REVISION="$(
-  GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 HOME=/nonexistent \
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 \
     git ls-remote --refs "$ORIGIN" refs/heads/main |
     awk 'NR == 1 && $2 == "refs/heads/main" {print $1}'
 )"
@@ -203,7 +258,6 @@ require_private_file /etc/melloa/self-change.env "self-change environment file"
 require_private_file /etc/melloa/configuration.json "configuration receipt"
 require_private_file /etc/melloa/private/database-change-planner-dsn "planner database DSN"
 require_private_file /etc/melloa/private/database-change-applier-dsn "applier database DSN"
-require_private_file /etc/melloa/private/git-credentials "Git credential"
 
 [[ "$(read_environment_value MELLOA_RUNTIME_UID)" == "$RUNTIME_UID" ]] ||
   fail "MELLOA_RUNTIME_UID does not match melloa-runtime"
@@ -263,7 +317,8 @@ if ! jq -e \
     .contract_version == "1.0.0" and
     (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
     .backup_repository == $backup_repository and
-    (.codex_mode == "api_key" or .codex_mode == "ollama" or .codex_mode == "lmstudio") and
+    (.codex_mode == "disabled" or .codex_mode == "api_key" or
+      .codex_mode == "ollama" or .codex_mode == "lmstudio") and
     (.configured_at | type == "string" and length > 0)
   ' /etc/melloa/configuration.json >/dev/null; then
   fail "configuration receipt is invalid or names a different backup repository"
@@ -304,16 +359,28 @@ readonly RELEASE_STATE_DIR="$(read_environment_path MELLOA_RELEASE_STATE_DIR)"
 [[ "$RELEASE_STATE_DIR" == /var/lib/melloa/release-state ]] ||
   fail "release state directory must use the installed protected path"
 
-readonly USE_API_KEY="$(awk -F= '$1 == "MELLOA_CODEX_USE_API_KEY" {print $2}' /etc/melloa/self-change.env)"
+readonly SELF_CHANGE_ENABLED="$(read_self_change_value MELLOA_SELF_CHANGE_ENABLED)"
+[[ "$SELF_CHANGE_ENABLED" == true || "$SELF_CHANGE_ENABLED" == false ]] ||
+  fail "MELLOA_SELF_CHANGE_ENABLED must occur once as true or false"
+readonly USE_API_KEY="$(read_self_change_value MELLOA_CODEX_USE_API_KEY)"
 [[ "$USE_API_KEY" == true || "$USE_API_KEY" == false ]] ||
   fail "MELLOA_CODEX_USE_API_KEY must occur once as true or false"
-readonly LOCAL_PROVIDER="$(awk -F= '$1 == "MELLOA_CODEX_LOCAL_PROVIDER" {print $2}' /etc/melloa/self-change.env)"
-if [[ "$USE_API_KEY" == true ]]; then
+readonly LOCAL_PROVIDER="$(read_self_change_value MELLOA_CODEX_LOCAL_PROVIDER)"
+if [[ "$SELF_CHANGE_ENABLED" == false ]]; then
+  [[ "$USE_API_KEY" == false ]] || fail "disabled self-change cannot use an API key"
+  [[ -z "$LOCAL_PROVIDER" ]] || fail "disabled self-change cannot select a local provider"
+  [[ "$(jq -r .codex_mode /etc/melloa/configuration.json)" == disabled ]] ||
+    fail "configuration receipt does not match disabled self-change"
+elif [[ "$USE_API_KEY" == true ]]; then
+  verify_codex_cli
+  require_private_file /etc/melloa/private/git-credentials "Git credential" 20
   require_private_file /etc/melloa/private/codex-api-key "Codex API key" 20
   [[ -z "$LOCAL_PROVIDER" ]] || fail "API-key Codex mode cannot select a local provider"
   [[ "$(jq -r .codex_mode /etc/melloa/configuration.json)" == api_key ]] ||
     fail "configuration receipt does not match Codex API-key mode"
 else
+  verify_codex_cli
+  require_private_file /etc/melloa/private/git-credentials "Git credential" 20
   [[ "$LOCAL_PROVIDER" == ollama || "$LOCAL_PROVIDER" == lmstudio ]] ||
     fail "non-key Codex mode requires ollama or lmstudio"
   [[ "$(jq -r .codex_mode /etc/melloa/configuration.json)" == "$LOCAL_PROVIDER" ]] ||

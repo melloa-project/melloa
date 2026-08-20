@@ -65,10 +65,14 @@ def _read_private_text(
     return value
 
 
-def _require_model_credential(config: OpenAICompatibleModelConfig, *, route: str) -> None:
+def _model_credential_name(
+    config: OpenAICompatibleModelConfig,
+    *,
+    route: str,
+) -> str | None:
     path = config.authorization_token_file
     if path is None:
-        return
+        return None
     if not path.is_absolute() or path == _MODEL_CREDENTIAL_ROOT:
         raise DeploymentCheckError(f"{route} model credential path is outside its private mount")
     try:
@@ -79,7 +83,33 @@ def _require_model_credential(config: OpenAICompatibleModelConfig, *, route: str
         ) from error
     if len(relative.parts) != 1 or relative.parts[0] in {".", ".."}:
         raise DeploymentCheckError(f"{route} model credential path is outside its private mount")
-    _read_private_text(path, label=f"{route} model credential", maximum=4_096)
+    return relative.parts[0]
+
+
+def _require_model_credential_from(
+    config: OpenAICompatibleModelConfig,
+    *,
+    route: str,
+    source_root: Path,
+) -> None:
+    credential_name = _model_credential_name(config, route=route)
+    if credential_name is None:
+        return
+    if not source_root.is_absolute() or source_root == source_root.parent:
+        raise DeploymentCheckError(f"{route} model credential source root is invalid")
+    try:
+        source_metadata = source_root.stat(follow_symlinks=False)
+    except OSError as error:
+        raise DeploymentCheckError(
+            f"{route} model credential source root is unavailable"
+        ) from error
+    if not stat.S_ISDIR(source_metadata.st_mode):
+        raise DeploymentCheckError(f"{route} model credential source root is invalid")
+    _read_private_text(
+        source_root / credential_name,
+        label=f"{route} model credential",
+        maximum=4_096,
+    )
 
 
 def _load_route(path: Path, *, route: str) -> OpenAICompatibleModelConfig:
@@ -90,7 +120,7 @@ def _load_route(path: Path, *, route: str) -> OpenAICompatibleModelConfig:
         raise DeploymentCheckError(f"{route} model config is invalid") from error
     if Sensitivity.PERSONAL not in config.allowed_sensitivities:
         raise DeploymentCheckError(f"{route} model is not approved for personal conversation")
-    _require_model_credential(config, route=route)
+    _model_credential_name(config, route=route)
     return config
 
 
@@ -99,13 +129,30 @@ async def _live_checks(
     telegram: TelegramBotClient,
     owner: TelegramOwnerConfig,
 ) -> tuple[ModelGatewayHealth, ModelGatewayHealth, TelegramBotIdentity, TelegramChat]:
-    capable_health, economy_health, identity, chat = await asyncio.gather(
-        asyncio.to_thread(OpenAICompatibleModelGateway(routes.capable).health),
-        asyncio.to_thread(OpenAICompatibleModelGateway(routes.economy).health),
-        telegram.verify_long_polling(),
-        telegram.verify_private_chat(owner.owner_chat_id),
+    capable_health, economy_health = await asyncio.gather(
+        asyncio.to_thread(_check_model_health, routes.capable, route="capable"),
+        asyncio.to_thread(_check_model_health, routes.economy, route="economy"),
     )
+    try:
+        identity, chat = await asyncio.gather(
+            telegram.verify_long_polling(),
+            telegram.verify_private_chat(owner.owner_chat_id),
+        )
+    except Exception as error:
+        reason = getattr(error, "reason_code", "telegram.integration_unavailable")
+        raise DeploymentCheckError(f"Telegram integration failed: {reason}") from error
     return capable_health, economy_health, identity, chat
+
+
+def _check_model_health(
+    config: OpenAICompatibleModelConfig,
+    *,
+    route: str,
+) -> ModelGatewayHealth:
+    try:
+        return OpenAICompatibleModelGateway(config).health()
+    except Exception as error:
+        raise DeploymentCheckError(f"{route} model check failed") from error
 
 
 def check_deployment_integrations(
@@ -116,6 +163,7 @@ def check_deployment_integrations(
     economy_model_config: Path,
     telegram_owner_config: Path,
     telegram_bot_token_file: Path,
+    model_credential_source_root: Path = _MODEL_CREDENTIAL_ROOT,
 ) -> dict[str, Any]:
     try:
         verified_guardian = FileGuardianStatusReader(
@@ -131,6 +179,16 @@ def check_deployment_integrations(
         routes = ModelRouteConfigs(capable=capable, economy=economy)
     except ValueError as error:
         raise DeploymentCheckError("capable and economy model routes are not distinct") from error
+    _require_model_credential_from(
+        capable,
+        route="capable",
+        source_root=model_credential_source_root,
+    )
+    _require_model_credential_from(
+        economy,
+        route="economy",
+        source_root=model_credential_source_root,
+    )
 
     try:
         owner = TelegramOwnerConfig.model_validate_json(
@@ -152,12 +210,11 @@ def check_deployment_integrations(
     )
     try:
         telegram = TelegramBotClient(token)
-        capable_health, economy_health, identity, _chat = asyncio.run(
-            _live_checks(routes, telegram, owner)
-        )
-    except Exception as error:
-        reason = getattr(error, "reason_code", "telegram.integration_unavailable")
-        raise DeploymentCheckError(f"Telegram integration failed: {reason}") from error
+    except ValueError as error:
+        raise DeploymentCheckError("Telegram bot token is invalid") from error
+    capable_health, economy_health, identity, _chat = asyncio.run(
+        _live_checks(routes, telegram, owner)
+    )
 
     for route, health in (
         ("capable", capable_health),

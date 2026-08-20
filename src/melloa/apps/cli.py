@@ -283,6 +283,7 @@ def deployment_check(args: argparse.Namespace) -> int:
             economy_model_config=args.economy_model_config,
             telegram_owner_config=args.telegram_owner_config,
             telegram_bot_token_file=args.telegram_bot_token_file,
+            model_credential_source_root=args.model_credential_source_root,
         )
     except DeploymentCheckError as error:
         _exit_error(f"Deployment activation check failed: {error}")
@@ -574,6 +575,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     deployment_parser.add_argument("--capable-model-config", type=Path, required=True)
     deployment_parser.add_argument("--economy-model-config", type=Path, required=True)
+    deployment_parser.add_argument(
+        "--model-credential-source-root",
+        type=Path,
+        default=Path("/run/melloa/model-credentials"),
+    )
     deployment_parser.add_argument("--telegram-owner-config", type=Path, required=True)
     deployment_parser.add_argument("--telegram-bot-token-file", type=Path, required=True)
     deployment_parser.set_defaults(handler=deployment_check)

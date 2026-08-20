@@ -7,13 +7,17 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"
 DESTINATION_ROOT=/
+CA_FILE=""
+GUIDED_FIRST_INSTALL=false
 
 usage() {
   cat >&2 <<'EOF'
-Usage: infra/server/install.sh [--source PATH] [--origin HTTPS_URL] [--root PATH]
+Usage: infra/server/install.sh [--source PATH] [--origin HTTPS_URL] [--ca-file PATH] [--root PATH]
+                               [--guided-first-install]
 
 Without --root, installs host worker assets and systemd units but does not start services.
 A non-root --root stages only the immutable files for packaging tests.
+--guided-first-install suppresses lower-level handoff instructions while first-install continues.
 EOF
   exit 2
 }
@@ -30,10 +34,19 @@ while (($#)); do
       ORIGIN="$2"
       shift 2
       ;;
+    --ca-file)
+      [[ $# -ge 2 ]] || usage
+      CA_FILE="$2"
+      shift 2
+      ;;
     --root)
       [[ $# -ge 2 ]] || usage
       DESTINATION_ROOT="$2"
       shift 2
+      ;;
+    --guided-first-install)
+      GUIDED_FIRST_INSTALL=true
+      shift
       ;;
     *)
       usage
@@ -44,6 +57,31 @@ done
 fail() {
   echo "Server installation failed: $1" >&2
   exit 1
+}
+
+apply_ca_file() {
+  local path="$1"
+  [[ "$path" == /* && -f "$path" && ! -L "$path" && -r "$path" ]] ||
+    fail "CA bundle must be an absolute readable regular file, not a symlink"
+  export CURL_CA_BUNDLE="$path"
+  export GIT_SSL_CAINFO="$path"
+  export NODE_EXTRA_CA_CERTS="$path"
+  export SSL_CERT_FILE="$path"
+}
+
+installed_build_ca_file() {
+  local count
+  local value
+  [[ -f /etc/melloa/server.env && ! -L /etc/melloa/server.env ]] || return 0
+  count="$(awk -F= '$1 == "MELLOA_BUILD_CA_FILE" {count += 1} END {print count + 0}' \
+    /etc/melloa/server.env)"
+  [[ "$count" == 1 ]] || fail "MELLOA_BUILD_CA_FILE must occur exactly once in /etc/melloa/server.env"
+  value="$(awk -F= '$1 == "MELLOA_BUILD_CA_FILE" {sub(/^[^=]*=/, ""); print}' \
+    /etc/melloa/server.env)"
+  [[ "$value" == /* && "$value" != *$'\t'* && "$value" != *' '* && \
+    "$value" != */../* && "$value" != */./* && "$value" != */.. && "$value" != */. ]] ||
+    fail "MELLOA_BUILD_CA_FILE must be a plain absolute path"
+  printf '%s' "$value"
 }
 
 destination() {
@@ -73,7 +111,19 @@ if [[ -e "$DESTINATION_ROOT" && ( ! -d "$DESTINATION_ROOT" || -L "$DESTINATION_R
 fi
 if [[ "$DESTINATION_ROOT" == / ]]; then
   ((EUID == 0)) || fail "installation must run as root"
-  "$SOURCE/infra/server/preflight.sh" --source "$SOURCE" --origin "$ORIGIN"
+  if [[ -z "$CA_FILE" ]]; then
+    CA_FILE="$(installed_build_ca_file)"
+  fi
+fi
+if [[ -n "$CA_FILE" ]]; then
+  apply_ca_file "$CA_FILE"
+fi
+if [[ "$DESTINATION_ROOT" == / ]]; then
+  declare -a PREFLIGHT_ARGS=(--source "$SOURCE" --origin "$ORIGIN")
+  if [[ -n "$CA_FILE" ]]; then
+    PREFLIGHT_ARGS+=(--ca-file "$CA_FILE")
+  fi
+  "$SOURCE/infra/server/preflight.sh" "${PREFLIGHT_ARGS[@]}"
 fi
 
 readonly LIBEXEC_DIR="$(destination /usr/local/libexec/melloa)"
@@ -90,7 +140,13 @@ install -d -m 0755 "$LIBEXEC_DIR" "$SYSTEMD_DIR"
 install -d -m 0700 "$CONFIG_DIR" "$PRIVATE_DIR" "$WORKER_DIR" "$APPLIER_HOME"
 install -m 0755 "$SOURCE/infra/server/activate.sh" "$LIBEXEC_DIR/activate"
 install -m 0755 "$SOURCE/infra/server/configure.sh" "$LIBEXEC_DIR/configure"
+install -m 0755 "$SOURCE/infra/server/first-install.sh" "$LIBEXEC_DIR/first-install"
+install -m 0755 "$SOURCE/infra/server/rollback.sh" "$LIBEXEC_DIR/rollback"
+install -m 0755 "$SOURCE/infra/server/restore-drill.sh" "$LIBEXEC_DIR/restore-drill"
+install -m 0755 "$SOURCE/infra/server/update.sh" "$LIBEXEC_DIR/update"
+install -m 0755 "$SOURCE/infra/server/verify-owner-journey.sh" "$LIBEXEC_DIR/verify-owner-journey"
 install -m 0755 "$SOURCE/infra/server/codex-wrapper.sh" "$LIBEXEC_DIR/codex"
+install -m 0755 "$SOURCE/infra/server/self-change-enabled.sh" "$LIBEXEC_DIR/self-change-enabled"
 install -m 0755 "$SOURCE/infra/server/self-change-plan.sh" "$LIBEXEC_DIR/self-change-plan"
 install -m 0755 "$SOURCE/infra/server/self-change-apply.sh" "$LIBEXEC_DIR/self-change-apply"
 install -m 0755 "$SOURCE/tools/self_change_verify.sh" "$LIBEXEC_DIR/self-change-verify"
@@ -225,7 +281,28 @@ systemd-analyze verify \
   /etc/systemd/system/melloa-self-change-applier.service
 systemctl daemon-reload
 
-echo "Server services installed but not started. Complete private configuration, then run:"
-echo "  Pair the dedicated Telegram bot with /opt/melloa/worker/.venv/bin/melloa-pair-telegram."
-echo "  See infra/server/README.md for the file-based configure command."
-echo "  sudo /usr/local/libexec/melloa/configure --source $SOURCE [private file arguments]"
+if [[ -f "$CONFIG_DIR/configuration.json" && ! -L "$CONFIG_DIR/configuration.json" ]]; then
+  if [[ "$GUIDED_FIRST_INSTALL" == true ]]; then
+    echo "Server service assets refreshed for the configured server; continuing guided setup."
+    exit 0
+  fi
+  echo "Server service assets refreshed for the configured server. To deploy this checkout, run:"
+  printf '  sudo /usr/local/libexec/melloa/activate --source %q --origin %q\n' \
+    "$SOURCE" "$ORIGIN"
+else
+  if [[ "$GUIDED_FIRST_INSTALL" == true ]]; then
+    echo "Server service assets installed; continuing guided first-owner setup."
+    exit 0
+  fi
+  echo "Server services installed but not started. Complete private configuration, then run:"
+  echo "  Pair the dedicated Telegram bot with /opt/melloa/worker/.venv/bin/melloa-pair-telegram."
+  echo "  See infra/server/README.md for the file-based configure command."
+  printf '  Or run the guided first-owner setup: sudo /usr/local/libexec/melloa/first-install --source %q --origin %q' \
+    "$SOURCE" "$ORIGIN"
+  if [[ -n "$CA_FILE" ]]; then
+    printf ' --ca-file %q' "$CA_FILE"
+  fi
+  printf '\n'
+  printf '  sudo /usr/local/libexec/melloa/configure --source %q [private file arguments]\n' \
+    "$SOURCE"
+fi

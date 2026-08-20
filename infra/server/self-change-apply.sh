@@ -4,8 +4,10 @@ set -euo pipefail
 umask 077
 
 readonly CREDENTIALS_DIR="${CREDENTIALS_DIRECTORY:-}"
+readonly SELF_CHANGE_ENABLED="${MELLOA_SELF_CHANGE_ENABLED:-}"
 
-if [[ "$CREDENTIALS_DIR" != /* || ! -d "$CREDENTIALS_DIR" ]]; then
+if [[ "$CREDENTIALS_DIR" != /* || ! -d "$CREDENTIALS_DIR" || \
+  "$SELF_CHANGE_ENABLED" != true ]]; then
   echo "Self-change applier service configuration rejected" >&2
   exit 2
 fi

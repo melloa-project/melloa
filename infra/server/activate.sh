@@ -12,7 +12,7 @@ usage() {
 Usage: infra/server/activate.sh [--source PATH] [--origin HTTPS_URL] [--initialize-backup]
 
 Builds and checks the exact installed revision, deploys it, proves one encrypted backup,
-and enables boot recovery plus the self-change workers. It is safe to rerun.
+and enables boot recovery plus optional self-change workers when configured. It is safe to rerun.
 --initialize-backup is required only for a new, independently mounted restic repository.
 EOF
   exit 2
@@ -45,11 +45,26 @@ fail() {
   exit 1
 }
 
+activation_rerun_command() {
+  local command_line
+  local -a command=(
+    sudo /usr/local/libexec/melloa/activate
+    --source "$SOURCE"
+    --origin "$ORIGIN"
+  )
+  if [[ "$INITIALIZE_BACKUP" == true ]]; then
+    command+=(--initialize-backup)
+  fi
+  printf -v command_line '%q ' "${command[@]}"
+  printf '%s' "${command_line% }"
+}
+
 ((EUID == 0)) || fail "activation must run as root"
 [[ "$SOURCE" == /* && -d "$SOURCE/.git" && ! -L "$SOURCE" && ! -L "$SOURCE/.git" ]] ||
   fail "source must be an absolute Git checkout"
 
 readonly ENV_FILE=/etc/melloa/server.env
+readonly SELF_CHANGE_ENV=/etc/melloa/self-change.env
 readonly RELEASE_SOURCE=/srv/melloa/release-source
 readonly STATE_DIR=/var/lib/melloa/release-state
 readonly RUNTIME_STATE_DIR=/var/lib/melloa/runtime-state
@@ -81,8 +96,24 @@ ensure_backup_running() {
   fi
 }
 
+self_change_enabled() {
+  local count
+  local value
+  [[ -f "$SELF_CHANGE_ENV" && ! -L "$SELF_CHANGE_ENV" ]] ||
+    fail "self-change environment file is unavailable"
+  count="$(awk -F= '$1 == "MELLOA_SELF_CHANGE_ENABLED" {count += 1} END {print count + 0}' \
+    "$SELF_CHANGE_ENV")"
+  [[ "$count" == 1 ]] || fail "MELLOA_SELF_CHANGE_ENABLED must occur exactly once"
+  value="$(awk -F= '$1 == "MELLOA_SELF_CHANGE_ENABLED" {print $2}' "$SELF_CHANGE_ENV")"
+  [[ "$value" == true || "$value" == false ]] ||
+    fail "MELLOA_SELF_CHANGE_ENABLED must be true or false"
+  printf '%s' "$value"
+}
+
 compose config --quiet
-compose build melloa backup
+if ! compose build melloa backup; then
+  fail "container image build failed; check Docker registry access, proxy/CA configuration, and rerun activation. If this server uses a private CA, rerun bootstrap and first install with --ca-file so /etc/melloa/build-ca.pem is configured"
+fi
 compose run --rm --no-deps melloa \
   deployment-check \
   --status /run/melloa/guardian/status.json \
@@ -90,7 +121,8 @@ compose run --rm --no-deps melloa \
   --capable-model-config /run/melloa/private/capable-model.json \
   --economy-model-config /run/melloa/private/economy-model.json \
   --telegram-owner-config /run/melloa/private/telegram-owner.json \
-  --telegram-bot-token-file /run/melloa/private/telegram-bot-token
+  --telegram-bot-token-file /run/melloa/private/telegram-bot-token ||
+  fail "pre-activation live Guardian, model, or Telegram check failed; fix the reported cause, then rerun $(activation_rerun_command)"
 
 if ! compose run --rm --no-deps backup check; then
   if [[ "$INITIALIZE_BACKUP" == false ]]; then
@@ -104,19 +136,21 @@ fi
 systemctl enable melloa-release-recovery.service >/dev/null
 systemctl start melloa-release-recovery.service
 
-"$RELEASE_SOURCE/tools/server_release.sh" deploy \
+if ! "$RELEASE_SOURCE/tools/server_release.sh" deploy \
   --env-file "$ENV_FILE" \
   --state-dir "$STATE_DIR" \
   --revision "$REVISION" \
   --app-image "$APP_IMAGE" \
   --backup-image "$BACKUP_IMAGE" \
-  --no-build
+  --no-build; then
+  fail "release deployment failed; run sudo systemctl start melloa-release-recovery.service, then rerun $(activation_rerun_command)"
+fi
 
 compose stop backup >/dev/null
 BACKUP_STOPPED=true
 trap ensure_backup_running EXIT
 if ! compose run --rm --no-deps backup once; then
-  fail "the first post-activation encrypted backup failed"
+  fail "the first post-activation encrypted backup failed; fix the reported backup cause, run sudo systemctl start melloa-release-recovery.service, then rerun $(activation_rerun_command)"
 fi
 compose start backup >/dev/null
 BACKUP_STOPPED=false
@@ -128,19 +162,33 @@ readonly SNAPSHOT="$(jq -er 'select(.result == "success") | .snapshot_id' \
 [[ "$SNAPSHOT" =~ ^[0-9a-f]{64}$ ]] || fail "the first backup receipt is invalid"
 
 systemctl enable \
-  melloa-self-change-planner.service \
-  melloa-self-change-applier.service >/dev/null
-systemctl restart \
-  melloa-self-change-planner.service \
-  melloa-self-change-applier.service
+  melloa-release-recovery.service >/dev/null
+if [[ "$(self_change_enabled)" == true ]]; then
+  systemctl enable \
+    melloa-self-change-planner.service \
+    melloa-self-change-applier.service >/dev/null
+  systemctl restart \
+    melloa-self-change-planner.service \
+    melloa-self-change-applier.service
+else
+  systemctl disable --now \
+    melloa-self-change-planner.service \
+    melloa-self-change-applier.service >/dev/null 2>&1 || true
+  echo "Optional self-change workers are disabled for this deployment."
+fi
 sleep 2
-for service in \
-  melloa-release-recovery.service \
-  melloa-self-change-planner.service \
-  melloa-self-change-applier.service; do
+for service in melloa-release-recovery.service; do
   systemctl is-active --quiet "$service" || fail "service did not remain active: $service"
   systemctl is-enabled --quiet "$service" || fail "service is not enabled for reboot: $service"
 done
+if [[ "$(self_change_enabled)" == true ]]; then
+  for service in \
+    melloa-self-change-planner.service \
+    melloa-self-change-applier.service; do
+    systemctl is-active --quiet "$service" || fail "service did not remain active: $service"
+    systemctl is-enabled --quiet "$service" || fail "service is not enabled for reboot: $service"
+  done
+fi
 
 echo "Server revision $REVISION is active with encrypted snapshot ${SNAPSHOT:0:12}."
 echo "The deployed owner journey must still be exercised before README readiness can change."

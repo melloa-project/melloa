@@ -13,6 +13,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=/srv/melloa/planning-source
+ExecCondition=/usr/local/libexec/melloa/self-change-enabled
 ExecStart=/usr/local/libexec/melloa/self-change-plan
 Restart=on-failure
 RestartSec=15s
@@ -20,8 +21,7 @@ TimeoutStopSec=30s
 KillMode=control-group
 UMask=0077
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=MELLOA_CODEX_USE_API_KEY=true
-EnvironmentFile=-/etc/melloa/self-change.env
+EnvironmentFile=/etc/melloa/self-change.env
 LoadCredential=planner-dsn:/etc/melloa/private/database-change-planner-dsn
 LoadCredential=codex-api-key:/etc/melloa/private/codex-api-key
 CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID

@@ -39,6 +39,8 @@ jobs:
         run: make check
       - name: Verify PostgreSQL contracts
         run: make integration
+      - name: Prove the selected Debian host toolchain
+        run: make server-bootstrap
       - name: Prove persistent runtime, scheduled backup, and clean restore
         run: make server-runtime
       - name: Prove encrypted clean restore

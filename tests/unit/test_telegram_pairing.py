@@ -7,10 +7,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from melloa.adapters.telegram import TelegramBotClient, TelegramUpdate
+from melloa.adapters.telegram import (
+    TelegramBotClient,
+    TelegramUpdate,
+)
 from melloa.apps.telegram_pairing import (
     TelegramPairingError,
     _matching_owner_id,
+    _prepare_pairing_client,
     _read_bot_token,
     wait_for_telegram_owner,
 )
@@ -159,6 +163,37 @@ def test_matching_owner_rejects_different_private_sender_and_chat() -> None:
         _matching_owner_id(update, payload="melloa_exact", bot_username="melli_bot")
         is None
     )
+
+
+def test_pairing_setup_removes_existing_webhook_once(capsys: pytest.CaptureFixture[str]) -> None:
+    methods: list[str] = []
+    payloads: list[dict[str, object]] = []
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        method = request.url.path.rsplit("/", 1)[-1]
+        methods.append(method)
+        payloads.append(json.loads(request.content))
+        if method == "getMe":
+            return _response({"id": 99, "is_bot": True, "username": "melli_bot"})
+        if method == "getWebhookInfo":
+            webhook_url = (
+                "https://example.invalid/melloa"
+                if methods.count("getWebhookInfo") == 1
+                else ""
+            )
+            return _response({"url": webhook_url})
+        if method == "deleteWebhook":
+            return _response(True)
+        raise AssertionError(f"unexpected Telegram method {method}")
+
+    client = TelegramBotClient(_TOKEN, transport=httpx.MockTransport(respond))
+
+    identity = asyncio.run(_prepare_pairing_client(client))
+
+    assert identity.username == "melli_bot"
+    assert methods == ["getMe", "getWebhookInfo", "deleteWebhook", "getMe", "getWebhookInfo"]
+    assert payloads[2] == {"drop_pending_updates": True}
+    assert "removing it for this dedicated long-polling setup" in capsys.readouterr().err
 
 
 def test_bot_token_file_must_be_private_regular_and_well_formed(tmp_path: Path) -> None:

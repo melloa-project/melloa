@@ -145,9 +145,25 @@ def _pairing_target(identity: TelegramBotIdentity) -> str:
     return f"@{identity.username}" if identity.username else f"bot ID {identity.id}"
 
 
+async def _prepare_pairing_client(client: TelegramBotClient) -> TelegramBotIdentity:
+    try:
+        return await client.verify_long_polling()
+    except TelegramAPIError as error:
+        if error.reason_code != "telegram.webhook_configured":
+            raise
+    print(
+        "Telegram bot has an existing webhook; removing it for this dedicated "
+        "long-polling setup and discarding pending updates.",
+        file=sys.stderr,
+        flush=True,
+    )
+    await client.delete_webhook(drop_pending_updates=True)
+    return await client.verify_long_polling()
+
+
 async def _run_pairing(token: str, *, wait_seconds: int) -> int:
     client = TelegramBotClient(token)
-    identity = await client.verify_long_polling()
+    identity = await _prepare_pairing_client(client)
     payload = _pairing_payload()
     print(
         f"Telegram {_pairing_target(identity)} is ready for long polling.\n"
@@ -170,7 +186,8 @@ async def _run_pairing(token: str, *, wait_seconds: int) -> int:
 def _api_failure_message(error: TelegramAPIError) -> str:
     messages = {
         "telegram.webhook_configured": (
-            "the bot has a webhook configured; remove it before selecting long polling"
+            "the bot still has a webhook configured after setup tried to remove it; "
+            "remove the previous webhook manually and retry"
         ),
         "telegram.transport_failed": "Telegram could not be reached",
         "telegram.rate_limited": "Telegram rate-limited the pairing request; retry later",

@@ -13,6 +13,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=/srv/melloa/release-source
+ExecCondition=/usr/local/libexec/melloa/self-change-enabled
 ExecStart=/usr/local/libexec/melloa/self-change-apply
 Restart=on-failure
 RestartSec=15s
@@ -22,6 +23,7 @@ UMask=0077
 Environment=HOME=/var/lib/melloa/applier-home
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-/etc/melloa/release.env
+EnvironmentFile=/etc/melloa/self-change.env
 LoadCredential=applier-dsn:/etc/melloa/private/database-change-applier-dsn
 UnsetEnvironment=CODEX_HOME OPENAI_API_KEY
 CapabilityBoundingSet=

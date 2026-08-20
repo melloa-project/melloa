@@ -107,6 +107,14 @@ class TelegramBotClient:
             raise TelegramAPIError("telegram.webhook_configured")
         return identity
 
+    async def delete_webhook(self, *, drop_pending_updates: bool) -> None:
+        result = await self._request(
+            "deleteWebhook",
+            {"drop_pending_updates": drop_pending_updates},
+        )
+        if result is not True:
+            raise TelegramAPIError("telegram.webhook_delete_invalid")
+
     async def verify_private_chat(self, chat_id: int) -> TelegramChat:
         if chat_id <= 0:
             raise ValueError("Telegram private chat ID must be positive")

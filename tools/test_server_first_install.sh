@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly WORKDIR="$(mktemp -d /tmp/melloa-first-install-test.XXXXXX)"
+readonly INPUTS="$WORKDIR/inputs"
+readonly TARGET="$WORKDIR/target"
+readonly BAD_TARGET="$WORKDIR/bad-target"
+readonly BAD_SECRET_TARGET="$WORKDIR/bad-secret-target"
+readonly BAD_MODEL_TARGET="$WORKDIR/bad-model-target"
+readonly BAD_COST_TARGET="$WORKDIR/bad-cost-target"
+readonly BAD_LOCAL_TARGET="$WORKDIR/bad-local-target"
+readonly CA_RESUME_TARGET="$WORKDIR/ca-resume-target"
+readonly LOG="$WORKDIR/first-install.log"
+readonly RESUME_LOG="$WORKDIR/first-install-resume.log"
+readonly CA_RESUME_SETUP_LOG="$WORKDIR/first-install-ca-resume-setup.log"
+readonly CA_RESUME_LOG="$WORKDIR/first-install-ca-resume.log"
+readonly BAD_LOG="$WORKDIR/first-install-bad-input.log"
+readonly BAD_SECRET_LOG="$WORKDIR/first-install-bad-secret.log"
+readonly BAD_MODEL_LOG="$WORKDIR/first-install-bad-model.log"
+readonly BAD_COST_LOG="$WORKDIR/first-install-bad-cost.log"
+readonly BAD_LOCAL_LOG="$WORKDIR/first-install-bad-local.log"
+readonly TEST_UID="$(id -u)"
+readonly TEST_GID="$(id -g)"
+
+cleanup() {
+  if [[ "$WORKDIR" == /tmp/melloa-first-install-test.* && -d "$WORKDIR" ]]; then
+    rm -rf -- "$WORKDIR"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+install -d -m 0700 "$INPUTS"
+printf '{"contract_version":"1.0.0"}\n' >"$INPUTS/status.json"
+printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'first-install-test' \
+  '-----END PUBLIC KEY-----' >"$INPUTS/public.pem"
+printf '%s\n' '-----BEGIN CERTIFICATE-----' 'first-install-ca-test' \
+  '-----END CERTIFICATE-----' >"$INPUTS/build-ca.pem"
+
+MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+MELLOA_SETUP_CAPABLE_MODEL_ID=capable-test-model \
+MELLOA_SETUP_CAPABLE_TOKEN=capable_first_install_secret \
+MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
+MELLOA_SETUP_ECONOMY_MODEL_ID=economy-test-model \
+MELLOA_SETUP_ECONOMY_TOKEN=economy_first_install_secret \
+MELLOA_SETUP_ECONOMY_ESTIMATED_MAX_COST_GBP=0.01 \
+MELLOA_SETUP_ECONOMY_INPUT_COST_GBP_PER_MILLION_TOKENS=0.25 \
+MELLOA_SETUP_ECONOMY_OUTPUT_COST_GBP_PER_MILLION_TOKENS=2 \
+MELLOA_SETUP_RESTIC_PASSWORD=restic_first_install_secret_123456789 \
+  "$ROOT/infra/server/first-install.sh" \
+    --source "$ROOT" \
+    --ca-file "$INPUTS/build-ca.pem" \
+    --root "$TARGET" \
+    --skip-activation \
+    </dev/null \
+    >"$LOG" 2>&1
+
+readonly PRIVATE="$TARGET/etc/melloa/private"
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE")" == "700:$TEST_UID:$TEST_GID" ]]
+[[ "$(jq -r .owner_user_id "$PRIVATE/telegram-owner.json")" == 5678 ]]
+[[ "$(jq -r .model_id "$PRIVATE/capable-model.json")" == capable-test-model ]]
+[[ "$(jq -r .provider_id "$PRIVATE/capable-model.json")" == provider.openai-capable ]]
+[[ "$(jq -r .base_url "$PRIVATE/capable-model.json")" == https://api.openai.com/v1 ]]
+[[ "$(jq -r .api_style "$PRIVATE/capable-model.json")" == responses ]]
+[[ "$(jq -r .authorization_token_file "$PRIVATE/capable-model.json")" == \
+  /run/melloa/model-credentials/capable-token ]]
+[[ "$(jq -r .provider_id "$PRIVATE/economy-model.json")" == provider.openai-economy ]]
+[[ "$(jq -r .base_url "$PRIVATE/economy-model.json")" == https://api.openai.com/v1 ]]
+[[ "$(jq -r .processing_location "$PRIVATE/economy-model.json")" == approved_provider ]]
+[[ "$(jq -r .authorization_token_file "$PRIVATE/economy-model.json")" == \
+  /run/melloa/model-credentials/economy-token ]]
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE/model-credentials/capable-token")" == \
+  "600:$TEST_UID:$TEST_GID" ]]
+[[ "$(<"$PRIVATE/model-credentials/capable-token")" == capable_first_install_secret ]]
+[[ "$(stat --format='%a:%u:%g' "$PRIVATE/model-credentials/economy-token")" == \
+  "600:$TEST_UID:$TEST_GID" ]]
+[[ "$(<"$PRIVATE/model-credentials/economy-token")" == economy_first_install_secret ]]
+grep --fixed-strings --quiet \
+  'MELLOA_BACKUP_REPOSITORY_DIR=/mnt/melloa-off-device-backup' \
+  "$TARGET/etc/melloa/server.env"
+grep --fixed-strings --quiet 'MELLOA_BUILD_CA_FILE=/etc/melloa/build-ca.pem' \
+  "$TARGET/etc/melloa/server.env"
+[[ "$(stat --format='%a:%u:%g' "$TARGET/etc/melloa/build-ca.pem")" == \
+  "644:$TEST_UID:$TEST_GID" ]]
+cmp --silent "$INPUTS/build-ca.pem" "$TARGET/etc/melloa/build-ca.pem"
+grep --fixed-strings --quiet 'MELLOA_SELF_CHANGE_ENABLED=false' \
+  "$TARGET/etc/melloa/self-change.env"
+[[ "$(jq -r .codex_mode "$TARGET/etc/melloa/configuration.json")" == disabled ]]
+[[ "$(wc -c <"$PRIVATE/git-credentials")" == 1 ]]
+[[ "$(wc -c <"$PRIVATE/codex-api-key")" == 1 ]]
+grep --fixed-strings --quiet "Public path checks passed." "$LOG"
+grep --fixed-strings --quiet \
+  "When ready, run: sudo /usr/local/libexec/melloa/activate --source $ROOT --origin https://github.com/melloa-project/melloa.git --initialize-backup" \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "Then verify before treating the server as ready: sudo /usr/local/libexec/melloa/verify-owner-journey" \
+  "$LOG"
+"$ROOT/infra/server/first-install.sh" \
+  --source "$ROOT" \
+  --root "$TARGET" \
+  </dev/null \
+  >"$RESUME_LOG" 2>&1
+grep --fixed-strings --quiet \
+  "Private configuration is already installed. Activation was skipped by request." \
+  "$RESUME_LOG"
+grep --fixed-strings --quiet \
+  "When ready, run: sudo /usr/local/libexec/melloa/activate --source $ROOT --origin https://github.com/melloa-project/melloa.git --initialize-backup" \
+  "$RESUME_LOG"
+if grep --fixed-strings --quiet "MELLOA_SETUP_BACKUP_REPOSITORY is required" "$RESUME_LOG"; then
+  echo "First-install rerun prompted for setup inputs instead of resuming" >&2
+  exit 1
+fi
+
+MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+MELLOA_SETUP_CAPABLE_MODEL_ID=ca-resume-capable-model \
+MELLOA_SETUP_CAPABLE_TOKEN=capable_ca_resume_secret \
+MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+MELLOA_SETUP_ECONOMY_ROUTE_KIND=openai \
+MELLOA_SETUP_ECONOMY_MODEL_ID=ca-resume-economy-model \
+MELLOA_SETUP_ECONOMY_TOKEN=economy_ca_resume_secret \
+MELLOA_SETUP_ECONOMY_ESTIMATED_MAX_COST_GBP=0.01 \
+MELLOA_SETUP_ECONOMY_INPUT_COST_GBP_PER_MILLION_TOKENS=0.25 \
+MELLOA_SETUP_ECONOMY_OUTPUT_COST_GBP_PER_MILLION_TOKENS=2 \
+MELLOA_SETUP_RESTIC_PASSWORD=restic_ca_resume_secret_123456789 \
+  "$ROOT/infra/server/first-install.sh" \
+    --source "$ROOT" \
+    --root "$CA_RESUME_TARGET" \
+    --skip-activation \
+    </dev/null \
+    >"$CA_RESUME_SETUP_LOG" 2>&1
+grep --fixed-strings --quiet \
+  'MELLOA_BUILD_CA_FILE=/etc/ssl/certs/ca-certificates.crt' \
+  "$CA_RESUME_TARGET/etc/melloa/server.env"
+[[ ! -e "$CA_RESUME_TARGET/etc/melloa/build-ca.pem" ]]
+"$ROOT/infra/server/first-install.sh" \
+  --source "$ROOT" \
+  --ca-file "$INPUTS/build-ca.pem" \
+  --root "$CA_RESUME_TARGET" \
+  </dev/null \
+  >"$CA_RESUME_LOG" 2>&1
+grep --fixed-strings --quiet \
+  "Updated the installed public build CA bundle for future image builds." \
+  "$CA_RESUME_LOG"
+grep --fixed-strings --quiet 'MELLOA_BUILD_CA_FILE=/etc/melloa/build-ca.pem' \
+  "$CA_RESUME_TARGET/etc/melloa/server.env"
+cmp --silent "$INPUTS/build-ca.pem" "$CA_RESUME_TARGET/etc/melloa/build-ca.pem"
+if grep --fixed-strings --quiet "MELLOA_SETUP_BACKUP_REPOSITORY is required" "$CA_RESUME_LOG"; then
+  echo "First-install CA recovery prompted for setup inputs instead of resuming" >&2
+  exit 1
+fi
+
+for secret in \
+  '123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+  capable_first_install_secret \
+  economy_first_install_secret \
+  restic_first_install_secret_123456789; do
+  if grep --fixed-strings --quiet "$secret" "$LOG"; then
+    echo "First-install setup exposed a private input" >&2
+    exit 1
+  fi
+done
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=relative-backup-path \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_LOG" 2>&1; then
+  echo "First-install setup accepted an invalid backup repository path" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet "backup repository must be a plain absolute path" "$BAD_LOG"
+if grep --fixed-strings --quiet "TELEGRAM_BOT_TOKEN is required" "$BAD_LOG"; then
+  echo "First-install setup prompted for secrets before public path validation" >&2
+  exit 1
+fi
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+  MELLOA_SETUP_TELEGRAM_BOT_TOKEN=not-a-token \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_SECRET_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_SECRET_LOG" 2>&1; then
+  echo "First-install setup accepted an invalid Telegram token" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet "Telegram bot token has an invalid format" "$BAD_SECRET_LOG"
+if grep --fixed-strings --quiet "Configure the two conversation model routes." "$BAD_SECRET_LOG"; then
+  echo "First-install setup asked model questions before Telegram token validation" >&2
+  exit 1
+fi
+if grep --fixed-strings --quiet "not-a-token" "$BAD_SECRET_LOG"; then
+  echo "First-install setup exposed an invalid private input" >&2
+  exit 1
+fi
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+  MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+  MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+  MELLOA_SETUP_CAPABLE_ROUTE_KIND=external \
+  MELLOA_SETUP_CAPABLE_MODEL_ID=capable-test-model \
+  MELLOA_SETUP_CAPABLE_BASE_URL=http://capable.example/v1 \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_MODEL_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_MODEL_LOG" 2>&1; then
+  echo "First-install setup accepted an invalid external model URL" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "capable model base URL for an approved provider must use HTTPS with a host" \
+  "$BAD_MODEL_LOG"
+if grep --fixed-strings --quiet "MELLOA_SETUP_CAPABLE_TOKEN is required" "$BAD_MODEL_LOG"; then
+  echo "First-install setup asked for a model token before model URL validation" >&2
+  exit 1
+fi
+if grep --fixed-strings --quiet \
+  '123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' "$BAD_MODEL_LOG"; then
+  echo "First-install setup exposed a private input while reporting a model URL error" >&2
+  exit 1
+fi
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+  MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+  MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+  MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+  MELLOA_SETUP_CAPABLE_MODEL_ID=capable-test-model \
+  MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=not-a-decimal \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_COST_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_COST_LOG" 2>&1; then
+  echo "First-install setup accepted an invalid model cost" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "capable maximum GBP cost must be a non-negative decimal" \
+  "$BAD_COST_LOG"
+if grep --fixed-strings --quiet "MELLOA_SETUP_CAPABLE_TOKEN is required" "$BAD_COST_LOG"; then
+  echo "First-install setup asked for a model token before model cost validation" >&2
+  exit 1
+fi
+if grep --fixed-strings --quiet \
+  '123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' "$BAD_COST_LOG"; then
+  echo "First-install setup exposed a private input while reporting a model cost error" >&2
+  exit 1
+fi
+
+if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
+  MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
+  MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
+  MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
+  MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
+  MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
+  MELLOA_SETUP_CAPABLE_MODEL_ID=capable-test-model \
+  MELLOA_SETUP_CAPABLE_TOKEN=capable_first_install_secret \
+  MELLOA_SETUP_CAPABLE_ESTIMATED_MAX_COST_GBP=0.05 \
+  MELLOA_SETUP_CAPABLE_INPUT_COST_GBP_PER_MILLION_TOKENS=1.25 \
+  MELLOA_SETUP_CAPABLE_OUTPUT_COST_GBP_PER_MILLION_TOKENS=10 \
+  MELLOA_SETUP_ECONOMY_ROUTE_KIND=ollama \
+    "$ROOT/infra/server/first-install.sh" \
+      --source "$ROOT" \
+      --root "$BAD_LOCAL_TARGET" \
+      --skip-activation \
+      </dev/null \
+      >"$BAD_LOCAL_LOG" 2>&1; then
+  echo "First-install setup accepted an unproven local conversation route preset" >&2
+  exit 1
+fi
+grep --fixed-strings --quiet \
+  "economy model route preset must be openai or external" \
+  "$BAD_LOCAL_LOG"
+if grep --fixed-strings --quiet "MELLOA_SETUP_RESTIC_PASSWORD is required" "$BAD_LOCAL_LOG"; then
+  echo "First-install setup continued after an unproven local conversation route preset" >&2
+  exit 1
+fi
+
+echo "Guided first-owner setup generation and redaction checks passed."

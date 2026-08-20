@@ -22,6 +22,8 @@ GITHUB_TOKEN_FILE=""
 CODEX_API_KEY_FILE=""
 CODEX_LOCAL_PROVIDER=""
 CODEX_MODEL=""
+SELF_CHANGE_DISABLED=false
+BUILD_CA_FILE=""
 declare -a MODEL_CREDENTIAL_SPECS=()
 
 usage() {
@@ -35,14 +37,18 @@ Usage: infra/server/configure.sh [--source PATH] [--root PATH]
   --capable-model-config-file PATH
   --economy-model-config-file PATH
   --restic-password-file PATH
-  --github-token-file PATH
   [--model-credential NAME=PATH ...]
-  (--codex-api-key-file PATH | --codex-local-provider ollama|lmstudio)
+  (--self-change-disabled |
+    --github-token-file PATH
+    (--codex-api-key-file PATH | --codex-local-provider ollama|lmstudio))
   [--codex-model MODEL]
+  [--build-ca-file PATH]
 
 Installs a new server's private configuration without starting services. Secret values are read
 only from owner-private files; command-line arguments contain paths and non-secret selections.
 The independently retained restic password file is copied, never generated or replaced here.
+When --build-ca-file is supplied, the public CA bundle is copied into /etc/melloa for future image
+builds and update checks; it is not installed as a machine-wide trust root.
 EOF
   exit 2
 }
@@ -99,6 +105,10 @@ while (($#)); do
       RESTIC_PASSWORD_FILE="$2"
       shift 2
       ;;
+    --self-change-disabled)
+      SELF_CHANGE_DISABLED=true
+      shift
+      ;;
     --github-token-file)
       [[ $# -ge 2 ]] || usage
       GITHUB_TOKEN_FILE="$2"
@@ -122,6 +132,11 @@ while (($#)); do
     --codex-model)
       [[ $# -ge 2 ]] || usage
       CODEX_MODEL="$2"
+      shift 2
+      ;;
+    --build-ca-file)
+      [[ $# -ge 2 ]] || usage
+      BUILD_CA_FILE="$2"
       shift 2
       ;;
     *)
@@ -290,12 +305,19 @@ fi
 for required in \
   BACKUP_REPOSITORY GUARDIAN_STATUS_FILE GUARDIAN_PUBLIC_KEY_FILE TELEGRAM_OWNER_ID \
   TELEGRAM_BOT_TOKEN_FILE CAPABLE_MODEL_CONFIG_FILE ECONOMY_MODEL_CONFIG_FILE \
-  RESTIC_PASSWORD_FILE GITHUB_TOKEN_FILE; do
+  RESTIC_PASSWORD_FILE; do
   [[ -n "${!required}" ]] || usage
 done
-if [[ -n "$CODEX_API_KEY_FILE" && -n "$CODEX_LOCAL_PROVIDER" ]] ||
-  [[ -z "$CODEX_API_KEY_FILE" && -z "$CODEX_LOCAL_PROVIDER" ]]; then
-  fail "select exactly one Codex API-key or local-provider mode"
+if [[ "$SELF_CHANGE_DISABLED" == true ]]; then
+  [[ -z "$GITHUB_TOKEN_FILE" && -z "$CODEX_API_KEY_FILE" && -z "$CODEX_LOCAL_PROVIDER" && \
+    -z "$CODEX_MODEL" ]] ||
+    fail "self-change credentials cannot be supplied when self-change is disabled"
+else
+  [[ -n "$GITHUB_TOKEN_FILE" ]] || usage
+  if [[ -n "$CODEX_API_KEY_FILE" && -n "$CODEX_LOCAL_PROVIDER" ]] ||
+    [[ -z "$CODEX_API_KEY_FILE" && -z "$CODEX_LOCAL_PROVIDER" ]]; then
+    fail "select exactly one Codex API-key or local-provider mode"
+  fi
 fi
 [[ -z "$CODEX_LOCAL_PROVIDER" || "$CODEX_LOCAL_PROVIDER" == ollama || \
   "$CODEX_LOCAL_PROVIDER" == lmstudio ]] || fail "Codex local provider must be ollama or lmstudio"
@@ -306,6 +328,9 @@ validate_plain_path "$BACKUP_REPOSITORY" "backup repository"
 validate_telegram_owner_id "$TELEGRAM_OWNER_ID"
 require_source_file "$GUARDIAN_STATUS_FILE" "Guardian status" 2 1048576 false
 require_source_file "$GUARDIAN_PUBLIC_KEY_FILE" "Guardian public key" 32 65536 false
+if [[ -n "$BUILD_CA_FILE" ]]; then
+  require_source_file "$BUILD_CA_FILE" "build CA bundle" 32 1048576 false
+fi
 
 telegram_token="$(
   read_single_line_secret "$TELEGRAM_BOT_TOKEN_FILE" "Telegram bot token" 37 149
@@ -319,11 +344,14 @@ restic_password="$(
 [[ "$restic_password" =~ ^[A-Za-z0-9_-]{32,128}$ ]] ||
   fail "restic recovery password must contain 32-128 base64url-safe characters"
 
-github_token="$(read_single_line_secret "$GITHUB_TOKEN_FILE" "GitHub token" 20 255)"
-[[ "$github_token" =~ ^[A-Za-z0-9_]+$ ]] || fail "GitHub token has an invalid format"
+github_token=""
+if [[ "$SELF_CHANGE_DISABLED" == false ]]; then
+  github_token="$(read_single_line_secret "$GITHUB_TOKEN_FILE" "GitHub token" 20 255)"
+  [[ "$github_token" =~ ^[A-Za-z0-9_]+$ ]] || fail "GitHub token has an invalid format"
+fi
 
 codex_api_key=""
-if [[ -n "$CODEX_API_KEY_FILE" ]]; then
+if [[ "$SELF_CHANGE_DISABLED" == false && -n "$CODEX_API_KEY_FILE" ]]; then
   codex_api_key="$(read_single_line_secret "$CODEX_API_KEY_FILE" "Codex API key" 20 4096)"
   [[ "$codex_api_key" =~ ^[A-Za-z0-9._-]{20,4096}$ ]] ||
     fail "Codex API key has an invalid format"
@@ -380,6 +408,9 @@ for installed_file in "$SERVER_ENV" "$SELF_CHANGE_ENV"; do
   [[ -f "$installed_file" && ! -L "$installed_file" ]] ||
     fail "installed configuration template is unavailable: $installed_file"
 done
+if [[ -n "$BUILD_CA_FILE" && ( -e "$CONFIG_DIR/build-ca.pem" || -L "$CONFIG_DIR/build-ca.pem" ) ]]; then
+  fail "build CA bundle is already installed; use a reviewed credential-rotation procedure"
+fi
 [[ -d "$PRIVATE_DIR" && ! -L "$PRIVATE_DIR" ]] || fail "installed private directory is unavailable"
 [[ ! -e "$CONFIGURATION_MARKER" && ! -L "$CONFIGURATION_MARKER" ]] ||
   fail "server is already configured; use a reviewed credential-rotation procedure"
@@ -428,6 +459,7 @@ PRIVATE_SWAPPED=false
 GUARDIAN_SWAPPED=false
 SERVER_ENV_SWAPPED=false
 SELF_CHANGE_ENV_SWAPPED=false
+BUILD_CA_INSTALLED=false
 MARKER_INSTALLED=false
 COMMITTED=false
 
@@ -450,6 +482,9 @@ cleanup() {
         mv -- "$GUARDIAN_DIR" "$GUARDIAN_STAGE/failed"
       fi
       mv -- "$GUARDIAN_STAGE/original" "$GUARDIAN_DIR"
+    fi
+    if [[ "$BUILD_CA_INSTALLED" == true ]]; then
+      rm -f -- "$CONFIG_DIR/build-ca.pem"
     fi
     if [[ "$PRIVATE_SWAPPED" == true && -d "$STAGE/private.original" ]]; then
       if [[ -e "$PRIVATE_DIR" || -L "$PRIVATE_DIR" ]]; then
@@ -527,10 +562,21 @@ for name in "${!MODEL_CREDENTIAL_SOURCES[@]}"; do
   write_private_text "$STAGE/private/model-credentials/$name" \
     "${MODEL_CREDENTIAL_VALUES[$name]}" 0600 "$RUNTIME_UID" "$RUNTIME_GID"
 done
+build_ca_runtime_file=/etc/ssl/certs/ca-certificates.crt
+if [[ -n "$BUILD_CA_FILE" ]]; then
+  build_ca_runtime_file=/etc/melloa/build-ca.pem
+  install -m 0644 "$BUILD_CA_FILE" "$STAGE/build-ca.pem"
+  set_owner "$STAGE/build-ca.pem" 0 0
+fi
 
-write_private_text "$STAGE/private/git-credentials" \
-  "https://x-access-token:$github_token@github.com" 0600 0 0
-write_private_text "$STAGE/private/codex-api-key" "$codex_api_key" 0600 0 0
+if [[ "$SELF_CHANGE_DISABLED" == false ]]; then
+  write_private_text "$STAGE/private/git-credentials" \
+    "https://x-access-token:$github_token@github.com" 0600 0 0
+  write_private_text "$STAGE/private/codex-api-key" "$codex_api_key" 0600 0 0
+else
+  write_private_text "$STAGE/private/git-credentials" "" 0600 0 0
+  write_private_text "$STAGE/private/codex-api-key" "" 0600 0 0
+fi
 
 unset admin_password app_password migration_password backup_password planner_password
 unset applier_password owner_credential telegram_token restic_password github_token codex_api_key
@@ -538,8 +584,9 @@ for name in "${!MODEL_CREDENTIAL_VALUES[@]}"; do
   unset 'MODEL_CREDENTIAL_VALUES[$name]'
 done
 
-awk -F= -v revision="$REVISION" -v repository="$BACKUP_REPOSITORY" '
-  BEGIN { image = backup_image = source = backup_repository = 0 }
+awk -F= -v revision="$REVISION" -v repository="$BACKUP_REPOSITORY" \
+  -v build_ca="$build_ca_runtime_file" '
+  BEGIN { image = backup_image = source = backup_repository = build_ca_count = 0 }
   $1 == "MELLOA_IMAGE" { print "MELLOA_IMAGE=melloa-local/server:" revision; image += 1; next }
   $1 == "MELLOA_BACKUP_IMAGE" {
     print "MELLOA_BACKUP_IMAGE=melloa-local/backup:" revision; backup_image += 1; next
@@ -550,20 +597,28 @@ awk -F= -v revision="$REVISION" -v repository="$BACKUP_REPOSITORY" '
   $1 == "MELLOA_BACKUP_REPOSITORY_DIR" {
     print "MELLOA_BACKUP_REPOSITORY_DIR=" repository; backup_repository += 1; next
   }
+  $1 == "MELLOA_BUILD_CA_FILE" {
+    print "MELLOA_BUILD_CA_FILE=" build_ca; build_ca_count += 1; next
+  }
   { print }
   END {
-    if (image != 1 || backup_image != 1 || source != 1 || backup_repository != 1) exit 1
+    if (image != 1 || backup_image != 1 || source != 1 || backup_repository != 1 ||
+        build_ca_count != 1) exit 1
   }
 ' "$SOURCE/infra/server/server.env.example" >"$STAGE/server.env"
 chmod 0600 "$STAGE/server.env"
 set_owner "$STAGE/server.env" 0 0
 
-if [[ -n "$CODEX_API_KEY_FILE" ]]; then
-  printf 'MELLOA_CODEX_USE_API_KEY=true\nMELLOA_CODEX_MODEL=%s\nMELLOA_CODEX_LOCAL_PROVIDER=\n' \
+if [[ "$SELF_CHANGE_DISABLED" == true ]]; then
+  printf 'MELLOA_SELF_CHANGE_ENABLED=false\nMELLOA_CODEX_USE_API_KEY=false\nMELLOA_CODEX_MODEL=\nMELLOA_CODEX_LOCAL_PROVIDER=\n' \
+    >"$STAGE/self-change.env"
+  codex_mode=disabled
+elif [[ -n "$CODEX_API_KEY_FILE" ]]; then
+  printf 'MELLOA_SELF_CHANGE_ENABLED=true\nMELLOA_CODEX_USE_API_KEY=true\nMELLOA_CODEX_MODEL=%s\nMELLOA_CODEX_LOCAL_PROVIDER=\n' \
     "$CODEX_MODEL" >"$STAGE/self-change.env"
   codex_mode=api_key
 else
-  printf 'MELLOA_CODEX_USE_API_KEY=false\nMELLOA_CODEX_MODEL=%s\nMELLOA_CODEX_LOCAL_PROVIDER=%s\n' \
+  printf 'MELLOA_SELF_CHANGE_ENABLED=true\nMELLOA_CODEX_USE_API_KEY=false\nMELLOA_CODEX_MODEL=%s\nMELLOA_CODEX_LOCAL_PROVIDER=%s\n' \
     "$CODEX_MODEL" "$CODEX_LOCAL_PROVIDER" >"$STAGE/self-change.env"
   codex_mode="$CODEX_LOCAL_PROVIDER"
 fi
@@ -606,6 +661,10 @@ mv -- "$STAGE/private" "$PRIVATE_DIR"
 mv -- "$GUARDIAN_DIR" "$GUARDIAN_STAGE/original"
 GUARDIAN_SWAPPED=true
 mv -- "$GUARDIAN_STAGE/new" "$GUARDIAN_DIR"
+if [[ -f "$STAGE/build-ca.pem" ]]; then
+  mv -- "$STAGE/build-ca.pem" "$CONFIG_DIR/build-ca.pem"
+  BUILD_CA_INSTALLED=true
+fi
 mv -f -- "$STAGE/server.env" "$SERVER_ENV"
 SERVER_ENV_SWAPPED=true
 mv -f -- "$STAGE/self-change.env" "$SELF_CHANGE_ENV"
@@ -615,6 +674,9 @@ MARKER_INSTALLED=true
 
 sync -f "$SERVER_ENV"
 sync -f "$SELF_CHANGE_ENV"
+if [[ "$BUILD_CA_INSTALLED" == true ]]; then
+  sync -f "$CONFIG_DIR/build-ca.pem"
+fi
 sync -f "$CONFIGURATION_MARKER"
 sync -f "$CONFIG_DIR"
 sync -f "$GUARDIAN_DIR"

@@ -24,6 +24,95 @@ def test_release_recovery_precedes_both_self_change_workers() -> None:
     assert "After=melloa-release-recovery.service" in applier
 
 
+def test_self_change_workers_are_explicitly_enablement_gated() -> None:
+    planner = _unit("melloa-self-change-planner.service")
+    applier = _unit("melloa-self-change-applier.service")
+    gate = (ROOT / "infra/server/self-change-enabled.sh").read_text(encoding="utf-8")
+    default_environment = (
+        ROOT / "infra/server/self-change.env.example"
+    ).read_text(encoding="utf-8")
+
+    for unit in (planner, applier):
+        assert "EnvironmentFile=/etc/melloa/self-change.env" in unit
+        assert "ExecCondition=/usr/local/libexec/melloa/self-change-enabled" in unit
+    assert "Environment=MELLOA_CODEX_USE_API_KEY=true" not in planner
+    assert "MELLOA_SELF_CHANGE_ENABLED=false" in default_environment
+    assert "MELLOA_CODEX_USE_API_KEY=false" in default_environment
+    assert '[[ "$ENABLED" == false ]]' in gate
+    assert "exit 1" in gate
+    assert "exit 255" in gate
+
+
+def test_codex_cli_is_optional_until_self_change_workers_are_enabled() -> None:
+    bootstrap = (ROOT / "infra/server/bootstrap-debian.sh").read_text(
+        encoding="utf-8"
+    )
+    preflight = (ROOT / "infra/server/preflight.sh").read_text(encoding="utf-8")
+    first_install = (ROOT / "infra/server/first-install.sh").read_text(
+        encoding="utf-8"
+    )
+
+    bootstrap_required_commands = (
+        bootstrap.split("for command in bwrap ", 1)[1].split("; do", 1)[0].split()
+    )
+    preflight_required_commands = (
+        preflight.split("for command in \\\n", 1)[1].split("; do", 1)[0].split()
+    )
+
+    assert "SELF_CHANGE_TOOLS=false" in bootstrap
+    assert "--self-change-tools" in bootstrap
+    assert "verify_codex_cli" in bootstrap
+    assert 'if [[ "$SELF_CHANGE_TOOLS" == true ]]; then' in bootstrap
+    assert "codex" not in bootstrap_required_commands
+    assert "codex" not in preflight_required_commands
+    assert "verify_codex_cli" in preflight
+    assert "require_codex_self_change_tools" in first_install
+    assert "optional self-change workers require Codex CLI" in first_install
+
+
+def test_guided_first_install_suppresses_lower_level_installer_handoff() -> None:
+    installer = (ROOT / "infra/server/install.sh").read_text(encoding="utf-8")
+    first_install = (ROOT / "infra/server/first-install.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--guided-first-install" in first_install
+    assert "GUIDED_FIRST_INSTALL=false" in installer
+    assert "--guided-first-install)" in installer
+    assert (
+        "Server service assets installed; continuing guided first-owner setup."
+        in installer
+    )
+    guided_branches = installer.split('if [[ "$GUIDED_FIRST_INSTALL" == true ]]; then')[
+        1:
+    ]
+    assert len(guided_branches) == 2
+    for branch in guided_branches:
+        guided_branch = branch.split("fi", 1)[0]
+        assert "Pair the dedicated Telegram bot" not in guided_branch
+        assert "Or run the guided first-owner setup" not in guided_branch
+
+
+def test_guided_first_install_reports_safe_activation_and_verification_recovery() -> None:
+    first_install = (ROOT / "infra/server/first-install.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "first_install_resume_command" in first_install
+    assert "sudo /usr/local/libexec/melloa/first-install" in first_install
+    assert "if ! \"$activate_bin\" \"${activate_args[@]}\"; then" in first_install
+    assert (
+        "activation failed; fix the reported cause, then rerun $resume_command"
+        in first_install
+    )
+    assert "Existing private configuration will be reused" in first_install
+    assert "if ! \"$verify_bin\" --source \"$SOURCE\"; then" in first_install
+    assert (
+        "owner verification failed; fix the reported cause or send the exact Telegram phrase"
+        in first_install
+    )
+
+
 def test_planner_has_only_bounded_root_broker_authority() -> None:
     planner = _unit("melloa-self-change-planner.service")
 
@@ -93,3 +182,22 @@ def test_server_activation_orders_recovery_before_release_and_workers() -> None:
     assert recovery < deployment < workers
     assert "deployment-check" in activation
     assert "backup once" in activation
+
+
+def test_server_activation_reports_phase_specific_safe_recovery_commands() -> None:
+    activation = (ROOT / "infra/server/activate.sh").read_text(encoding="utf-8")
+
+    assert "activation_rerun_command" in activation
+    assert "sudo /usr/local/libexec/melloa/activate" in activation
+    assert (
+        "pre-activation live Guardian, model, or Telegram check failed; "
+        "fix the reported cause"
+    ) in activation
+    assert (
+        "release deployment failed; run sudo systemctl start "
+        "melloa-release-recovery.service"
+    ) in activation
+    assert (
+        "the first post-activation encrypted backup failed; fix the reported backup cause"
+        in activation
+    )

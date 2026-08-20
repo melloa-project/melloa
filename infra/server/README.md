@@ -1,10 +1,14 @@
 # Persistent server runtime (engineering checkpoint)
 
-This is the generic Linux container runtime intended to become Melloa's low-maintenance server
-path. It is **not yet an owner deployment instruction** and does not change the repository's
-`NOT READY` status. Host supervision of the tested release recovery and self-change workers, real
-provider and off-device storage configuration, actual server installation, and deployed dogfooding
-are still required.
+Owner-facing installation instructions live in the canonical
+[first-owner server deployment path](../../docs/server-deployment.md). This file is the technical
+reference for the checked-in server runtime and the lower-level commands behind that guide.
+
+This is the container runtime intended to become Melloa's low-maintenance server path. The first
+qualification target is now one concrete host: a fresh Debian 13 (`trixie`) amd64 machine booted
+with systemd. It is **not yet an owner deployment instruction** and does not change the
+repository's `NOT READY` status. Real provider and off-device storage configuration, actual server
+installation, reboot and recovery drills, and deployed dogfooding are still required.
 
 The runtime has five bounded roles:
 
@@ -28,24 +32,82 @@ owner-visible until a complete backup and repository check succeeds. A database 
 30 minutes by default, so a frozen database cannot leave backup health silently stale forever; an
 incomplete restic snapshot created while a dump fails is removed before the failure is reported.
 
-## Private deployment inputs
+## Selected host bootstrap
 
-`configure.sh` is the supported first-install writer for private inputs. It generates the six
-independent database passwords and the local API owner credential, creates matching least-
-privilege DSNs, and installs owner-supplied integration secrets with the exact runtime
-ownership and modes. It never starts a service, accepts secret *paths* rather than secret command-
-line values, refuses to overwrite a configured server, and emits no secret values.
+Start from a fresh Debian 13 amd64 server with root access and an independently mounted backup
+volume. The bootstrap intentionally refuses other distributions, architectures, containers outside
+its own disposable CI smoke test, conflicting distro Docker packages, and pre-existing commands it
+does not own. On a minimal image, install only the two tools needed to obtain the reviewed checkout,
+then run the checked-in bootstrap:
 
-Before invoking it, prepare owner-private mode-`0600` files outside the source checkout for:
+```bash
+sudo apt-get update
+sudo apt-get install --yes --no-install-recommends ca-certificates git
+git clone https://github.com/melloa-project/melloa.git
+cd melloa
+sudo infra/server/bootstrap-debian.sh --source "$PWD"
+sudo infra/server/first-install.sh --source "$PWD"
+```
+
+The reviewed versions and artifact hashes live in `toolchain.lock`. The bootstrap verifies Docker's
+repository signing-key fingerprint, installs Docker CE and Compose from its Debian repository,
+installs checksum-pinned Node.js and uv artifacts, and installs Go for the public Guardian handoff
+drill. It starts and enables Docker, then runs the normal clean/current-main build preflight. The
+integrity-pinned Codex CLI npm packages are installed only when bootstrap is rerun with
+`--self-change-tools` for explicitly enabled self-change workers. Bootstrap does not configure
+secrets, initialize storage, or start Melloa. The guided
+`first-install.sh` step installs host assets, prompts for the owner-private values, generates the
+route JSON, pairs the Telegram bot, installs private configuration, initializes the encrypted backup
+repository when approved, activates Melloa, and runs a final owner-journey verifier. That verifier
+asks the owner to send one exact setup message in Telegram, then proves from Melloa's durable state
+that the message was accepted, answered, and delivered back through Telegram. Rerun the bootstrap's
+read-only host check with:
+
+```bash
+sudo infra/server/bootstrap-debian.sh --source "$PWD" --check
+```
+
+An owner-approved outbound TLS proxy can be supplied as a public PEM bundle with `--ca-file`; pass
+the same flag to `first-install.sh`. The bootstrap uses that bundle for apt, curl, npm, and the
+clean-main Git check. First install copies the public bundle into `/etc/melloa/build-ca.pem`, stores
+that path in `server.env`, and update/preflight reuse it for Git, uv, npm, and Docker build
+dependency fetches. If activation fails before that bundle was configured, rerunning first install
+with `--ca-file` updates only that public build CA setting and resumes activation. It is not
+installed as a new machine-wide trust root.
+
+`make server-bootstrap` repeats the toolchain installation in a disposable digest-pinned Debian 13
+container. That proves package and CLI compatibility, not systemd boot behavior; the real target
+still has to pass the live qualification before the root README can say ready.
+
+The pinned Codex CLI path uses a separate API key or an explicitly selected local provider. It does
+not claim that unattended service operation can rely on an interactive ChatGPT subscription login.
+
+## Guided first install inputs
+
+`first-install.sh` is now the normal owner path after bootstrap. It runs the immutable asset
+installer, collects private values through prompts, writes temporary mode-`0600` input files,
+generates the capable/economy model JSON, runs exact Telegram owner pairing, calls the private
+configuration transaction, and activates the server unless `--skip-activation` is selected for a
+staged test. It resumes an already configured server through activation and verification instead of
+overwriting owner state, and emits no secret values. After activation, it runs
+`/usr/local/libexec/melloa/verify-owner-journey`; if the owner cannot complete the Telegram proof
+immediately, rerun that command later.
+
+Before invoking it, have these owner-controlled values ready:
 
 - a dedicated Telegram bot token;
-- the capable and economy model JSON documents plus each bearer token they name directly below
-  `/run/melloa/model-credentials/`;
-- a high-entropy base64url restic password retained separately from both this machine and the
-  backup repository;
-- a repository-scoped GitHub token able to read and write this repository's branches; and
-- a separate OpenAI API key for Codex self-change planning, or select an explicitly installed
-  `ollama`/`lmstudio` local Codex provider instead.
+- the exact model IDs, base URLs, API style, token/cost ceilings, and bearer tokens for external
+  OpenAI-compatible capable/economy routes;
+- a high-entropy base64url restic password retained separately from this machine and the backup
+  repository.
+
+The guided first-owner path defaults optional self-change workers off. If the owner intentionally
+enables them during setup, also prepare a fine-grained GitHub token for this repository with
+contents read/write access and a separate OpenAI API key for Codex planning, or select an
+explicitly installed `ollama`/`lmstudio` local Codex provider instead. First install refuses that
+optional path on the real server unless bootstrap has prepared the pinned Codex CLI with
+`--self-change-tools`. When disabled, activation stops and disables the planner/applier units, and
+the units have an `ExecCondition` gate so an accidental manual start does not run the workers.
 
 The current OpenAI chat route uses an API key with the Responses API; it does not claim to persist
 an interactive ChatGPT or Codex subscription login. Official OpenAI documentation recommends the
@@ -81,11 +143,11 @@ The cost placeholders deliberately make this example fail validation. Replace al
 sensitivity, and cost values from current owner-reviewed provider terms; setting real token rates
 to zero would make the retained cost record inaccurate.
 
-After the host assets are installed, discover the exact numeric Telegram owner ID without using a
-third-party ID bot or copying it from Telegram metadata. The command verifies that the supplied bot
-is available for long polling, prints a random one-time `/start` phrase to the terminal, and waits
-for that exact phrase in a one-to-one chat. Instructions go to the terminal while stdout contains
-only the verified numeric ID, so it can be captured directly:
+During guided setup, Melloa discovers the exact numeric Telegram owner ID without using a third-
+party ID bot or copying it from Telegram metadata. The pairing step verifies that the supplied bot is
+available for long polling, prints a random one-time `/start` phrase to the terminal, and waits for
+that exact phrase in a one-to-one chat. Instructions go to the terminal while stdout contains only
+the verified numeric ID. For manual recovery or debugging, the underlying command is:
 
 ```bash
 TELEGRAM_OWNER_ID="$(
@@ -94,14 +156,15 @@ TELEGRAM_OWNER_ID="$(
 )"
 ```
 
-Use a dedicated bot with no webhook and no other active long poller. Before an owner is bound,
-unrelated pending updates have no authority and are discarded; the exact pairing update is also
-acknowledged so it does not become the first conversation message after activation. The bot token
-is read only from the owner-private file and never printed. Telegram bot chats still are not
-end-to-end encrypted.
+Use a dedicated bot with no other active long poller. The pairing command removes an existing
+webhook from that dedicated bot and discards stale pending updates before waiting for the owner.
+Before an owner is bound, unrelated pending updates have no authority and are discarded; the exact
+pairing update is also acknowledged so it does not become the first conversation message after
+activation. The bot token is read only from the owner-private file and never printed. Telegram bot
+chats still are not end-to-end encrypted.
 
 With those files ready and the public-only Guardian projection already prepared by Guardian, the
-configuration transaction has this shape:
+configuration transaction performed by `first-install.sh` has this lower-level shape:
 
 ```bash
 sudo /usr/local/libexec/melloa/configure \
@@ -116,14 +179,19 @@ sudo /usr/local/libexec/melloa/configure \
   --model-credential capable-token=/owner-input/capable-token \
   --model-credential economy-token=/owner-input/economy-token \
   --restic-password-file /owner-recovery/restic-password \
-  --github-token-file /owner-input/github-token \
-  --codex-api-key-file /owner-input/codex-api-key
+  --self-change-disabled
 ```
 
-Input file paths may differ, but the installed paths remain fixed and auditable. For local Codex
-planning, replace the last option with `--codex-local-provider ollama` (or `lmstudio`) and ensure
-that provider is actually reachable from the host service. The two conversation routes remain
-separately configured; Codex planning credentials are never mounted into the Melloa application.
+Input file paths may differ, but the installed paths remain fixed and auditable. To enable
+self-change workers during configuration, replace `--self-change-disabled` with
+`--github-token-file /owner-input/github-token` plus either
+`--codex-api-key-file /owner-input/codex-api-key` or `--codex-local-provider ollama` (or
+`lmstudio`) and ensure that provider is actually reachable from the host service. The two
+conversation routes remain separately configured; Codex planning credentials are never mounted into
+the Melloa application.
+The guided first-owner conversation setup deliberately accepts only hosted OpenAI-compatible routes
+until a local model path has explicit container-networking and recovery proof. Lower-level model
+configuration still validates private-network endpoints for future reviewed use.
 
 The path-only `server.env` is produced from `server.env.example`. Every credential and owner-
 specific JSON document remains a separate regular file. Credential files read by Melloa or the
@@ -150,12 +218,15 @@ planner receives Codex credentials but no Git-push or container-control authorit
 receives Git/Docker release authority but refuses to start with Codex or OpenAI credentials in its
 environment. Hardened unit definitions now make release recovery a required oneshot predecessor,
 hide Docker and deployment state from the planner, and hide Codex state from the applier. The units
-are not yet installed or reboot-tested by this engineering checkpoint.
+are installed by the host-asset installer and verified before activation, but the ordering still
+needs to pass on the actual server after reboot.
 
-`install.sh` is the corresponding host-asset installer. It requires a clean current `main` checkout,
-uv 0.12.0, Python 3.13+, Node.js 22+, Docker Compose 2.27+, systemd 249+, Bubblewrap, and a Codex CLI
-whose non-interactive command exposes the exact sandbox, approval, ephemeral, user-config, and local-
-provider controls used by the planner. It creates the dedicated `melloa-codex` identity, separate
+`install.sh` is the host-asset installer called by `first-install.sh`. It requires a clean current
+`main` checkout, the Node.js and uv versions in `toolchain.lock`, Python 3.13+, Docker Compose
+2.27+, systemd 249+, and Bubblewrap. The installed preflight requires the pinned Codex CLI only
+when self-change workers are enabled, and then verifies the exact sandbox, approval, ephemeral,
+user-config, and local-provider controls used by the planner. The installer creates the dedicated
+`melloa-codex` identity, separate
 public planning and credential-bearing release clones, a fixed unprivileged `melloa-runtime`
 identity, immutable worker/verifier dependencies, and root-owned launchers and units. It
 deliberately does not start anything or overwrite an existing owner configuration:
@@ -167,24 +238,43 @@ sudo infra/server/preflight.sh --source "$PWD" --installed
 
 Those remain engineering commands, not supported owner deployment instructions. The installed
 preflight validates every runtime-owned private input, requires the backup repository to be a mount
-on storage independent from the root filesystem, and accepts either a private Codex API-key file or
-an explicitly selected `ollama`/`lmstudio` local provider. It also runs Bubblewrap as the dedicated
-coding UID and validates the installed units on the target host.
+on storage independent from the root filesystem, and accepts either disabled self-change workers,
+a private Codex API-key file, or an explicitly selected `ollama`/`lmstudio` local provider. It also
+runs Bubblewrap as the dedicated coding UID and validates the installed units on the target host.
 
-After that preflight passes, `activate.sh` provides the bounded first-activation transaction. It
-builds the exact installed revision, verifies the signed Guardian handoff, both live model routes,
-the bot identity, and the exact private Telegram chat before starting owner-facing work. It refuses
-an absent backup repository unless the operator explicitly selects `--initialize-backup`, starts
-boot recovery before the first release, proves one encrypted snapshot, and only then enables the
-planner and applier:
+After that preflight passes, `activate.sh` provides the bounded first-activation transaction called
+by `first-install.sh`. It builds the exact installed revision, verifies the signed Guardian handoff,
+both live model routes, the bot identity, and the exact private Telegram chat before starting owner-
+facing work. It refuses an absent backup repository unless the operator explicitly selects
+`--initialize-backup`, starts boot recovery before the first release, proves one encrypted snapshot,
+and only then enables the planner and applier if self-change workers were explicitly enabled:
 
 ```bash
 sudo infra/server/activate.sh --source "$PWD" --initialize-backup
 ```
 
-This remains an engineering command until the same sequence, a reboot, a real conversation, and a
-reviewed self-change have succeeded on the target server. Activation deliberately prints that the
-README is still not ready; a healthy synthetic or partial activation cannot change that contract.
+This remains an engineering command until the same sequence, a reboot, a real conversation, a
+restore drill, and an update/rollback drill have succeeded on the target server. Activation
+deliberately prints that the README is still not ready; a healthy synthetic or partial activation
+cannot change that contract.
+
+After a reboot or maintenance window, the owner-facing health proof is:
+
+```bash
+sudo /usr/local/libexec/melloa/verify-owner-journey
+```
+
+It verifies enabled systemd services, running containers, the latest encrypted backup receipt, the
+active release marker, and a fresh Telegram conversation through Melloa's real long-polling worker.
+
+For a non-destructive restore proof against the installed encrypted repository:
+
+```bash
+sudo /usr/local/libexec/melloa/restore-drill
+```
+
+The drill restores into a separate temporary Compose project and volume, runs migration check, and
+removes the temporary project. It does not stop or overwrite the active deployment.
 
 The backup database password is a third independent secret. The scheduler converts it to a
 mode-`0600` `.pgpass` in container tmpfs, so the password does not appear in process arguments or
@@ -241,6 +331,17 @@ termination. Owner-facing work stays held until the journal is durably cleared. 
 first snapshots current data and refuses to start an older image unless that image's migration
 manifest accepts the current schema; it does not silently discard post-deployment owner data.
 
+Owner-facing maintenance should use the installed wrappers:
+
+```bash
+sudo /usr/local/libexec/melloa/update
+sudo /usr/local/libexec/melloa/rollback
+```
+
+Both wrappers finish by running `/usr/local/libexec/melloa/verify-owner-journey` unless explicitly
+skipped for a staged test or emergency diagnosis. The lower-level release commands remain available
+for engineering inspection:
+
 The operator-shaped commands currently exercised by the disposable proof are:
 
 ```bash
@@ -257,11 +358,12 @@ tools/server_release.sh rollback \
   --state-dir /var/lib/melloa/release-state
 ```
 
-These are not yet installation instructions. The disposable proof sends an untrappable `SIGKILL`
-during the pre-activation window, confirms that the durable operation journal remains, invokes
-`recover`, and verifies both the previous release and owner data. A hardened boot unit must still run
-that reconciliation before workers start, and that ordering has not yet been installed or reboot
-tested on an actual server. That supervision gap is one reason the root README remains `NOT READY`.
+These are not owner-facing installation instructions. The disposable proof sends an untrappable
+`SIGKILL` during the pre-activation window, confirms that the durable operation journal remains,
+invokes `recover`, and verifies both the previous release and owner data. The installed
+`melloa-release-recovery.service` is now ordered before the planner and applier, but that ordering
+still has to pass during the real dedicated-server reboot drill before the root README can change
+from `NOT READY`.
 
 ## Mechanical verification
 

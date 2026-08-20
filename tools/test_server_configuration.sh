@@ -6,6 +6,7 @@ readonly WORKDIR="$(mktemp -d /tmp/melloa-configuration-test.XXXXXX)"
 readonly INPUTS="$WORKDIR/inputs"
 readonly TARGET="$WORKDIR/target"
 readonly LOCAL_TARGET="$WORKDIR/local-target"
+readonly DISABLED_TARGET="$WORKDIR/disabled-target"
 readonly TEST_UID="$(id -u)"
 readonly TEST_GID="$(id -g)"
 
@@ -69,6 +70,8 @@ private_input local-economy-model.json '{
 printf '{"contract_version":"1.0.0"}\n' >"$INPUTS/status.json"
 printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'configuration-test' \
   '-----END PUBLIC KEY-----' >"$INPUTS/public.pem"
+printf '%s\n' '-----BEGIN CERTIFICATE-----' 'configuration-ca-test' \
+  '-----END CERTIFICATE-----' >"$INPUTS/build-ca.pem"
 
 "$ROOT/infra/server/configure.sh" \
   --source "$ROOT" \
@@ -84,6 +87,7 @@ printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'configuration-test' \
   --model-credential "economy-token=$INPUTS/economy-token" \
   --restic-password-file "$INPUTS/restic-password" \
   --github-token-file "$INPUTS/github-token" \
+  --build-ca-file "$INPUTS/build-ca.pem" \
   --codex-api-key-file "$INPUTS/codex-api-key" \
   >"$WORKDIR/configure.log"
 
@@ -102,6 +106,13 @@ readonly PRIVATE="$TARGET/etc/melloa/private"
 grep --fixed-strings --quiet \
   'MELLOA_BACKUP_REPOSITORY_DIR=/mnt/melloa-off-device-backup' \
   "$TARGET/etc/melloa/server.env"
+grep --fixed-strings --quiet 'MELLOA_BUILD_CA_FILE=/etc/melloa/build-ca.pem' \
+  "$TARGET/etc/melloa/server.env"
+[[ "$(stat --format='%a:%u:%g' "$TARGET/etc/melloa/build-ca.pem")" == \
+  "644:$TEST_UID:$TEST_GID" ]]
+cmp --silent "$INPUTS/build-ca.pem" "$TARGET/etc/melloa/build-ca.pem"
+grep --fixed-strings --quiet 'MELLOA_SELF_CHANGE_ENABLED=true' \
+  "$TARGET/etc/melloa/self-change.env"
 grep --fixed-strings --quiet 'MELLOA_CODEX_USE_API_KEY=true' \
   "$TARGET/etc/melloa/self-change.env"
 grep --fixed-strings --quiet \
@@ -158,8 +169,30 @@ done
   --codex-local-provider ollama \
   >/dev/null
 [[ "$(<"$LOCAL_TARGET/etc/melloa/self-change.env")" == \
-  $'MELLOA_CODEX_USE_API_KEY=false\nMELLOA_CODEX_MODEL=\nMELLOA_CODEX_LOCAL_PROVIDER=ollama' ]]
+  $'MELLOA_SELF_CHANGE_ENABLED=true\nMELLOA_CODEX_USE_API_KEY=false\nMELLOA_CODEX_MODEL=\nMELLOA_CODEX_LOCAL_PROVIDER=ollama' ]]
 [[ "$(jq -r .codex_mode "$LOCAL_TARGET/etc/melloa/configuration.json")" == ollama ]]
 [[ -z "$(find "$LOCAL_TARGET/etc/melloa/private/model-credentials" -mindepth 1 -print -quit)" ]]
+
+"$ROOT/infra/server/install.sh" --source "$ROOT" --root "$DISABLED_TARGET" >/dev/null
+"$ROOT/infra/server/configure.sh" \
+  --source "$ROOT" \
+  --root "$DISABLED_TARGET" \
+  --backup-repository /mnt/melloa-off-device-backup \
+  --guardian-status-file "$INPUTS/status.json" \
+  --guardian-public-key-file "$INPUTS/public.pem" \
+  --telegram-owner-id 5678 \
+  --telegram-bot-token-file "$INPUTS/telegram-token" \
+  --capable-model-config-file "$INPUTS/capable-model.json" \
+  --economy-model-config-file "$INPUTS/economy-model.json" \
+  --model-credential "capable-token=$INPUTS/capable-token" \
+  --model-credential "economy-token=$INPUTS/economy-token" \
+  --restic-password-file "$INPUTS/restic-password" \
+  --self-change-disabled \
+  >/dev/null
+[[ "$(<"$DISABLED_TARGET/etc/melloa/self-change.env")" == \
+  $'MELLOA_SELF_CHANGE_ENABLED=false\nMELLOA_CODEX_USE_API_KEY=false\nMELLOA_CODEX_MODEL=\nMELLOA_CODEX_LOCAL_PROVIDER=' ]]
+[[ "$(jq -r .codex_mode "$DISABLED_TARGET/etc/melloa/configuration.json")" == disabled ]]
+[[ "$(wc -c <"$DISABLED_TARGET/etc/melloa/private/git-credentials")" == 1 ]]
+[[ "$(wc -c <"$DISABLED_TARGET/etc/melloa/private/codex-api-key")" == 1 ]]
 
 echo "Private first-install configuration and non-overwrite checks passed."

@@ -4,7 +4,8 @@ set -euo pipefail
 umask 077
 
 readonly CREDENTIALS_DIR="${CREDENTIALS_DIRECTORY:-}"
-readonly USE_API_KEY="${MELLOA_CODEX_USE_API_KEY:-true}"
+readonly SELF_CHANGE_ENABLED="${MELLOA_SELF_CHANGE_ENABLED:-}"
+readonly USE_API_KEY="${MELLOA_CODEX_USE_API_KEY:-}"
 readonly MODEL="${MELLOA_CODEX_MODEL:-}"
 readonly LOCAL_PROVIDER="${MELLOA_CODEX_LOCAL_PROVIDER:-}"
 
@@ -14,6 +15,7 @@ fail() {
 }
 
 [[ "$CREDENTIALS_DIR" == /* && -d "$CREDENTIALS_DIR" ]] || fail
+[[ "$SELF_CHANGE_ENABLED" == true ]] || fail
 [[ "$MODEL" != *$'\n'* && ${#MODEL} -le 128 ]] || fail
 [[ "$LOCAL_PROVIDER" == "" || "$LOCAL_PROVIDER" == ollama || "$LOCAL_PROVIDER" == lmstudio ]] || fail
 [[ "$USE_API_KEY" == true || "$USE_API_KEY" == false ]] || fail

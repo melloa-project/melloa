@@ -61,7 +61,10 @@ def test_preflight_requires_bot_identity_and_no_webhook() -> None:
 
 
 def test_preflight_rejects_existing_webhook_without_mutating_it() -> None:
+    methods: list[str] = []
+
     async def respond(request: httpx.Request) -> httpx.Response:
+        methods.append(request.url.path.rsplit("/", 1)[-1])
         if request.url.path.endswith("/getMe"):
             return _response({"ok": True, "result": {"id": 99, "is_bot": True}})
         return _response(
@@ -72,6 +75,23 @@ def test_preflight_rejects_existing_webhook_without_mutating_it() -> None:
 
     with pytest.raises(TelegramAPIError, match=r"telegram\.webhook_configured"):
         asyncio.run(client.verify_long_polling())
+
+    assert methods == ["getMe", "getWebhookInfo"]
+
+
+def test_delete_webhook_can_drop_pending_updates() -> None:
+    captured: dict[str, object] = {}
+
+    async def respond(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        assert request.url.path.endswith("/deleteWebhook")
+        return _response({"ok": True, "result": True})
+
+    client = TelegramBotClient(_TOKEN, transport=httpx.MockTransport(respond))
+
+    asyncio.run(client.delete_webhook(drop_pending_updates=True))
+
+    assert captured == {"drop_pending_updates": True}
 
 
 def test_deployment_check_requires_the_exact_private_owner_chat() -> None:
