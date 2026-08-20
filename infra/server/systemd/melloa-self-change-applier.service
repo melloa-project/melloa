@@ -1,0 +1,50 @@
+[Unit]
+Description=Verify, publish, and deploy approved Melloa self-changes
+Documentation=https://github.com/melloa-project/melloa/tree/main/infra/server
+Requires=melloa-release-recovery.service
+After=melloa-release-recovery.service docker.service network-online.target
+Wants=docker.service network-online.target
+StartLimitIntervalSec=10min
+StartLimitBurst=5
+RequiresMountsFor=/etc/melloa /opt/melloa /srv/melloa/release-source /var/lib/melloa/release-state
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/srv/melloa/release-source
+ExecStart=/usr/local/libexec/melloa/self-change-apply
+Restart=on-failure
+RestartSec=15s
+TimeoutStopSec=30s
+KillMode=control-group
+UMask=0077
+Environment=HOME=/var/lib/melloa/applier-home
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/etc/melloa/release.env
+LoadCredential=applier-dsn:/etc/melloa/private/database-change-applier-dsn
+UnsetEnvironment=CODEX_HOME OPENAI_API_KEY
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadWritePaths=/srv/melloa/release-source /var/lib/melloa/applying-work /var/lib/melloa/release-state
+InaccessiblePaths=-/var/lib/melloa/codex-agent -/var/lib/melloa/planning-work -/srv/melloa/planning-source -/etc/melloa/private/codex-api-key -/etc/melloa/private/model-credentials
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

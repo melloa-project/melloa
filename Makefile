@@ -67,7 +67,10 @@ check-generated:
 	$(UV) run python tools/update_migration_manifest.py --check
 	bash -n \
 		infra/server/backup.sh \
+		infra/server/codex-wrapper.sh \
 		infra/server/reconcile-logins.sh \
+		infra/server/self-change-apply.sh \
+		infra/server/self-change-plan.sh \
 		tools/server_release.sh \
 		tools/self_change_verify.sh \
 		tools/restore_drill.sh \

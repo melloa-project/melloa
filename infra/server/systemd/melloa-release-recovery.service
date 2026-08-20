@@ -1,0 +1,44 @@
+[Unit]
+Description=Recover and reconcile the active Melloa release
+Documentation=https://github.com/melloa-project/melloa/tree/main/infra/server
+Wants=docker.service network-online.target
+After=local-fs.target docker.service network-online.target
+Before=melloa-self-change-planner.service melloa-self-change-applier.service
+RequiresMountsFor=/etc/melloa /srv/melloa/release-source /var/lib/melloa/release-state
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/srv/melloa/release-source
+ExecStart=/srv/melloa/release-source/tools/server_release.sh recover --env-file /etc/melloa/server.env --state-dir /var/lib/melloa/release-state
+RemainAfterExit=yes
+UMask=0077
+Environment=HOME=/var/lib/melloa/applier-home
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+UnsetEnvironment=CODEX_HOME OPENAI_API_KEY
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadWritePaths=/var/lib/melloa/release-state
+InaccessiblePaths=-/var/lib/melloa/codex-agent -/etc/melloa/private/codex-api-key -/etc/melloa/private/model-credentials
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

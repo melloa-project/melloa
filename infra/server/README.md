@@ -52,7 +52,9 @@ claim requests and retain proposals but cannot alter approval or deployment evid
 can retain candidate/deployment state but cannot alter requests, proposals, or approvals. The
 planner receives Codex credentials but no Git-push or container-control authority; the applier
 receives Git/Docker release authority but refuses to start with Codex or OpenAI credentials in its
-environment. These workers are not yet installed or supervised by this engineering checkpoint.
+environment. Hardened unit definitions now make release recovery a required oneshot predecessor,
+hide Docker and deployment state from the planner, and hide Codex state from the applier. The units
+are not yet installed or reboot-tested by this engineering checkpoint.
 
 The backup database password is a third independent secret. The scheduler converts it to a
 mode-`0600` `.pgpass` in container tmpfs, so the password does not appear in process arguments or
