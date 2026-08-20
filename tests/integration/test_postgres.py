@@ -28,7 +28,7 @@ from melloa.domain.base import JsonObject
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
-from melloa.domain.models import ModelRequest, ProcessingLocation
+from melloa.domain.models import ModelRequest, ModelRoute, ProcessingLocation
 from melloa.ports.model import ModelInvocationError
 from melloa.ports.telegram import TelegramStateConflictError
 
@@ -302,6 +302,7 @@ def test_failed_external_destination_and_disclosed_memory_survive_restart() -> N
                 provider_id="provider.postgres-approved",
                 model_id="durable-external-v1",
                 processing_location=ProcessingLocation.APPROVED_PROVIDER,
+                route=ModelRoute.ECONOMY,
             )
 
         service = ConversationService(

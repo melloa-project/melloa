@@ -17,12 +17,18 @@ class ProcessingLocation(StrEnum):
     APPROVED_PROVIDER = "approved_provider"
 
 
+class ModelRoute(StrEnum):
+    CAPABLE = "capable"
+    ECONOMY = "economy"
+
+
 class ModelInvocationTarget(ContractModel):
     """The bounded destination known before a model call returns."""
 
     provider_id: QualifiedName
     model_id: str = Field(min_length=1, max_length=256)
     processing_location: ProcessingLocation
+    route: ModelRoute = ModelRoute.ECONOMY
 
 
 class ModelHealthState(StrEnum):
@@ -51,6 +57,7 @@ class ModelGatewayHealth(ContractModel):
 class ModelRequest(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     request_id: RecordId
+    route: ModelRoute = ModelRoute.ECONOMY
     sensitivity: Sensitivity
     allowed_processing_locations: frozenset[ProcessingLocation]
     latency_deadline_ms: Annotated[int, Field(gt=0, le=3_600_000)]
@@ -65,6 +72,7 @@ class ModelResult(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     result_id: RecordId
     request_id: RecordId
+    route: ModelRoute = ModelRoute.ECONOMY
     provider_id: QualifiedName
     model_id: str = Field(min_length=1, max_length=256)
     processing_location: ProcessingLocation

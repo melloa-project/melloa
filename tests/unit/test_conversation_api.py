@@ -20,7 +20,7 @@ from melloa.domain.base import JsonObject
 from melloa.domain.classification import Sensitivity
 from melloa.domain.conversation import ConversationThread
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
-from melloa.domain.models import ModelRequest, ProcessingLocation
+from melloa.domain.models import ModelRequest, ModelRoute, ProcessingLocation
 from melloa.ports.model import ModelInvocationError
 from tests.conftest import record_id
 
@@ -194,6 +194,7 @@ def test_failed_external_destination_is_returned_and_remains_in_transcript(
             provider_id="provider.approved-test",
             model_id="capable-external-v1",
             processing_location=ProcessingLocation.APPROVED_PROVIDER,
+            route=ModelRoute.ECONOMY,
         )
 
     client = _client(fixed_time, model_response=fail_external)
@@ -221,6 +222,7 @@ def test_failed_external_destination_is_returned_and_remains_in_transcript(
         "provider_id": "provider.approved-test",
         "model_id": "capable-external-v1",
         "processing_location": "approved_provider",
+        "route": "economy",
     }
     assert attempt["model_result_summary"] is None
 

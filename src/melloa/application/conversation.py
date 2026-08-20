@@ -45,6 +45,7 @@ from melloa.domain.models import (
     ModelInvocationTarget,
     ModelRequest,
     ModelResult,
+    ModelRoute,
     ProcessingLocation,
 )
 from melloa.domain.retrieval import RetrievalManifest
@@ -263,6 +264,7 @@ class ConversationService:
         text: str,
         idempotency_key: str,
         source_client: QualifiedName = "client.owner-console",
+        model_route: ModelRoute = ModelRoute.ECONOMY,
     ) -> ConversationReply:
         return self._accept_owner_message(
             principal,
@@ -271,6 +273,7 @@ class ConversationService:
             idempotency_key=idempotency_key,
             corrects_message_id=None,
             source_client=source_client,
+            model_route=model_route,
         )
 
     def correct_owner_message(
@@ -282,6 +285,7 @@ class ConversationService:
         text: str,
         idempotency_key: str,
         source_client: QualifiedName = "client.owner-console",
+        model_route: ModelRoute = ModelRoute.ECONOMY,
     ) -> ConversationReply:
         return self._accept_owner_message(
             principal,
@@ -290,6 +294,7 @@ class ConversationService:
             idempotency_key=idempotency_key,
             corrects_message_id=message_id,
             source_client=source_client,
+            model_route=model_route,
         )
 
     def _accept_owner_message(
@@ -301,6 +306,7 @@ class ConversationService:
         idempotency_key: str,
         corrects_message_id: RecordId | None,
         source_client: QualifiedName,
+        model_route: ModelRoute,
     ) -> ConversationReply:
         thread = self._store.get_thread(thread_id)
         self._require_thread_owner(principal, thread)
@@ -313,6 +319,7 @@ class ConversationService:
                 text,
                 corrects_message_id,
                 source_client,
+                model_route,
             )
             return self._process_accepted(existing, duplicate=True)
         if corrects_message_id is not None:
@@ -340,6 +347,7 @@ class ConversationService:
             thread_id=thread_id,
             author_principal_id=principal.owner_id,
             source_client=source_client,
+            model_route=model_route,
             parts=(MessagePart(kind=MessageKind.TEXT, text=text),),
             corrects_message_id=corrects_message_id,
             sensitivity=thread.sensitivity,
@@ -364,6 +372,7 @@ class ConversationService:
                 text,
                 corrects_message_id,
                 source_client,
+                model_route,
             )
             return self._process_accepted(accepted.message, duplicate=True)
         return self._process_accepted(accepted.message, duplicate=False)
@@ -635,6 +644,7 @@ class ConversationService:
             thread_id=thread.thread_id,
             author_principal_id=self._intelligence_id,
             source_client=inbound.source_client,
+            model_route=result.route,
             parts=(MessagePart(kind=MessageKind.TEXT, text=output.text),),
             reply_to_message_id=inbound.message_id,
             citation_ids=output.citation_ids,
@@ -669,6 +679,7 @@ class ConversationService:
                 "evidence_ids": list(evidence_ids),
                 "model_id": result.model_id,
                 "provider_id": result.provider_id,
+                "model_route": result.route.value,
                 "prompt_version": model_request.prompt_version,
                 "runtime_version": self._runtime_version,
                 "message_sensitivity": model_request.sensitivity.value,
@@ -722,6 +733,7 @@ class ConversationService:
             )
         return ModelRequest(
             request_id=self._id_factory("request"),
+            route=message.model_route or ModelRoute.ECONOMY,
             sensitivity=message_sensitivity,
             allowed_processing_locations=locations,
             latency_deadline_ms=self._model_limits.latency_deadline_ms,
@@ -955,11 +967,13 @@ class ConversationService:
         text: str,
         corrects_message_id: RecordId | None,
         source_client: QualifiedName,
+        model_route: ModelRoute,
     ) -> None:
         if (
             self._message_text(inbound) != text
             or inbound.corrects_message_id != corrects_message_id
             or inbound.source_client != source_client
+            or inbound.model_route is not model_route
         ):
             raise ConversationConflictError(
                 "idempotency key was reused for a different submission"

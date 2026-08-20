@@ -49,6 +49,7 @@ class FakeModelGateway:
         return ModelResult(
             result_id=self._id_factory("model_result"),
             request_id=request.request_id,
+            route=request.route,
             provider_id=self._provider_id,
             model_id=self._model_id,
             processing_location=self._processing_location,

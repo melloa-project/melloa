@@ -7,6 +7,7 @@ from melloa.domain.models import (
     ModelInvocationTarget,
     ModelRequest,
     ModelResult,
+    ModelRoute,
     ProcessingLocation,
 )
 
@@ -20,12 +21,14 @@ class ModelInvocationError(RuntimeError):
         provider_id: str,
         model_id: str,
         processing_location: ProcessingLocation,
+        route: ModelRoute,
     ) -> None:
         super().__init__("model invocation failed")
         self.target = ModelInvocationTarget(
             provider_id=provider_id,
             model_id=model_id,
             processing_location=processing_location,
+            route=route,
         )
         self.external_disclosure = (
             processing_location is ProcessingLocation.APPROVED_PROVIDER

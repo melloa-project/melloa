@@ -27,7 +27,7 @@ from melloa.domain.conversation import (
 )
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
-from melloa.domain.models import ProcessingLocation
+from melloa.domain.models import ModelRoute, ProcessingLocation
 from melloa.ports.conversation import ConversationConflictError, ConversationNotFoundError
 from melloa.ports.model import ModelInvocationError
 from melloa.release import CURRENT_RELEASE
@@ -126,7 +126,9 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert reply.output_message.parts[0].text == "Synthetic reply."
     assert reply.output_message.reply_to_message_id == reply.inbound_message.message_id
     assert reply.inbound_message.source_client == "client.owner-console"
+    assert reply.inbound_message.model_route is ModelRoute.ECONOMY
     assert reply.output_message.source_client == "client.owner-console"
+    assert reply.output_message.model_route is ModelRoute.ECONOMY
     assert reply.turn is not None
     assert reply.turn.triggering_message_ids == (reply.inbound_message.message_id,)
     assert reply.turn.retrieval_manifest_id is not None
@@ -134,10 +136,12 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert manifest.citations == ()
     assert manifest.external_disclosure is False
     assert reply.turn.decision_record["external_disclosure"] is False
+    assert reply.turn.decision_record["model_route"] == "economy"
     assert reply.turn.decision_record["runtime_version"] == (
         CURRENT_RELEASE.runtime_identifier
     )
     assert len(model.requests) == 1
+    assert model.requests[0].route is ModelRoute.ECONOMY
     assert model.requests[0].input["text"] == "What should I review?"
     assert model.requests[0].input["recent_conversation"] == []
     assert model.requests[0].allowed_processing_locations == frozenset(
@@ -166,6 +170,7 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert inspection.retrieval_manifest == manifest
     assert inspection.output_message == reply.output_message
     assert inspection.model_result.result_id == reply.turn.model_run_ids[0]
+    assert inspection.model_result.route is ModelRoute.ECONOMY
 
 
 def test_follow_up_includes_active_recent_conversation(fixed_time) -> None:
@@ -276,6 +281,14 @@ def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
             thread_id=thread.thread_id,
             text="Changed retry payload",
             idempotency_key="stable-key",
+        )
+    with pytest.raises(ConversationConflictError, match="different submission"):
+        service.post_owner_message(
+            owner,
+            thread_id=thread.thread_id,
+            text="Hello",
+            idempotency_key="stable-key",
+            model_route=ModelRoute.CAPABLE,
         )
 
     with pytest.raises(ValueError, match="idempotency key"):
@@ -444,6 +457,7 @@ def test_accepted_message_retries_after_backoff_and_completes(fixed_time) -> Non
         thread_id=thread.thread_id,
         text="Please retry safely",
         idempotency_key="retry-safe",
+        model_route=ModelRoute.CAPABLE,
     )
     assert accepted.output_message is None
     assert accepted.processing.state is ConversationProcessingState.READY
@@ -456,6 +470,7 @@ def test_accepted_message_retries_after_backoff_and_completes(fixed_time) -> Non
         thread_id=thread.thread_id,
         text="Please retry safely",
         idempotency_key="retry-safe",
+        model_route=ModelRoute.CAPABLE,
     )
     assert duplicate.duplicate is True
     assert len(model.requests) == 1
@@ -479,6 +494,7 @@ def test_accepted_message_retries_after_backoff_and_completes(fixed_time) -> Non
         ConversationProcessingOutcome.SUCCEEDED,
     )
     assert len(model.requests) == 3
+    assert all(request.route is ModelRoute.CAPABLE for request in model.requests)
     assert len(store.list_messages(thread.thread_id)) == 2
     assert len(store.list_turns(thread.thread_id)) == 1
 
@@ -811,6 +827,7 @@ def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
             provider_id="provider.synthetic-external",
             model_id="review-model-v2",
             processing_location=ProcessingLocation.APPROVED_PROVIDER,
+            route=ModelRoute.ECONOMY,
         )
 
     backend = FakeModelGateway(

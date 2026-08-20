@@ -22,7 +22,7 @@ from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabel
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus, ProvenanceEdge, ProvenanceRelation
-from melloa.domain.models import ProcessingLocation
+from melloa.domain.models import ModelRoute, ProcessingLocation
 from melloa.ports.memory import AssertionContentDeletionWrite
 from melloa.ports.model import ModelInvocationError
 from tests.conftest import record_id
@@ -306,6 +306,7 @@ def test_export_includes_failed_external_destination_without_provider_output(
             provider_id="provider.export-approved",
             model_id="export-model-v1",
             processing_location=ProcessingLocation.APPROVED_PROVIDER,
+            route=ModelRoute.ECONOMY,
         )
 
     ids = _ids()
@@ -355,6 +356,7 @@ def test_export_includes_failed_external_destination_without_provider_output(
         "provider_id": "provider.export-approved",
         "model_id": "export-model-v1",
         "processing_location": "approved_provider",
+        "route": "economy",
     }
     assert attempt["disclosed_memory_ids"] == [memory.assertion_id]
     assert attempt["model_result_summary"] is None

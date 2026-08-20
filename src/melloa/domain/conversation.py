@@ -15,7 +15,12 @@ from melloa.domain.base import (
     RecordId,
 )
 from melloa.domain.classification import Sensitivity
-from melloa.domain.models import ModelInvocationTarget, ModelResult, ProcessingLocation
+from melloa.domain.models import (
+    ModelInvocationTarget,
+    ModelResult,
+    ModelRoute,
+    ProcessingLocation,
+)
 from melloa.domain.retrieval import RetrievalManifest
 
 
@@ -82,6 +87,7 @@ class ConversationMessage(ContractModel):
     thread_id: RecordId
     author_principal_id: RecordId
     source_client: QualifiedName
+    model_route: ModelRoute | None = None
     parts: tuple[MessagePart, ...] = Field(min_length=1)
     reply_to_message_id: RecordId | None = None
     corrects_message_id: RecordId | None = None
@@ -116,6 +122,7 @@ class ConversationTurnInspection(ContractModel):
 class ConversationProcessingModelResult(ContractModel):
     result_id: RecordId
     request_id: RecordId
+    route: ModelRoute = ModelRoute.ECONOMY
     provider_id: QualifiedName
     model_id: str = Field(min_length=1, max_length=256)
     processing_location: ProcessingLocation
@@ -316,6 +323,7 @@ def processing_model_result(result: ModelResult) -> ConversationProcessingModelR
     return ConversationProcessingModelResult(
         result_id=result.result_id,
         request_id=result.request_id,
+        route=result.route,
         provider_id=result.provider_id,
         model_id=result.model_id,
         processing_location=result.processing_location,

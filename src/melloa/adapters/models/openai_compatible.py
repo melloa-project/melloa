@@ -166,10 +166,12 @@ class OpenAICompatibleModelGateway:
                 provider_id=self.config.provider_id,
                 model_id=self.config.model_id,
                 processing_location=self.config.processing_location,
+                route=request.route,
             ) from error
         return ModelResult(
             result_id=self._id_factory("model_result"),
             request_id=request.request_id,
+            route=request.route,
             provider_id=self.config.provider_id,
             model_id=self.config.model_id,
             processing_location=self.config.processing_location,
