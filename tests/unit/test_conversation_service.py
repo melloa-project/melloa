@@ -137,6 +137,7 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     )
     assert len(model.requests) == 1
     assert model.requests[0].input["text"] == "What should I review?"
+    assert model.requests[0].input["recent_conversation"] == []
     assert model.requests[0].allowed_processing_locations == frozenset(
         {ProcessingLocation.DEVICE}
     )
@@ -163,6 +164,43 @@ def test_canonical_conversation_persists_validated_turn(fixed_time) -> None:
     assert inspection.retrieval_manifest == manifest
     assert inspection.output_message == reply.output_message
     assert inspection.model_result.result_id == reply.turn.model_run_ids[0]
+
+
+def test_follow_up_includes_active_recent_conversation(fixed_time) -> None:
+    service, _store, model = service_fixture(fixed_time)
+    owner = principal(fixed_time)
+    thread = service.create_thread(
+        owner,
+        title="Continuous conversation",
+        sensitivity=Sensitivity.PERSONAL,
+    )
+    first = service.post_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        text="I am choosing between the red and blue plans.",
+        idempotency_key="continuity:1",
+    )
+
+    service.post_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        text="Which one did I say felt safer?",
+        idempotency_key="continuity:2",
+    )
+
+    assert first.output_message is not None
+    assert model.requests[1].input["recent_conversation"] == [
+        {
+            "message_id": first.inbound_message.message_id,
+            "role": "owner",
+            "text": "I am choosing between the red and blue plans.",
+        },
+        {
+            "message_id": first.output_message.message_id,
+            "role": "melli",
+            "text": "Synthetic reply.",
+        },
+    ]
 
 
 def test_message_idempotency_does_not_reinvoke_model(fixed_time) -> None:
@@ -273,6 +311,7 @@ def test_owner_correction_preserves_linkage_and_is_idempotent(fixed_time) -> Non
     assert model.requests[1].input["corrects_message_id"] == (
         original.inbound_message.message_id
     )
+    assert model.requests[1].input["recent_conversation"] == []
     assert set(store.list_messages(thread.thread_id)) == {
         original.inbound_message,
         original.output_message,
@@ -720,7 +759,13 @@ def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
         observed_at=fixed_time,
     )
 
+    invocations = 0
+
     def fail_provider(_request):
+        nonlocal invocations
+        invocations += 1
+        if invocations == 1:
+            return {"text": "First external reply."}
         raise ModelInvocationError(
             provider_id="provider.synthetic-external",
             model_id="review-model-v2",
@@ -745,6 +790,13 @@ def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
         title="External outage",
         sensitivity=Sensitivity.PERSONAL,
     )
+    first = service.post_owner_message(
+        owner,
+        thread_id=thread.thread_id,
+        text="Remember this context",
+        idempotency_key="external-context",
+    )
+    assert first.output_message is not None
     accepted = service.post_owner_message(
         owner,
         thread_id=thread.thread_id,
@@ -764,5 +816,9 @@ def test_failed_external_model_records_disclosed_memory(fixed_time) -> None:
         is ProcessingLocation.APPROVED_PROVIDER
     )
     assert attempt.disclosed_memory_ids == (memory.assertion_id,)
+    assert attempt.disclosed_history_message_ids == (
+        first.inbound_message.message_id,
+        first.output_message.message_id,
+    )
     assert attempt.retrieval_manifest_id is not None
     assert store.get_retrieval_manifest(attempt.retrieval_manifest_id).external_disclosure is True

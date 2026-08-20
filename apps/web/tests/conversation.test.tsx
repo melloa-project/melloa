@@ -91,6 +91,7 @@ function failedExternalAttempt(
   attempt: number,
   memoryIds: readonly string[],
   target: "failed" | "result" = "failed",
+  historyMessageIds: readonly string[] = [],
 ): ConversationProcessingAttempt {
   const modelTarget = {
     provider_id: attempt === 1 ? "provider.acme-cloud" : "provider.second-cloud",
@@ -122,6 +123,7 @@ function failedExternalAttempt(
     } : null,
     failed_model_target: target === "failed" ? modelTarget : null,
     disclosed_memory_ids: memoryIds,
+    disclosed_history_message_ids: historyMessageIds,
     external_disclosure: true,
   };
 }
@@ -399,6 +401,8 @@ describe("ConversationPage", () => {
     const failedAttempt = failedExternalAttempt(
       1,
       ["memory_one", "memory_two"],
+      "failed",
+      ["message_previous_owner", "message_previous_melli"],
     );
     mocks.transcript.mockResolvedValue({
       messages: [ownerMessage],
@@ -410,7 +414,7 @@ describe("ConversationPage", () => {
     const warning = await screen.findByRole("alert");
     expect(warning).toHaveTextContent("External model attempt failed");
     expect(warning).toHaveTextContent(
-      "Your message and 2 saved memories may have reached Acme Cloud (reasoner-v2).",
+      "Your message, 2 earlier conversation messages, and 2 saved memories may have reached Acme Cloud (reasoner-v2).",
     );
     expect(warning).toHaveTextContent("No usable answer was recorded from this attempt.");
     expect(screen.getByText("Melli is thinking…")).toBeVisible();

@@ -1111,7 +1111,10 @@ function FailedExternalDisclosure({
           {attempts.map((attempt) => (
             <li key={attempt.attempt_id}>
               <span>
-                {disclosedContext(attempt.disclosed_memory_ids.length)} may have reached{" "}
+                {disclosedContext(
+                  attempt.disclosed_history_message_ids.length,
+                  attempt.disclosed_memory_ids.length,
+                )} may have reached{" "}
                 {failedDestination(attempt)}.
               </span>
               <small>Attempt {attempt.attempt} · {formatInstant(attempt.completed_at)}</small>
@@ -1142,11 +1145,22 @@ function plainLocation(value: string): string {
   return "within the configured private boundary";
 }
 
-function disclosedContext(memoryCount: number): string {
-  if (memoryCount === 0) {
+function disclosedContext(historyCount: number, memoryCount: number): string {
+  const context = [
+    historyCount === 0
+      ? null
+      : `${historyCount} earlier conversation ${historyCount === 1 ? "message" : "messages"}`,
+    memoryCount === 0
+      ? null
+      : `${memoryCount} saved ${memoryCount === 1 ? "memory" : "memories"}`,
+  ].filter((item): item is string => item !== null);
+  if (context.length === 0) {
     return "Your message";
   }
-  return `Your message and ${memoryCount} saved ${memoryCount === 1 ? "memory" : "memories"}`;
+  if (context.length === 1) {
+    return `Your message and ${context[0]}`;
+  }
+  return `Your message, ${context[0]}, and ${context[1]}`;
 }
 
 function failedDestination(attempt: ConversationProcessingAttempt): string {

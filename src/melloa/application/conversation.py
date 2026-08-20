@@ -60,6 +60,9 @@ from melloa.ports.memory import MemoryRetriever
 from melloa.ports.model import ModelGateway, ModelInvocationError
 from melloa.release import CURRENT_RELEASE
 
+_MAX_RECENT_CONVERSATION_MESSAGES = 24
+_MAX_RECENT_CONVERSATION_CHARACTERS = 32_000
+
 
 class ConversationUnavailableError(RuntimeError):
     """Guardian mode or runtime state forbids a conversation write."""
@@ -88,7 +91,7 @@ class ConversationModelLimits:
     max_input_tokens: int = 4_096
     max_output_tokens: int = 1_024
     cost_ceiling_gbp: float = 0.0
-    prompt_version: str = "conversation-response-v1"
+    prompt_version: str = "conversation-response-v2"
 
     def __post_init__(self) -> None:
         if not 1 <= self.latency_deadline_ms <= 3_600_000:
@@ -493,6 +496,13 @@ class ConversationService:
                 *(citation.sensitivity for citation in retrieval_manifest.citations),
             )
         )
+        recent_conversation = self._recent_conversation(
+            thread.thread_id,
+            current_message_id=inbound.message_id,
+        )
+        history_message_ids = tuple(
+            entry["message_id"] for entry in recent_conversation
+        )
         model_request = self._model_request(
             thread,
             inbound,
@@ -500,6 +510,7 @@ class ConversationService:
             guardian_mode,
             message_sensitivity,
             retrieval_manifest,
+            recent_conversation,
         )
         try:
             result = self._model_gateway.invoke(model_request)
@@ -512,6 +523,7 @@ class ConversationService:
                 request_id=model_request.request_id,
                 external_disclosure=error.external_disclosure,
                 failed_model_target=error.target,
+                history_message_ids=history_message_ids,
             )
         except Exception:
             return self._record_processing_failure(
@@ -535,6 +547,7 @@ class ConversationService:
                 retrieval_manifest=retrieval_manifest,
                 model_result=result,
                 request_id=model_request.request_id,
+                history_message_ids=history_message_ids,
             )
         try:
             output = ConversationModelOutput.model_validate_json(
@@ -548,6 +561,7 @@ class ConversationService:
                 retrieval_manifest=disclosed_manifest,
                 model_result=result,
                 request_id=model_request.request_id,
+                history_message_ids=history_message_ids,
             )
         citations_by_id = {
             citation.citation_id: citation for citation in disclosed_manifest.citations
@@ -560,6 +574,7 @@ class ConversationService:
                 retrieval_manifest=disclosed_manifest,
                 model_result=result,
                 request_id=model_request.request_id,
+                history_message_ids=history_message_ids,
             )
         evidence_ids = tuple(
             citations_by_id[citation_id].assertion_id for citation_id in output.citation_ids
@@ -612,6 +627,7 @@ class ConversationService:
                 "runtime_version": self._runtime_version,
                 "message_sensitivity": model_request.sensitivity.value,
                 "corrects_message_id": inbound.corrects_message_id,
+                "context_message_ids": list(history_message_ids),
                 "cost_gbp": result.cost_gbp,
                 "external_disclosure": result.external_disclosure,
             },
@@ -632,6 +648,7 @@ class ConversationService:
             retrieval_manifest=disclosed_manifest,
             model_result=result,
             request_id=model_request.request_id,
+            history_message_ids=history_message_ids,
         )
         return self._store.complete_reply_work(claim, completed, attempt)
 
@@ -643,6 +660,7 @@ class ConversationService:
         guardian_mode: GuardianMode,
         message_sensitivity: Sensitivity,
         retrieval_manifest: RetrievalManifest,
+        recent_conversation: list[dict[str, str]],
     ) -> ModelRequest:
         locations = frozenset({ProcessingLocation.DEVICE})
         if (
@@ -670,6 +688,7 @@ class ConversationService:
                 "message_id": message.message_id,
                 "corrects_message_id": message.corrects_message_id,
                 "text": text,
+                "recent_conversation": recent_conversation,
                 "retrieval_manifest_id": retrieval_manifest.manifest_id,
                 "memory_citations": [
                     citation.model_dump(mode="json")
@@ -677,6 +696,51 @@ class ConversationService:
                 ],
             },
         )
+
+    def _recent_conversation(
+        self,
+        thread_id: RecordId,
+        *,
+        current_message_id: RecordId,
+    ) -> list[dict[str, str]]:
+        messages = self._store.list_messages(thread_id)
+        superseded_ids = {
+            message.corrects_message_id
+            for message in messages
+            if message.corrects_message_id is not None
+        }
+        active = (
+            message
+            for message in messages
+            if message.message_id != current_message_id
+            and message.message_id not in superseded_ids
+            and (
+                message.reply_to_message_id is None
+                or message.reply_to_message_id not in superseded_ids
+            )
+        )
+        selected: list[dict[str, str]] = []
+        remaining_characters = _MAX_RECENT_CONVERSATION_CHARACTERS
+        for message in reversed(tuple(active)):
+            text = self._message_text(message)
+            if len(text) > remaining_characters:
+                break
+            if message.author_principal_id == self._owner_id:
+                role = "owner"
+            elif message.author_principal_id == self._intelligence_id:
+                role = "melli"
+            else:
+                raise ConversationConflictError(
+                    "conversation history contains an unknown author"
+                )
+            selected.append(
+                {"message_id": message.message_id, "role": role, "text": text}
+            )
+            remaining_characters -= len(text)
+            if len(selected) == _MAX_RECENT_CONVERSATION_MESSAGES:
+                break
+        selected.reverse()
+        return selected
 
     def _validate_retrieval_manifest(
         self,
@@ -721,6 +785,7 @@ class ConversationService:
         request_id: RecordId | None = None,
         external_disclosure: bool | None = None,
         failed_model_target: ModelInvocationTarget | None = None,
+        history_message_ids: tuple[RecordId, ...] = (),
     ) -> ConversationProcessingStatus:
         completed_at = max(self._clock(), started_at)
         if model_result is not None:
@@ -760,6 +825,7 @@ class ConversationService:
             request_id=request_id,
             external_disclosure=disclosed,
             failed_model_target=failed_model_target,
+            history_message_ids=history_message_ids,
         )
         return self._store.record_reply_failure(
             claim,
@@ -782,6 +848,7 @@ class ConversationService:
         retry_at: datetime | None = None,
         external_disclosure: bool | None = None,
         failed_model_target: ModelInvocationTarget | None = None,
+        history_message_ids: tuple[RecordId, ...] = (),
     ) -> ConversationProcessingAttempt:
         if model_result is not None:
             request_id = model_result.request_id
@@ -816,6 +883,9 @@ class ConversationService:
             ),
             failed_model_target=failed_model_target,
             disclosed_memory_ids=disclosed_memory_ids,
+            disclosed_history_message_ids=(
+                history_message_ids if disclosed else ()
+            ),
             external_disclosure=disclosed,
         )
 

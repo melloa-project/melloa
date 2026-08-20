@@ -148,6 +148,7 @@ class ConversationProcessingAttempt(ContractModel):
     model_result_summary: ConversationProcessingModelResult | None = None
     failed_model_target: ModelInvocationTarget | None = None
     disclosed_memory_ids: tuple[RecordId, ...] = ()
+    disclosed_history_message_ids: tuple[RecordId, ...] = ()
     external_disclosure: bool = False
 
     @model_validator(mode="after")
@@ -156,6 +157,10 @@ class ConversationProcessingAttempt(ContractModel):
             raise ValueError("conversation processing cannot complete before it starts")
         if len(set(self.disclosed_memory_ids)) != len(self.disclosed_memory_ids):
             raise ValueError("disclosed memory IDs must be unique")
+        if len(set(self.disclosed_history_message_ids)) != len(
+            self.disclosed_history_message_ids
+        ):
+            raise ValueError("disclosed history message IDs must be unique")
         if self.model_result_summary is not None:
             if self.request_id != self.model_result_summary.request_id:
                 raise ValueError("processing request does not match its model result")
@@ -178,8 +183,10 @@ class ConversationProcessingAttempt(ContractModel):
             raise ValueError("processing disclosure does not match the model result")
         if self.external_disclosure and self.retrieval_manifest_id is None:
             raise ValueError("external processing requires a retrieval manifest")
-        if not self.external_disclosure and self.disclosed_memory_ids:
-            raise ValueError("local processing cannot claim disclosed memory")
+        if not self.external_disclosure and (
+            self.disclosed_memory_ids or self.disclosed_history_message_ids
+        ):
+            raise ValueError("local processing cannot claim disclosed context")
         if self.outcome is ConversationProcessingOutcome.SUCCEEDED:
             if (
                 self.error_code is not None

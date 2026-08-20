@@ -151,7 +151,7 @@ def build_runtime(
         cost_ceiling_gbp=(
             0.0 if model_config is None else model_config.estimated_max_cost_gbp
         ),
-        prompt_version="conversation-response-v1",
+        prompt_version="conversation-response-v2",
     )
     conversation = ConversationService(
         owner_id=OWNER_ID,

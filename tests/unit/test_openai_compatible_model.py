@@ -45,6 +45,18 @@ def _request() -> ModelRequest:
         prompt_version="test-v1",
         input={
             "text": "What should I read next?",
+            "recent_conversation": [
+                {
+                    "message_id": record_id("message", 1),
+                    "role": "owner",
+                    "text": "I enjoyed the previous essay.",
+                },
+                {
+                    "message_id": record_id("message", 2),
+                    "role": "melli",
+                    "text": "The shorter one suited you.",
+                },
+            ],
             "memory_citations": [
                 {
                     "citation_id": record_id("citation", 1),
@@ -219,6 +231,20 @@ def test_gateway_invokes_bounded_json_completion_and_accounts_usage(fixed_time) 
     assert isinstance(body, dict)
     assert body["model"] == "qwen-test"
     assert body["response_format"] == {"type": "json_object"}
+    prompt = json.loads(body["messages"][1]["content"])
+    assert prompt["owner_message"] == "What should I read next?"
+    assert prompt["recent_conversation"] == [
+        {
+            "message_id": record_id("message", 1),
+            "role": "owner",
+            "text": "I enjoyed the previous essay.",
+        },
+        {
+            "message_id": record_id("message", 2),
+            "role": "melli",
+            "text": "The shorter one suited you.",
+        },
+    ]
     assert result.output == {"text": "Try a short essay.", "citation_ids": []}
     assert result.input_tokens == 120
     assert result.output_tokens == 18

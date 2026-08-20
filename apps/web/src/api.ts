@@ -104,6 +104,7 @@ export type ConversationProcessingAttempt = {
   readonly model_result_summary?: ConversationProcessingModelResult | null;
   readonly failed_model_target?: ModelInvocationTarget | null;
   readonly disclosed_memory_ids: readonly string[];
+  readonly disclosed_history_message_ids: readonly string[];
   readonly external_disclosure: boolean;
 };
 
