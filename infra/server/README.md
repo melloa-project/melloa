@@ -56,6 +56,25 @@ environment. Hardened unit definitions now make release recovery a required ones
 hide Docker and deployment state from the planner, and hide Codex state from the applier. The units
 are not yet installed or reboot-tested by this engineering checkpoint.
 
+`install.sh` is the corresponding host-asset installer. It requires a clean current `main` checkout,
+uv 0.12.0, Python 3.13+, Node.js 22+, Docker Compose 2.27+, systemd 249+, Bubblewrap, and a Codex CLI
+whose non-interactive command exposes the exact sandbox, approval, ephemeral, user-config, and local-
+provider controls used by the planner. It creates the dedicated `melloa-codex` identity, separate
+public planning and credential-bearing release clones, immutable worker/verifier dependencies, and
+root-owned launchers and units. It deliberately does not start anything or overwrite an existing
+owner configuration:
+
+```bash
+sudo infra/server/install.sh --source "$PWD"
+sudo infra/server/preflight.sh --source "$PWD" --installed
+```
+
+Those remain engineering commands, not supported owner deployment instructions. The installed
+preflight requires private DSNs, Git credentials, and either a private Codex API-key file or an
+explicitly selected non-key configuration. It also runs Bubblewrap as the dedicated coding UID and
+validates the installed units on the target host. Actual installation, service startup, reboot, and
+end-to-end self-change still need proof before the root README can become ready.
+
 The backup database password is a third independent secret. The scheduler converts it to a
 mode-`0600` `.pgpass` in container tmpfs, so the password does not appear in process arguments or
 environment metadata. Its `melloa_backup_login` can read backup-covered state and sequences but

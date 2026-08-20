@@ -66,3 +66,19 @@ def test_all_server_services_apply_the_common_hardening_floor() -> None:
         assert "ProtectSystem=strict" in unit
         assert "RestrictSUIDSGID=yes" in unit
         assert "SystemCallArchitectures=native" in unit
+
+
+def test_external_verifier_imports_the_candidate_without_syncing_dependencies() -> None:
+    verifier = (ROOT / "tools/self_change_verify.sh").read_text(encoding="utf-8")
+
+    assert '--setenv PYTHONPATH "$CHECKOUT/src"' in verifier
+    assert "--setenv UV_NO_SYNC 1" in verifier
+
+
+def test_server_installer_packages_only_tracked_worker_code_and_reconciles_checkouts() -> None:
+    installer = (ROOT / "infra/server/install.sh").read_text(encoding="utf-8")
+
+    assert 'git -C "$SOURCE" archive --format=tar "$SOURCE_REVISION"' in installer
+    assert '--no-owner --no-group --chmod=D0755,F0644' in installer
+    assert 'chown -R root:root /opt/melloa/worker' in installer
+    assert 'reset --quiet --hard "$SOURCE_REVISION"' in installer

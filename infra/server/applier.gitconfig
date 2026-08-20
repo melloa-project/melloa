@@ -1,0 +1,4 @@
+[credential]
+	helper = store --file /etc/melloa/private/git-credentials
+[init]
+	defaultBranch = main

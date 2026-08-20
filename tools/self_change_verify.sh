@@ -77,8 +77,10 @@ bwrap \
   --chdir "$CHECKOUT" \
   --setenv HOME /home/verifier \
   --setenv PATH "$SANDBOX_PYTHON_ENV/bin:/usr/local/bin:/usr/bin:/bin" \
+  --setenv PYTHONPATH "$CHECKOUT/src" \
   --setenv UV_CACHE_DIR /tmp/uv-cache \
   --setenv UV_NO_PROGRESS 1 \
+  --setenv UV_NO_SYNC 1 \
   --setenv UV_SYSTEM_CERTS 1 \
   --setenv npm_config_cache /tmp/npm-cache \
   /usr/bin/make check

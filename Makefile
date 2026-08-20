@@ -68,6 +68,8 @@ check-generated:
 	bash -n \
 		infra/server/backup.sh \
 		infra/server/codex-wrapper.sh \
+		infra/server/install.sh \
+		infra/server/preflight.sh \
 		infra/server/reconcile-logins.sh \
 		infra/server/self-change-apply.sh \
 		infra/server/self-change-plan.sh \
@@ -75,7 +77,9 @@ check-generated:
 		tools/self_change_verify.sh \
 		tools/restore_drill.sh \
 		tools/test_postgres_integration.sh \
+		tools/test_server_installer.sh \
 		tools/test_server_runtime.sh
+	bash tools/test_server_installer.sh
 
 lint:
 	$(UV) run ruff check src tests \
