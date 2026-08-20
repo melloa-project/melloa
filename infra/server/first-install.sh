@@ -359,6 +359,16 @@ route_environment_name() {
   printf 'MELLOA_SETUP_%s_%s' "$uppercase" "$suffix"
 }
 
+explain_model_route_inputs() {
+  local route="$1"
+  local purpose="$2"
+  echo >&2
+  echo "Configure the $route model route: $purpose." >&2
+  echo "Choose openai for api.openai.com/v1. Choose external only for another hosted provider or router that documents:" >&2
+  echo "  HTTPS OpenAI-compatible base URL, exact model ID, API style, bearer token, and reviewed GBP token prices." >&2
+  echo "Do not guess zero prices; use the current provider pricing you reviewed for this account." >&2
+}
+
 write_model_route() {
   local route="$1"
   local output="$2"
@@ -483,7 +493,7 @@ write_model_route() {
         "$route output GBP per million tokens"
       ;;
     *)
-      fail "$route model route preset must be openai or external"
+      fail "$route model route preset must be openai, or external for a hosted OpenAI-compatible provider/router with reviewed URL, model, API style, token, and GBP prices"
       ;;
   esac
 
@@ -843,8 +853,10 @@ validate_telegram_owner_id "$telegram_owner_id"
 echo "Configure the two conversation model routes." >&2
 echo "Use openai for the fixed OpenAI preset or external for another hosted OpenAI-compatible provider." >&2
 echo "External routes require an explicit HTTPS provider base URL, model ID, API style, bearer token, and reviewed prices." >&2
+explain_model_route_inputs capable "higher-quality replies when accuracy matters"
 declare -a MODEL_CREDENTIAL_ARGS=()
 write_model_route capable "$STAGE/capable-model.json"
+explain_model_route_inputs economy "cheaper routine replies when cost matters"
 write_model_route economy "$STAGE/economy-model.json"
 [[ "$(model_route_target "$STAGE/capable-model.json" "capable model config")" != \
   "$(model_route_target "$STAGE/economy-model.json" "economy model config")" ]] ||

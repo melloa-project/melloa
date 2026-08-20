@@ -104,6 +104,15 @@ grep --fixed-strings --quiet 'MELLOA_SELF_CHANGE_ENABLED=false' \
 [[ "$(wc -c <"$PRIVATE/codex-api-key")" == 1 ]]
 grep --fixed-strings --quiet "Public path checks passed." "$LOG"
 grep --fixed-strings --quiet \
+  "Configure the capable model route: higher-quality replies when accuracy matters." \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "Choose external only for another hosted provider or router that documents:" \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "Do not guess zero prices; use the current provider pricing you reviewed for this account." \
+  "$LOG"
+grep --fixed-strings --quiet \
   "When ready, run: sudo /usr/local/libexec/melloa/activate --source $ROOT --origin https://github.com/melloa-project/melloa.git --initialize-backup" \
   "$LOG"
 grep --fixed-strings --quiet \
@@ -425,7 +434,7 @@ if MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
   exit 1
 fi
 grep --fixed-strings --quiet \
-  "economy model route preset must be openai or external" \
+  "economy model route preset must be openai, or external for a hosted OpenAI-compatible provider/router with reviewed URL, model, API style, token, and GBP prices" \
   "$BAD_LOCAL_LOG"
 if grep --fixed-strings --quiet "MELLOA_SETUP_RESTIC_PASSWORD is required" "$BAD_LOCAL_LOG"; then
   echo "First-install setup continued after an unproven local conversation route preset" >&2
