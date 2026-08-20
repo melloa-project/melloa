@@ -196,7 +196,7 @@ grep --fixed-strings --quiet "install --source $SOURCE --origin $ORIGIN --ca-fil
 grep --fixed-strings --quiet "activate --source $SOURCE --origin $ORIGIN" "$LOG"
 grep --fixed-strings --quiet "verify --source $SOURCE" "$LOG"
 grep --fixed-strings --quiet "Server update finished" "$WORKDIR/update-output.log"
-jq -s -e \
+run_server_wrapper jq -s -e \
   --arg from "$CURRENT_REVISION" \
   --arg active "$TARGET_REVISION" \
   'length == 1 and
@@ -265,7 +265,7 @@ grep --fixed-strings --quiet \
   "$LOG"
 grep --fixed-strings --quiet "verify --source $SOURCE" "$LOG"
 grep --fixed-strings --quiet "Server rollback finished" "$WORKDIR/rollback-output.log"
-jq -s -e \
+run_server_wrapper jq -s -e \
   --arg from "$TARGET_REVISION" \
   --arg active "$CURRENT_REVISION" \
   'length == 2 and
