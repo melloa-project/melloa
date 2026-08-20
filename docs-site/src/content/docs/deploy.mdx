@@ -71,6 +71,9 @@ cd ../melloa
 Only those public files go into Melloa. Guardian private keys, journals, locks, and control commands
 stay outside Melloa.
 
+If the Guardian checkout is beside Melloa exactly as shown above, first install detects those two
+public files and offers them as the defaults. Press Enter at the Guardian prompts to use them.
+
 ## 5. Have these inputs ready
 
 The installer asks for the owner-controlled values. Do not put these into Git.
@@ -118,7 +121,7 @@ Use these choices for the first home-server path:
 | Prompt area | Choice |
 | --- | --- |
 | backup repository | Enter the mounted path, normally `/mnt/melloa-off-device-backup`. |
-| Guardian files | Enter the `status.json` and `public.pem` paths printed by `make preview-state`. |
+| Guardian files | Press Enter if setup detected the sibling Guardian checkout, otherwise enter the `status.json` and `public.pem` paths printed by `make preview-state`. |
 | Telegram owner ID | Leave blank to pair now. |
 | Telegram pairing | Send the exact `/start ...` phrase printed by setup to the bot’s private chat. |
 | capable route | Use the stronger hosted model route. |

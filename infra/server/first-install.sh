@@ -202,6 +202,23 @@ prompt_secret() {
   printf '%s' "$value"
 }
 
+guardian_default_root() {
+  if [[ -n "${MELLOA_TEST_GUARDIAN_ROOT:-}" ]]; then
+    printf '%s' "$MELLOA_TEST_GUARDIAN_ROOT"
+    return 0
+  fi
+  printf '%s/melloa-guardian' "$(dirname "$SOURCE")"
+}
+
+guardian_default_file() {
+  local name="$1"
+  local path
+  path="$(guardian_default_root)/state/local-preview/$name"
+  if [[ -f "$path" && ! -L "$path" && -r "$path" ]]; then
+    printf '%s' "$path"
+  fi
+}
+
 validate_decimal() {
   local value="$1"
   local label="$2"
@@ -827,13 +844,21 @@ backup_repository="$(
     "Mounted off-device backup repository path" \
     /mnt/melloa-off-device-backup
 )"
+guardian_status_default="$(guardian_default_file status.json)"
+guardian_public_key_default="$(guardian_default_file public.pem)"
+if [[ -n "$guardian_status_default" && -n "$guardian_public_key_default" ]]; then
+  echo "Detected Guardian public handoff defaults from $(guardian_default_root)/state/local-preview." >&2
+  echo "Press Enter at the Guardian prompts to use these public files." >&2
+fi
 guardian_status_file="$(
   prompt_text MELLOA_SETUP_GUARDIAN_STATUS_FILE \
-    "Guardian public status.json path from melloa-guardian make preview-state"
+    "Guardian public status.json path from melloa-guardian make preview-state" \
+    "$guardian_status_default"
 )"
 guardian_public_key_file="$(
   prompt_text MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE \
-    "Guardian public.pem path from melloa-guardian make preview-state"
+    "Guardian public.pem path from melloa-guardian make preview-state" \
+    "$guardian_public_key_default"
 )"
 validate_public_setup_inputs
 echo "Public path checks passed. Setup will now ask for private Telegram, model, and backup values." >&2

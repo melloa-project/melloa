@@ -34,6 +34,7 @@ readonly BAD_DUPLICATE_LOG="$WORKDIR/first-install-bad-duplicate.log"
 readonly BAD_LOCAL_LOG="$WORKDIR/first-install-bad-local.log"
 readonly TEST_UID="$(id -u)"
 readonly TEST_GID="$(id -g)"
+readonly DEFAULT_GUARDIAN_ROOT="$WORKDIR/default-guardian"
 
 select_backup_mount() {
   local candidate
@@ -60,16 +61,20 @@ readonly REAL_BACKUP_MOUNT="$(select_backup_mount)"
 readonly BAD_MOUNT_REPOSITORY="$WORKDIR/not-mounted-backup"
 
 install -d -m 0700 "$INPUTS"
+install -d -m 0700 "$DEFAULT_GUARDIAN_ROOT/state/local-preview"
 install -d -m 0700 "$BAD_MOUNT_REPOSITORY"
 printf '{"contract_version":"1.0.0"}\n' >"$INPUTS/status.json"
 printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'first-install-test' \
   '-----END PUBLIC KEY-----' >"$INPUTS/public.pem"
+printf '{"contract_version":"1.0.0","source":"default-guardian"}\n' \
+  >"$DEFAULT_GUARDIAN_ROOT/state/local-preview/status.json"
+printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'default-guardian-test' \
+  '-----END PUBLIC KEY-----' >"$DEFAULT_GUARDIAN_ROOT/state/local-preview/public.pem"
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'first-install-ca-test' \
   '-----END CERTIFICATE-----' >"$INPUTS/build-ca.pem"
 
+MELLOA_TEST_GUARDIAN_ROOT="$DEFAULT_GUARDIAN_ROOT" \
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
-MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
-MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
 MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
 MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
 MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
@@ -187,9 +192,8 @@ grep --fixed-strings --quiet \
   "MELLOA_BACKUP_REPOSITORY_DIR=$REAL_BACKUP_MOUNT" \
   "$MOUNT_TARGET/etc/melloa/server.env"
 
+MELLOA_TEST_GUARDIAN_ROOT="$DEFAULT_GUARDIAN_ROOT" \
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \
-MELLOA_SETUP_GUARDIAN_STATUS_FILE="$INPUTS/status.json" \
-MELLOA_SETUP_GUARDIAN_PUBLIC_KEY_FILE="$INPUTS/public.pem" \
 MELLOA_SETUP_TELEGRAM_BOT_TOKEN='123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456' \
 MELLOA_SETUP_TELEGRAM_OWNER_ID=5678 \
 MELLOA_SETUP_CAPABLE_ROUTE_KIND=openai \
@@ -212,6 +216,15 @@ MELLOA_SETUP_RESTIC_PASSWORD=restic_default_model_secret_123456789 \
 readonly DEFAULT_MODEL_PRIVATE="$DEFAULT_MODEL_TARGET/etc/melloa/private"
 [[ "$(jq -r .model_id "$DEFAULT_MODEL_PRIVATE/capable-model.json")" == gpt-5.6-terra ]]
 [[ "$(jq -r .model_id "$DEFAULT_MODEL_PRIVATE/economy-model.json")" == gpt-5.6-luna ]]
+cmp --silent \
+  "$DEFAULT_GUARDIAN_ROOT/state/local-preview/status.json" \
+  "$DEFAULT_MODEL_TARGET/var/lib/melloa/guardian-handoff/status.json"
+cmp --silent \
+  "$DEFAULT_GUARDIAN_ROOT/state/local-preview/public.pem" \
+  "$DEFAULT_MODEL_TARGET/var/lib/melloa/guardian-handoff/public.pem"
+grep --fixed-strings --quiet \
+  "Detected Guardian public handoff defaults from $DEFAULT_GUARDIAN_ROOT/state/local-preview." \
+  "$DEFAULT_MODEL_LOG"
 grep --fixed-strings --quiet \
   "OpenAI preset defaults: capable uses gpt-5.6-terra; economy uses gpt-5.6-luna." \
   "$DEFAULT_MODEL_LOG"

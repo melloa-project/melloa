@@ -140,6 +140,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
     assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy
     assert "make preview-state" in deploy
+    assert "Press Enter at the Guardian prompts" in deploy
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in deploy
     assert "Leave blank to pair now" in deploy
     assert "exact `/start ...` phrase" in deploy

@@ -252,6 +252,11 @@ cd ../melloa
 Only those two public files are passed to Melloa. Do not pass Guardian private keys, journals, lock
 files, or control commands.
 
+When the Guardian checkout is the sibling directory shown above, first install detects
+`../melloa-guardian/state/local-preview/status.json` and
+`../melloa-guardian/state/local-preview/public.pem` and offers them as prompt defaults. Press Enter
+at those two prompts to use the detected public handoff.
+
 Then run the guided first install:
 
 ```bash
