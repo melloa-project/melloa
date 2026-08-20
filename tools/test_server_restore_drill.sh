@@ -22,11 +22,35 @@ cleanup() {
     fi
   fi
   if [[ "$WORKDIR" == /tmp/melloa-restore-drill-test.* && -d "$WORKDIR" ]]; then
-    rm -rf -- "$WORKDIR"
+    if ((EUID == 0)); then
+      rm -rf -- "$WORKDIR"
+    else
+      sudo -n rm -rf -- "$WORKDIR" 2>/dev/null || rm -rf -- "$WORKDIR"
+    fi
   fi
   exit "$status"
 }
 trap cleanup EXIT HUP INT TERM
+
+run_restore_drill() {
+  local -a environment=(
+    "PATH=$FAKEBIN:$PATH"
+    "MELLOA_RESTORE_DRILL_FAKE_LOG=$LOG"
+    "MELLOA_RESTORE_DRILL_FAKE_STAGE=$STAGE"
+  )
+  if [[ -n "${MELLOA_RESTORE_DRILL_FAIL_RESTORE+x}" ]]; then
+    environment+=("MELLOA_RESTORE_DRILL_FAIL_RESTORE=$MELLOA_RESTORE_DRILL_FAIL_RESTORE")
+  fi
+  if ((EUID == 0)); then
+    env "${environment[@]}" "$ROOT/infra/server/restore-drill.sh" "$@"
+  else
+    command -v sudo >/dev/null 2>&1 ||
+      { echo "restore-drill wrapper test requires root or passwordless sudo" >&2; return 2; }
+    sudo -n true >/dev/null 2>&1 ||
+      { echo "restore-drill wrapper test requires root or passwordless sudo" >&2; return 2; }
+    sudo -n env "${environment[@]}" "$ROOT/infra/server/restore-drill.sh" "$@"
+  fi
+}
 
 install -d -m 0700 "$TARGET/etc/melloa/private" "$TARGET/backup-repository" "$FAKEBIN"
 install -m 0600 /dev/null "$TARGET/etc/melloa/private/postgres-migration-password"
@@ -126,13 +150,10 @@ exit 64
 EOF
 chmod +x "$FAKEBIN/docker"
 
-PATH="$FAKEBIN:$PATH" \
-MELLOA_RESTORE_DRILL_FAKE_LOG="$LOG" \
-MELLOA_RESTORE_DRILL_FAKE_STAGE="$STAGE" \
-  "$ROOT/infra/server/restore-drill.sh" \
-    --source "$ROOT" \
-    --env-file "$TARGET/etc/melloa/server.env" \
-    >"$WORKDIR/output.log" 2>&1
+run_restore_drill \
+  --source "$ROOT" \
+  --env-file "$TARGET/etc/melloa/server.env" \
+  >"$WORKDIR/output.log" 2>&1
 
 grep --fixed-strings --quiet "Encrypted restore drill passed" "$WORKDIR/output.log"
 grep --fixed-strings --quiet "run --rm --no-deps restore restore-database latest" "$LOG"
@@ -145,14 +166,11 @@ if grep --fixed-strings --quiet "melloa-server --" "$LOG"; then
 fi
 
 set +e
-PATH="$FAKEBIN:$PATH" \
-MELLOA_RESTORE_DRILL_FAKE_LOG="$LOG" \
-MELLOA_RESTORE_DRILL_FAKE_STAGE="$STAGE" \
 MELLOA_RESTORE_DRILL_FAIL_RESTORE=true \
-  "$ROOT/infra/server/restore-drill.sh" \
-    --source "$ROOT" \
-    --env-file "$TARGET/etc/melloa/server.env" \
-    >"$WORKDIR/failed-output.log" 2>&1
+  run_restore_drill \
+  --source "$ROOT" \
+  --env-file "$TARGET/etc/melloa/server.env" \
+  >"$WORKDIR/failed-output.log" 2>&1
 status=$?
 set -e
 [[ "$status" == 1 ]]
