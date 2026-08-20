@@ -37,6 +37,7 @@ def test_recovery_receipt_tracks_only_current_migrations() -> None:
         "0009_m1_owner_sessions.sql",
         "0010_m1_owner_session_retention_cleanup.sql",
         "0011_owner_conversation_deletion.sql",
+        "0012_owner_telegram_channel.sql",
     ]
     assert set(receipt["checks"].values()) == {"pass"}
     assert recovery.SENSITIVE_FIXTURE_MARKER not in json.dumps(receipt)

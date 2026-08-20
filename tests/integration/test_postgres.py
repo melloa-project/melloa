@@ -9,6 +9,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import psycopg
+import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
@@ -16,6 +17,7 @@ from melloa.adapters.fakes.guardian import FakeGuardianStatusReader
 from melloa.adapters.fakes.model import FakeModelGateway
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
+from melloa.adapters.postgres.telegram import PostgresTelegramStore
 from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.runtime import MELLI_ID, OWNER_ID, build_runtime
@@ -26,6 +28,7 @@ from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
 from melloa.domain.models import ModelRequest, ProcessingLocation
 from melloa.ports.model import ModelInvocationError
+from melloa.ports.telegram import TelegramStateConflictError
 
 _OWNER_CREDENTIAL = "postgres-owner-test-credential-value-0001"
 _NOW = datetime(2026, 8, 19, 12, 0, tzinfo=UTC)
@@ -371,3 +374,98 @@ def test_failed_external_destination_and_disclosed_memory_survive_restart() -> N
             "model_id": "durable-external-v1",
             "processing_location": "approved_provider",
         },)
+
+
+def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
+    dsn = os.environ["MELLOA_TEST_DATABASE_DSN"]
+    inbound_message_id = "message_00000000000000000000000000000a01"
+    response_message_id = "message_00000000000000000000000000000a02"
+    first_lease_owner = "worker_00000000000000000000000000000a01"
+    second_lease_owner = "worker_00000000000000000000000000000a02"
+
+    with _connect(dsn) as first_connection:
+        store = PostgresTelegramStore(first_connection)
+        channel = store.bind_owner_channel(
+            owner_user_id=1_234_567,
+            owner_chat_id=7_654_321,
+            now=_NOW,
+        )
+        assert channel.last_update_id is None
+        accepted = store.accept_conversation_update(
+            update_id=101,
+            incoming_message_id=51,
+            inbound_message_id=inbound_message_id,
+            now=_NOW,
+            max_attempts=3,
+        )
+        assert accepted.state.value == "awaiting_reply"
+        ready = store.mark_conversation_ready(
+            101,
+            response_message_id=response_message_id,
+            now=_NOW + timedelta(seconds=1),
+        )
+        assert ready.state.value == "ready"
+        claimed = store.claim_next_delivery(
+            lease_owner=first_lease_owner,
+            now=_NOW + timedelta(seconds=2),
+            lease_expires_at=_NOW + timedelta(seconds=12),
+        )
+        assert claimed is not None
+        partial = store.record_delivery_part(
+            claimed,
+            telegram_message_id=901,
+            now=_NOW + timedelta(seconds=3),
+        )
+        assert partial.sent_part_count == 1
+
+    with _connect(dsn) as second_connection:
+        store = PostgresTelegramStore(second_connection)
+        channel = store.bind_owner_channel(
+            owner_user_id=1_234_567,
+            owner_chat_id=7_654_321,
+            now=_NOW + timedelta(seconds=4),
+        )
+        assert channel.last_update_id == 101
+        replay = store.accept_conversation_update(
+            update_id=101,
+            incoming_message_id=51,
+            inbound_message_id=inbound_message_id,
+            now=_NOW + timedelta(seconds=4),
+            max_attempts=3,
+        )
+        assert replay.sent_part_count == 1
+        assert (
+            store.claim_next_delivery(
+                lease_owner=second_lease_owner,
+                now=_NOW + timedelta(seconds=11),
+                lease_expires_at=_NOW + timedelta(seconds=21),
+            )
+            is None
+        )
+        resumed = store.claim_next_delivery(
+            lease_owner=second_lease_owner,
+            now=_NOW + timedelta(seconds=13),
+            lease_expires_at=_NOW + timedelta(seconds=23),
+        )
+        assert resumed is not None
+        assert resumed.attempt_count == 2
+        assert resumed.telegram_message_ids == (901,)
+        complete_part = store.record_delivery_part(
+            resumed,
+            telegram_message_id=902,
+            now=_NOW + timedelta(seconds=14),
+        )
+        completed = store.complete_delivery(
+            complete_part,
+            now=_NOW + timedelta(seconds=15),
+        )
+        assert completed.state.value == "sent"
+        assert completed.telegram_message_ids == (901, 902)
+        assert store.delivery_summary().sent == 1
+
+        with pytest.raises(TelegramStateConflictError, match="durable binding"):
+            store.bind_owner_channel(
+                owner_user_id=111,
+                owner_chat_id=222,
+                now=_NOW + timedelta(seconds=16),
+            )
