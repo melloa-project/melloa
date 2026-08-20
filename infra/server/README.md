@@ -24,7 +24,9 @@ non-writing database role, creates no plaintext dump file, and sends the dump st
 pinned restic binary. It runs immediately and then daily, retains 14 daily, 8 weekly, and 12 monthly
 snapshots, prunes superseded data, checks the repository, and atomically updates the protected
 status file read by Melli's `/status` response. A failure is retried after 15 minutes and remains
-owner-visible until a complete backup and repository check succeeds.
+owner-visible until a complete backup and repository check succeeds. A database dump is bounded to
+30 minutes by default, so a frozen database cannot leave backup health silently stale forever; an
+incomplete restic snapshot created while a dump fails is removed before the failure is reported.
 
 ## Private deployment inputs
 

@@ -338,6 +338,7 @@ install -m 0600 /dev/null "$ENV_FILE"
   printf 'MELLOA_RELEASE_STATE_DIR=%s\n' "$WORKDIR/release-state"
   printf 'MELLOA_BACKUP_INTERVAL_SECONDS=4\n'
   printf 'MELLOA_BACKUP_RETRY_SECONDS=2\n'
+  printf 'MELLOA_BACKUP_DUMP_TIMEOUT_SECONDS=8\n'
 } >"$ENV_FILE"
 
 compose config --quiet
@@ -368,6 +369,10 @@ readonly BACKUP_CONTAINER="$(compose ps --all --quiet backup)"
 [[ "$(docker inspect --format '{{.Config.User}}' "$BACKUP_CONTAINER")" == "$(id -u):$(id -g)" ]]
 [[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$BACKUP_CONTAINER")" == true ]]
 [[ "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$BACKUP_CONTAINER")" == 1 ]]
+[[ "$(docker exec "$BACKUP_CONTAINER" stat --format='%u:%g %a' /tmp)" == \
+  "$(id -u):$(id -g) 700" ]]
+docker exec "$BACKUP_CONTAINER" sh -ceu \
+  'probe="$(mktemp /tmp/melloa-backup-write.XXXXXX)"; rm -f -- "$probe"'
 if docker inspect --format '{{range .Mounts}}{{println .Destination}}{{end}}' "$BACKUP_CONTAINER" |
   grep --fixed-strings --quiet '/var/run/docker.sock'; then
   echo "Backup runtime unexpectedly received the Docker control socket" >&2

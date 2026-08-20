@@ -13,6 +13,7 @@ readonly RESTORE_PGPASS_PATH=/tmp/postgres-restore.pgpass
 readonly STATUS_FILE="${MELLOA_BACKUP_STATUS_FILE:-/run/melloa/state/backup-status.json}"
 readonly INTERVAL_SECONDS="${MELLOA_BACKUP_INTERVAL_SECONDS:-86400}"
 readonly RETRY_SECONDS="${MELLOA_BACKUP_RETRY_SECONDS:-900}"
+readonly DUMP_TIMEOUT_SECONDS="${MELLOA_BACKUP_DUMP_TIMEOUT_SECONDS:-1800}"
 
 stop_requested=false
 
@@ -106,6 +107,7 @@ prepare_pgpass() {
 validate_common_configuration() {
   require_positive_integer "$INTERVAL_SECONDS" "Backup interval" || return 1
   require_positive_integer "$RETRY_SECONDS" "Backup retry interval" || return 1
+  require_positive_integer "$DUMP_TIMEOUT_SECONDS" "Database dump timeout" || return 1
   if [[ -z "${RESTIC_PASSWORD_FILE:-}" ]]; then
     echo "RESTIC_PASSWORD_FILE must name a protected secret" >&2
     return 1
@@ -146,15 +148,17 @@ run_backup() {
     return 1
   }
 
-  PGCONNECT_TIMEOUT=5 PGPASSFILE="$PGPASS_PATH" pg_dump \
-    --host postgres \
-    --port 5432 \
-    --username melloa_backup_login \
-    --dbname melloa \
-    --schema melloa \
-    --format custom \
-    --no-owner \
-    --lock-wait-timeout 30s |
+  timeout --signal=TERM --kill-after=5s "$DUMP_TIMEOUT_SECONDS" \
+    env PGCONNECT_TIMEOUT=5 PGPASSFILE="$PGPASS_PATH" \
+    pg_dump \
+      --host postgres \
+      --port 5432 \
+      --username melloa_backup_login \
+      --dbname melloa \
+      --schema melloa \
+      --format custom \
+      --no-owner \
+      --lock-wait-timeout 30s |
     restic --no-cache backup \
       --host melloa-server \
       --tag "$snapshot_tag" \
@@ -164,6 +168,16 @@ run_backup() {
   pipeline_status=("${PIPESTATUS[@]}")
 
   if ((pipeline_status[0] != 0)); then
+    snapshot_id="$(
+      sed -n 's/.*"snapshot_id":"\([0-9a-f]\{64\}\)".*/\1/p' "$backup_output" |
+        tail -n 1
+    )"
+    if [[ "$snapshot_id" =~ ^[0-9a-f]{64}$ ]] &&
+      ! restic --no-cache forget "$snapshot_id" --prune >/dev/null; then
+      find /tmp -maxdepth 1 -type f -name 'restic-backup.*' -delete
+      fail_backup backup.failed_snapshot_cleanup_failed
+      return 1
+    fi
     find /tmp -maxdepth 1 -type f -name 'restic-backup.*' -delete
     fail_backup backup.database_dump_failed
     return 1
