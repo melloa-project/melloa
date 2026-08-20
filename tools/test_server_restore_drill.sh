@@ -97,6 +97,16 @@ if [[ "$1" == compose ]]; then
   if [[ " $* " == *" run --rm --no-deps migrate migrate check"* ]]; then
     exit 0
   fi
+  if [[ " $* " == *" exec --no-TTY --user postgres postgres psql "* ]]; then
+    if [[ " $* " == *"has_table_privilege"* ]]; then
+      printf 'f\n'
+      exit 0
+    fi
+    if [[ " $* " == *"DELETE FROM melloa.conversation_threads"* ]]; then
+      exit 1
+    fi
+    exit 0
+  fi
   if [[ " $* " == *" down --volumes --remove-orphans "* ]]; then
     exit 0
   fi
@@ -127,6 +137,8 @@ MELLOA_RESTORE_DRILL_FAKE_STAGE="$STAGE" \
 grep --fixed-strings --quiet "Encrypted restore drill passed" "$WORKDIR/output.log"
 grep --fixed-strings --quiet "run --rm --no-deps restore restore-database latest" "$LOG"
 grep --fixed-strings --quiet "run --rm --no-deps migrate migrate check" "$LOG"
+grep --fixed-strings --quiet "restored Telegram conversation proof is missing" "$LOG"
+grep --fixed-strings --quiet "has_table_privilege" "$LOG"
 if grep --fixed-strings --quiet "melloa-server --" "$LOG"; then
   echo "Restore drill used the active compose project" >&2
   exit 1

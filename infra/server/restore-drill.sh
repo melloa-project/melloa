@@ -146,6 +146,18 @@ wait_for_database_logins() {
   fail "database login reconciliation did not complete in the restore drill"
 }
 
+run_postgres() {
+  compose exec --no-TTY --user postgres postgres \
+    psql \
+      --set=ON_ERROR_STOP=1 \
+      --quiet \
+      --tuples-only \
+      --no-align \
+      --username postgres \
+      --dbname melloa \
+      "$@"
+}
+
 for command in awk chmod chown date docker findmnt install mktemp rm seq sleep stat; do
   require_command "$command"
 done
@@ -219,4 +231,56 @@ compose run --rm --no-deps restore restore-database "$SNAPSHOT" >/dev/null ||
   fail "encrypted snapshot restore failed; active Melloa was not modified. Fix the reported backup issue, then run sudo /usr/local/libexec/melloa/verify-owner-journey to confirm the active deployment"
 compose run --rm --no-deps migrate migrate check >/dev/null ||
   fail "restored database failed migration check; active Melloa was not modified. Do not treat backups as proven until restore-drill passes"
+run_postgres --command "
+DO \$\$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM melloa.owners
+     WHERE owner_id = 'owner_00000000000000000000000000000001'
+  ) THEN
+    RAISE EXCEPTION 'restored canonical owner identity is missing';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+      FROM melloa.telegram_owner_channels
+     WHERE channel_key = 'owner.telegram'
+       AND owner_user_id > 0
+       AND owner_chat_id > 0
+       AND model_route IN ('capable', 'economy')
+  ) THEN
+    RAISE EXCEPTION 'restored Telegram owner binding is missing';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+      FROM melloa.telegram_deliveries AS delivery
+      JOIN melloa.conversation_messages AS inbound
+        ON inbound.message_id = delivery.inbound_message_id
+      JOIN melloa.conversation_messages AS reply
+        ON reply.message_id = delivery.response_message_id
+     WHERE delivery.delivery_kind = 'conversation'
+       AND delivery.state = 'sent'
+       AND delivery.sent_part_count > 0
+       AND delivery.delivered_at IS NOT NULL
+       AND inbound.source_client = 'client.telegram'
+       AND reply.document #>> '{parts,0,text}' IS NOT NULL
+     LIMIT 1
+  ) THEN
+    RAISE EXCEPTION 'restored Telegram conversation proof is missing; run verify-owner-journey before restore-drill';
+  END IF;
+END
+\$\$;" >/dev/null ||
+  fail "restored owner-journey data proof failed; active Melloa was not modified. Run sudo /usr/local/libexec/melloa/verify-owner-journey after fixing the reported backup issue"
+readonly READONLY_HAS_MUTATION_PRIVILEGE="$(
+  run_postgres --command \
+    "SELECT has_table_privilege('melloa_readonly', 'melloa.conversation_threads', 'INSERT') OR has_table_privilege('melloa_readonly', 'melloa.conversation_threads', 'UPDATE') OR has_table_privilege('melloa_readonly', 'melloa.conversation_threads', 'DELETE');"
+)"
+if [[ "$READONLY_HAS_MUTATION_PRIVILEGE" != f ]]; then
+  fail "restored database grants unexpected mutation privileges to melloa_readonly"
+fi
+if run_postgres --command \
+  "SET ROLE melloa_readonly; DELETE FROM melloa.conversation_threads;" \
+  >/dev/null 2>&1; then
+  fail "restored database allowed melloa_readonly to mutate owner data"
+fi
 echo "Encrypted restore drill passed using snapshot $SNAPSHOT."
