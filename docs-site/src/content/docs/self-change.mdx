@@ -9,6 +9,9 @@ runs through, otherwise every gap turns back into manual maintenance.
 The loop is deliberately bounded. Melli can help propose a change; deterministic code and exact
 owner approval decide whether anything leaves the proposal stage.
 
+This is not the normal chat model path. Conversation uses the configured hosted model routes.
+Codex CLI is the confined planner for explicit source changes only.
+
 ## The path
 
 1. In Telegram, ask for a change with `/change propose ...`.
@@ -30,6 +33,11 @@ The model does not receive general host authority. The server path separates:
 
 That separation is what makes self-change practical. The owner can ask for useful evolution without
 handing the model ambient power over the server.
+
+The planner also works in a disposable checkout outside the active runtime. The first self-change
+proof should not alter release recovery, Guardian, Telegram binding, database, migration, or
+self-change policy code. Those parts are the recovery spine; hardening them requires a separate
+reviewed pass.
 
 ## First useful self-change
 

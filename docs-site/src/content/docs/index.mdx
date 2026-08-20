@@ -17,6 +17,7 @@ hero:
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 import CommandSpine from "../../components/CommandSpine.astro";
+import RuntimeLoop from "../../components/RuntimeLoop.astro";
 
 The current path is intentionally concrete: a dedicated Debian server, a private Telegram bot chat,
 two hosted OpenAI-compatible model routes, encrypted backups, and a bounded self-change loop that
@@ -27,6 +28,8 @@ the system from there.
 
 <CommandSpine />
 
+<RuntimeLoop />
+
 <CardGrid>
   <Card title="Telegram first" icon="mobile">
     The owner talks to Melli through one private Telegram bot chat paired to the exact owner account.
@@ -34,7 +37,9 @@ the system from there.
   </Card>
   <Card title="Hosted models first" icon="setting">
     The first deployment uses hosted OpenAI-compatible providers: one capable route and one cheaper
-    economy route. You do not need a local GPU or local model to begin.
+    economy route. `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, or another reviewed compatible
+    model ID can be entered during setup when your account and pricing support it.
+    You do not need a local GPU or local model to begin.
   </Card>
   <Card title="Self-change is core" icon="pencil">
     `/change propose` is not decorative automation. It is the path for Melloa to improve itself after
@@ -45,6 +50,13 @@ the system from there.
     and recovery-critical state is backed up under owner-held keys.
   </Card>
 </CardGrid>
+
+## What this is not
+
+Melloa is not starting as a generic multi-agent harness, channel gateway, or plugin marketplace.
+Those systems are useful references, but the first deployment is narrower: one owner, one Telegram
+chat, hosted model routes, bounded self-change, and recovery evidence. See [Runtime loop](./runtime-loop/)
+for the comparison and the current fork/adopt decision.
 
 ## What you need
 

@@ -30,6 +30,10 @@ The first deployment path is:
 11. complete one owner-approved `/change` proposal, approval, deploy, and rollback evidence path
     before treating the first server path as proven.
 
+The smallest closed loop is therefore: Telegram message → hosted model reply → owner-approved
+self-change → restart, rollback, and restore proof. This is the foundation, not a generic
+multi-agent harness.
+
 For this first path, assume hosted model APIs. You do not need Ollama, a GPU, or a local model. A
 cheaper online provider is fine when it offers an owner-reviewed HTTPS OpenAI-compatible endpoint,
 model ID, API style, bearer token, and token pricing. If a provider does not expose that shape,
@@ -39,6 +43,15 @@ Codex CLI is separate from normal Melli conversation. It is required for the bou
 path: the owner asks for a public-safe source change from Telegram, reviews the exact diff, approves
 the exact proposal token, and the worker may then test, commit, push, and deploy only that retained
 diff. This is not arbitrary self-modification.
+
+If Codex CLI ever becomes the preferred economics for ordinary conversation, treat that as a new
+conversation adapter. Do not reuse the self-change planner: normal chat would need no source
+checkout, no filesystem write authority, no release credentials, clear timeouts, and its own live
+unattended-service proof.
+
+The recovery spine itself should stay boring during the first proof. A separate reviewed hardening
+pass is required before changing release recovery, Guardian, Telegram binding, database, migration,
+or self-change policy code.
 
 The currently implemented unattended Codex credential modes are:
 
@@ -175,6 +188,9 @@ For the model prompts, use one of these hosted patterns:
 - simplest hosted path: choose `openai` for both routes, use a stronger model ID for `capable`, a
   cheaper distinct model ID for `economy`, and enter the current GBP token prices and per-request
   ceilings you have reviewed for your account;
+- OpenAI GPT-5.6-family path: use `gpt-5.6-luna` for economy, `gpt-5.6-terra` for balanced capable
+  work, or `gpt-5.6-sol` for the highest-capability route when your account access and reviewed
+  prices justify it;
 - mixed hosted path: choose `openai` for `capable` and `external` for `economy` when the cheaper
   provider exposes a reviewed OpenAI-compatible HTTPS endpoint, model ID, API style, bearer token,
   and price ceilings;

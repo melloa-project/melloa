@@ -1,0 +1,48 @@
+---
+const steps = [
+  {
+    eyebrow: "1",
+    title: "Telegram message",
+    body: "Only the paired one-to-one Telegram owner chat can enter the normal runtime.",
+  },
+  {
+    eyebrow: "2",
+    title: "Routed model reply",
+    body: "Melli answers through the selected hosted capable or economy route; routes do not silently fall back.",
+  },
+  {
+    eyebrow: "3",
+    title: "Bounded self-change",
+    body: "A /change request creates a retained diff. Only the exact owner approval token lets it commit, push, and deploy.",
+  },
+  {
+    eyebrow: "4",
+    title: "Recovery proof",
+    body: "Systemd, release recovery, rollback, encrypted restore drill, and owner verification prove the loop survived.",
+  },
+];
+---
+
+<section class="melloa-runtime-loop" aria-labelledby="melloa-runtime-loop-title">
+  <div>
+    <p class="melloa-eyebrow">Smallest closed loop</p>
+    <h2 id="melloa-runtime-loop-title">
+      Message → reply → self-change → restart and recover.
+    </h2>
+    <p>
+      This is the base Melloa must make boring before adding broader tools, channels, or agent
+      frameworks.
+    </p>
+  </div>
+  <ol aria-label="Melloa closed runtime loop">
+    {
+      steps.map((step) => (
+        <li>
+          <span>{step.eyebrow}</span>
+          <h3>{step.title}</h3>
+          <p>{step.body}</p>
+        </li>
+      ))
+    }
+  </ol>
+</section>

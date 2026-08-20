@@ -22,6 +22,10 @@ The current first-server path is:
 - encrypted off-device backup setup and restore proof;
 - bounded Codex/self-change workers enabled as part of the first server path.
 
+The smallest loop is Telegram message → routed hosted-model reply → owner-approved self-change →
+restart, rollback, and restore proof. Melloa should prove that loop before adopting a broad
+multi-agent harness or gateway stack.
+
 Command spine:
 
 ```bash
@@ -70,6 +74,11 @@ rollback evidence. The currently implemented unattended server credential modes 
 API key or an explicitly configured local provider; an interactive ChatGPT/Codex subscription login
 is not supported as unattended server auth for this path.
 
+If Codex CLI becomes the preferred economics for ordinary conversation, that should be implemented
+as a separate conversation adapter with no source checkout, no file-write authority, no release
+credentials, and its own unattended-service proof. It should not reuse the confined self-change
+planner.
+
 ## Current status
 
 Melloa is in an owner-experience reset. The active work is subtractive: collapse the
@@ -94,6 +103,10 @@ as a requirement.
 The public project website is a Starlight site in [docs-site](docs-site), deployed by the Pages
 workflow. It is the owner-facing setup path; the old MkDocs architecture bundle is not active
 guidance.
+
+The current fork/adopt decision is conservative: use Hermes, OpenClaw-style gateways, AgentTeams,
+and similar systems as references, but do not fork them as the Melloa runtime foundation until the
+one-owner recoverable self-change loop is proven on a real server.
 
 ## What the first real server run must prove
 

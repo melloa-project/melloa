@@ -16,6 +16,9 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "setup discovers your numeric owner ID during private pairing" in homepage
     assert "hosted OpenAI-compatible model routes" in homepage
     assert "You do not need a local GPU or local model to begin" in homepage
+    assert "gpt-5.6-luna" in homepage
+    assert "Melloa is not starting as a generic multi-agent harness" in homepage
+    assert "RuntimeLoop" in homepage
     assert "Self-change is core" in homepage
     assert "CommandSpine" in homepage
     assert "First server path" in command_spine
@@ -32,6 +35,11 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "make preview-state" in command_spine
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in command_spine
     assert "owner-approved self-change" in command_spine
+    runtime_loop = (DOCS_SITE / "src/components/RuntimeLoop.astro").read_text(
+        encoding="utf-8"
+    )
+    assert "Message → reply → self-change → restart and recover" in runtime_loop
+    assert "routes do not silently fall back" in runtime_loop
 
     stale_claims = [
         "not ready",
@@ -56,6 +64,8 @@ def test_readme_opens_with_first_owner_server_path() -> None:
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in opening
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in opening
     assert "## Evidence status" in opening
+    assert "Telegram message → routed hosted-model reply" in opening
+    assert "separate conversation adapter" in readme
     assert "Deployment readiness: NOT READY" not in opening
     assert "Do not deploy this repository" not in opening
     assert "disposable preview" not in opening
@@ -65,12 +75,17 @@ def test_readme_opens_with_first_owner_server_path() -> None:
 def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     guide = (ROOT / "docs/server-deployment.md").read_text(encoding="utf-8")
     opening = guide.split("## Supported starting point", 1)[0]
+    normalized_guide = " ".join(guide.split())
     server_reference = (ROOT / "infra/server/README.md").read_text(
         encoding="utf-8"
     )
 
     assert "Follow it on\nthe real server" in opening
     assert "The current gap is evidence, not a second hidden installation path" in opening
+    assert "Telegram message → hosted model reply → owner-approved" in opening
+    assert "not a generic\nmulti-agent harness" in opening
+    assert "gpt-5.6-luna" in guide
+    assert "separate reviewed hardening pass" in normalized_guide
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert "Self-change proof" in guide
     assert "readiness banner" not in guide
@@ -116,6 +131,9 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     self_change = (DOCS_SITE / "src/content/docs/self-change.mdx").read_text(
         encoding="utf-8"
     )
+    runtime_loop = (DOCS_SITE / "src/content/docs/runtime-loop.mdx").read_text(
+        encoding="utf-8"
+    )
 
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
@@ -128,8 +146,16 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "sudo /usr/local/libexec/melloa/verify-owner-journey" in deploy
     assert "sudo /usr/local/libexec/melloa/restore-drill" in deploy
     assert "`api-key`" in deploy
+    assert "gpt-5.6-luna" in deploy
+    assert "(../runtime-loop/)" in deploy
     assert "/change propose" in self_change
     assert "commits, pushes, deploys" in self_change
+    assert "Codex CLI is the confined planner" in self_change
+    assert "disposable checkout outside the active runtime" in self_change
+    assert "Do not fork Hermes" in runtime_loop
+    assert "AgentTeams/OpenClaw-style stacks" in runtime_loop
+    assert "separate conversation adapter" in runtime_loop
+    assert "no source checkout" in runtime_loop
 
 
 def test_public_site_uses_github_pages_safe_links() -> None:
@@ -146,6 +172,8 @@ def test_public_site_uses_github_pages_safe_links() -> None:
     assert "link: ./deploy/" in homepage
     assert "link: ./self-change/" in homepage
     assert "(./deploy/)" in homepage
+    assert "(./runtime-loop/)" in homepage
     assert "(../self-change/)" in deploy
+    assert "(../runtime-loop/)" in deploy
     assert "link: /deploy/" not in homepage
     assert "](/deploy/)" not in homepage

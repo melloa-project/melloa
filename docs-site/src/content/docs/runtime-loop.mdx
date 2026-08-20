@@ -1,0 +1,65 @@
+---
+title: Runtime loop
+description: The smallest closed loop Melloa is proving before broader agent-harness work.
+---
+
+import RuntimeLoop from "../../components/RuntimeLoop.astro";
+
+<RuntimeLoop />
+
+## Current direction
+
+Do not fork Hermes, OpenClaw-style gateway stacks, AgentTeams, or another broad agent harness as
+Melloa's runtime foundation right now.
+
+Those projects are useful references. Hermes shows strong work on messaging gateways, provider
+switching, skills, memory, and a fast installer. AgentTeams/OpenClaw-style stacks show useful
+patterns for manager/worker isolation, human-visible rooms, model gateways, and preflight checks.
+But their center of gravity is broad runtime orchestration. Melloa's center of gravity is narrower:
+a one-owner relationship system that can safely change and recover its own home-server deployment.
+
+Forking a broad harness before this loop is proven would import channels, worker topologies, plugin
+surfaces, migration contracts, and tool authority that are not needed for the first owner server.
+The correct move is to borrow specific ideas after they survive this constraint:
+
+- does it make the Telegram owner path clearer?
+- does it keep model/provider replacement separate from Melli's continuity?
+- does it make self-change more reviewable or recoverable?
+- does it reduce setup or maintenance burden on the owner?
+
+If the answer is no, it waits.
+
+## Where Codex belongs today
+
+Ordinary conversation uses the configured hosted model routes, not Codex CLI. During setup, enter
+the exact OpenAI-compatible model IDs and prices you have reviewed for your account. A practical
+starting shape is:
+
+| Route | Intended use | Example model choice |
+| --- | --- | --- |
+| `economy` | routine replies where cost and latency matter | `gpt-5.6-luna` or another cheaper compatible model |
+| `capable` | harder reasoning, planning, or one-off `/think` turns | `gpt-5.6-terra` or `gpt-5.6-sol` when cost is acceptable |
+
+Codex CLI is currently confined to the self-change planner. It receives explicit public-safe change
+requests and a disposable public-source checkout. It does not receive private conversation history,
+deployment state, Guardian authority, release credentials, or permission to commit, push, or deploy.
+
+If Codex CLI subscription economics become necessary for normal chat, that is a new route type, not
+a config toggle. It should be implemented as a separate conversation adapter with no source checkout,
+no file-system write authority, no release credentials, clear timeouts, and a live proof that the CLI
+works reliably as an unattended noninteractive chat backend.
+
+## Recovery spine
+
+The self-changing part is allowed to be useful only because the recovery spine is small and boring:
+
+- exact Telegram owner binding;
+- explicit capable/economy route retention with no silent fallback;
+- retained proposal diffs and exact approval tokens;
+- systemd units that separate conversation, planning, applying, and release recovery;
+- encrypted off-device backups and a restore drill that does not overwrite the active server;
+- update, rollback, and owner-journey verification wrappers;
+- Guardian remaining independent and read-only from Melloa.
+
+The first self-change proof should avoid changing that spine. Improve docs, tests, or owner-visible
+surface first. Change recovery-critical code only through a separate reviewed hardening pass.

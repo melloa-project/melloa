@@ -131,6 +131,72 @@ body {
   font-size: 0.9rem;
 }
 
+.melloa-runtime-loop {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(1rem, 4vw, 2rem);
+  align-items: start;
+  margin: 3rem 0;
+}
+
+.melloa-runtime-loop h2 {
+  margin: 0;
+  max-width: 13ch;
+  color: var(--sl-color-white);
+  font-size: clamp(2rem, 4vw, 3.35rem);
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+}
+
+.melloa-runtime-loop > div > p:not(.melloa-eyebrow) {
+  max-width: 36rem;
+  color: var(--sl-color-gray-2);
+  font-size: 1.02rem;
+}
+
+.melloa-runtime-loop ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.melloa-runtime-loop li {
+  min-height: 12rem;
+  padding: 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-white), transparent 84%);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--sl-color-black), transparent 10%);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16);
+}
+
+.melloa-runtime-loop li span {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--sl-color-accent);
+  color: var(--sl-color-black);
+  font-weight: 800;
+}
+
+.melloa-runtime-loop li h3 {
+  margin: 1.25rem 0 0.45rem;
+  color: var(--sl-color-white);
+  font-size: 1.05rem;
+}
+
+.melloa-runtime-loop li p {
+  margin: 0;
+  color: var(--sl-color-gray-2);
+  font-size: 0.94rem;
+}
+
 .card {
   border-radius: 1.25rem;
   background: color-mix(in srgb, var(--sl-color-black), transparent 16%);
@@ -163,5 +229,17 @@ body {
 
   .melloa-command-spine h2 {
     max-width: 16ch;
+  }
+
+  .melloa-runtime-loop {
+    grid-template-columns: 1fr;
+  }
+
+  .melloa-runtime-loop h2 {
+    max-width: 16ch;
+  }
+
+  .melloa-runtime-loop ol {
+    grid-template-columns: 1fr;
   }
 }
