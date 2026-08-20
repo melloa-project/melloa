@@ -123,8 +123,9 @@ git clone https://github.com/melloa-project/melloa.git
 git clone https://github.com/melloa-project/melloa-guardian.git
 ```
 
-First follow the [short baseline guide](docs/getting-started.md) to create an owner-controlled,
-public-only signed `offline` handoff. Then export only those two public paths and start Melloa:
+For local preview only, follow the [local disposable preview guide](docs/getting-started.md) to
+create an owner-controlled, public-only signed `offline` handoff. Then export only those two public
+paths and start Melloa:
 
 ```bash
 cd melloa-guardian

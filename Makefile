@@ -20,10 +20,10 @@ $(error Unknown PREVIEW_MODEL '$(PREVIEW_MODEL)'. Supported value: ollama; leave
 endif
 endif
 ifeq ($(strip $(GUARDIAN_STATUS)),)
-$(error GUARDIAN_STATUS is required; prepare an owner-controlled public handoff first (docs/getting-started.md))
+$(error GUARDIAN_STATUS is required; prepare an owner-controlled public handoff first; see docs/getting-started.md for the local preview guide)
 endif
 ifeq ($(strip $(GUARDIAN_PUBLIC_KEY)),)
-$(error GUARDIAN_PUBLIC_KEY is required; prepare an owner-controlled public handoff first (docs/getting-started.md))
+$(error GUARDIAN_PUBLIC_KEY is required; prepare an owner-controlled public handoff first; see docs/getting-started.md for the local preview guide)
 endif
 endif
 

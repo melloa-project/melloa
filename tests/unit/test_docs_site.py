@@ -81,6 +81,23 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "readiness banner" not in server_reference
 
 
+def test_local_preview_is_not_presented_as_first_run_path() -> None:
+    preview = (ROOT / "docs/getting-started.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
+    login = (ROOT / "apps/web/src/pages/login.tsx").read_text(encoding="utf-8")
+
+    assert preview.startswith("# Local disposable preview")
+    assert "For first owner deployment" in preview
+    assert "server-deployment.md" in preview
+    assert "## Start the disposable preview" in preview
+    assert "## Current limitations" not in preview
+    assert "short baseline guide" not in readme
+    assert "[getting started](getting-started.md)" not in development
+    assert "First run? See <code>docs/getting-started.md</code>" not in login
+    assert "Server setup: <code>docs/server-deployment.md</code>" in login
+
+
 def test_public_site_is_static_pages_source_not_mkdocs() -> None:
     workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
     config = (DOCS_SITE / "astro.config.mjs").read_text(encoding="utf-8")

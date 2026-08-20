@@ -25,7 +25,7 @@ const status: SystemStatus = {
 };
 
 describe("LoginPage", () => {
-  it("leads with the owner relationship and keeps the reset limitation honest", () => {
+  it("leads with the owner relationship and points first setup to the server path", () => {
     render(
       <MemoryRouter>
         <LoginPage login={vi.fn()} refreshStatus={vi.fn()} status={status} />
@@ -34,7 +34,8 @@ describe("LoginPage", () => {
 
     expect(screen.getByRole("heading", { name: "Pick up where you left off." })).toBeVisible();
     expect(screen.getByText(/understand your history, goals, and changing context/i)).toBeVisible();
-    expect(screen.getByText(/early owner-experience reset/i)).toBeVisible();
+    expect(screen.getByText(/First server setup pairs Telegram during install/i)).toBeVisible();
+    expect(screen.getByText("docs/server-deployment.md")).toBeVisible();
     expect(screen.getByText("Private access verified")).toBeVisible();
     expect(screen.queryByText(/route behind every response/i)).not.toBeInTheDocument();
   });

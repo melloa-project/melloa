@@ -71,16 +71,16 @@ export function LoginPage({
         <div className="login-promise">
           <p className="eyebrow">A relationship that can continue</p>
           <h1 id="login-title">Pick up where you left off.</h1>
-          <p>Melli is being built to understand your history, goals, and changing context—not make you administer an AI runtime.</p>
+          <p>Melli is built to understand your history, goals, and changing context—not make you administer an AI runtime.</p>
         </div>
-        <p className="login-reset-note">This build is still an early owner-experience reset. Expect gaps, and do not use the disposable baseline for irreplaceable personal history.</p>
+        <p className="login-reset-note">First server setup pairs Telegram during install. Use this web entrypoint only when the launcher or service prints an owner credential.</p>
       </section>
 
       <section className="login-access">
         <Card className="login-card">
           <div className="login-card-heading">
             <span className="login-lock"><KeyRound aria-hidden="true" size={19} /></span>
-            <div><h2>Continue privately</h2><p>Use the owner credential printed by the local launcher.</p></div>
+            <div><h2>Continue privately</h2><p>Use the owner credential printed by the launcher or installed service.</p></div>
           </div>
           <form className="stack-form" onSubmit={(event) => void submit(event)}>
             <label className="field-label" htmlFor="owner-credential">Owner credential</label>
@@ -125,7 +125,7 @@ export function LoginPage({
             </Button>
           </div>
         </Card>
-        <p className="login-help">First run? See <code>docs/getting-started.md</code>.</p>
+        <p className="login-help">Server setup: <code>docs/server-deployment.md</code>. Local preview: <code>docs/getting-started.md</code>.</p>
       </section>
     </main>
   );

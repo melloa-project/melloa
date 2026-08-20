@@ -1,11 +1,11 @@
-# Run the current baseline
+# Local disposable preview
 
-This guide starts the product that existed when the owner-experience reset began. It is useful for
-inspecting and simplifying the current behavior. It is not evidence that Melli is already valuable.
+This guide starts the loopback web preview on a development machine. Use it when you want to inspect
+the current local interface or make code changes without touching a real server.
 
-This is not the dedicated-server deployment guide. It does not connect Telegram, does not configure
-hosted model providers, and does not install the persistent server runtime. If your goal is the
-home-server path, use [first-owner server deployment](server-deployment.md).
+For first owner deployment, use [first-owner server deployment](server-deployment.md). That path
+connects Telegram, configures hosted model routes, installs the persistent server runtime, and
+exercises the bounded self-change loop.
 
 ## Requirements
 
@@ -37,9 +37,9 @@ See the Guardian repository's
 for the receipts, non-overwrite behavior, public-only output, cleanup safeguards, and exact limits of
 this static handoff. Melloa does not define or execute those operations.
 
-## Start Melloa
+## Start the disposable preview
 
-In the same shell, move to the Melloa checkout and start the baseline:
+In the same shell, move to the Melloa checkout and start the preview:
 
 ```bash
 cd ../melloa
@@ -51,8 +51,8 @@ is signed and already `offline`, creates Melloa's temporary credential and logs,
 web interface on loopback, and prints the exact URL and owner credential. Keep the terminal open and
 use the web URL on port `8787`; port `8000` is the private core API.
 
-Without a model configuration, the interface is available for inspecting the owner boundary and
-data controls, but conversation is unavailable. The preview does not manufacture a fallback answer.
+Without a model configuration, the interface is available for inspecting the owner boundary and data
+controls. Conversation starts only when you explicitly configure a model for this disposable run.
 
 Press `Ctrl-C` to stop both services and remove Melloa's disposable credential and logs. The
 Guardian handoff remains untouched. Remove that public-only directory yourself when finished:
@@ -75,21 +75,20 @@ The launcher requires that exact local model and fails with a corrective message
 unavailable. Owner text and selected context go only to this configured model on the device; they
 are not disclosed to an external provider.
 
-This model is a technical baseline, not a recommended quality ceiling or the target daily-use path.
-The first-owner server path is currently hosted-provider-first and does not require local model
-hardware.
+This model is only a local check. The first-owner server path is hosted-provider-first and does not
+require local model hardware.
 
-## Current limitations
+## Preview scope
 
-- Melloa's credential and logs are removed when the preview stops, while the owner-supplied Guardian
-  handoff remains owner-managed;
-- conversation is unavailable until an explicit model configuration passes preflight;
-- the interface exposes too much provider, audit, operations, and memory-record detail;
-- continuity, autonomous memory formation, goals, reflection, outcome learning, and calibrated
-  initiative are not yet compelling owner experiences;
-- the preview's screens and contracts may be removed during the reset.
+The preview is intentionally temporary:
 
-Do not put real long-lived owner data into this disposable baseline.
+- Melloa's credential and logs are removed when the preview stops;
+- the owner-supplied Guardian handoff remains owner-managed;
+- Telegram, hosted model routes, the persistent server runtime, and self-change workers are not
+  installed by this guide;
+- the preview is for inspection and development, not long-lived owner history.
+
+Do not put irreplaceable personal data into this disposable preview.
 
 ## Durable-state safety check
 

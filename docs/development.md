@@ -36,7 +36,7 @@ make preview         # requires owner-supplied GUARDIAN_STATUS and GUARDIAN_PUBL
 
 The preview target verifies those two public Guardian inputs. It does not receive the Guardian
 checkout, build or invoke `guardianctl`, choose private state paths, or remove Guardian state. Follow
-[getting started](getting-started.md) for the disposable owner handoff.
+the [local disposable preview guide](getting-started.md) for the disposable owner handoff.
 
 Use the narrowest relevant checks while iterating, then run the complete affected gate. A green old
 test is not a reason to retain rejected behavior; delete or rewrite it when product semantics change.
