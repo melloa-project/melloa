@@ -23,6 +23,11 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
         'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools'
         in command_spine
     )
+    assert (
+        "git clone https://github.com/melloa-project/melloa-guardian.git"
+        in command_spine
+    )
+    assert "make preview-state" in command_spine
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in command_spine
     assert "owner-approved self-change" in command_spine
 
