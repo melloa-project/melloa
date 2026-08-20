@@ -209,7 +209,12 @@ class PostgresSelfChangeStore:
                     raise SelfChangeConflictError(
                         "self-change already retains a different proposal"
                     )
-                self._require_active_claim(existing, claim, SelfChangeState.PLANNING)
+                self._require_active_claim(
+                    existing,
+                    claim,
+                    SelfChangeState.PLANNING,
+                    now,
+                )
                 updated_row = self._connection.execute(
                     sql.SQL("""
                     UPDATE melloa.self_changes
@@ -268,7 +273,12 @@ class PostgresSelfChangeStore:
         try:
             with self._connection.transaction():
                 existing = self._read(claim.owner_id, claim.change_id, for_update=True)
-                self._require_active_claim(existing, claim, SelfChangeState.PLANNING)
+                self._require_active_claim(
+                    existing,
+                    claim,
+                    SelfChangeState.PLANNING,
+                    now,
+                )
                 terminal = existing.attempt_count >= existing.max_attempts
                 next_state = (
                     SelfChangeState.FAILED if terminal else SelfChangeState.REQUESTED
@@ -434,6 +444,247 @@ class PostgresSelfChangeStore:
                 "self-change cancellation conflicts with durable state"
             ) from error
 
+    def claim_next_applying(
+        self,
+        *,
+        lease_owner: RecordId,
+        now: datetime,
+        lease_expires_at: datetime,
+    ) -> SelfChange | None:
+        if lease_expires_at <= now:
+            raise ValueError("self-change application lease must expire in the future")
+        try:
+            with self._connection.transaction():
+                self._fail_exhausted_applying(now)
+                row = self._connection.execute(
+                    sql.SQL("""
+                    SELECT {}
+                      FROM melloa.self_changes
+                     WHERE attempt_count < max_attempts
+                       AND (
+                           (state = 'approved' AND available_at <= %s)
+                           OR (state = 'applying' AND lease_expires_at <= %s)
+                       )
+                     ORDER BY available_at, requested_at, change_id
+                     FOR UPDATE SKIP LOCKED
+                     LIMIT 1
+                    """).format(_CHANGE_COLUMNS),
+                    (now, now),
+                ).fetchone()
+                if row is None:
+                    return None
+                existing = self._change(row)
+                if lease_expires_at <= existing.updated_at:
+                    raise ValueError("self-change application lease predates durable state")
+                claimed_row = self._connection.execute(
+                    sql.SQL("""
+                    UPDATE melloa.self_changes
+                       SET state = 'applying',
+                           attempt_count = attempt_count + 1,
+                           lease_owner = %s,
+                           lease_expires_at = %s,
+                           updated_at = GREATEST(updated_at, %s)
+                     WHERE change_id = %s
+                     RETURNING {}
+                    """).format(_CHANGE_COLUMNS),
+                    (lease_owner, lease_expires_at, now, existing.change_id),
+                ).fetchone()
+                if claimed_row is None:
+                    raise SelfChangeConflictError(
+                        "self-change disappeared while application was claimed"
+                    )
+                claimed = self._change(claimed_row)
+                self._insert_event(
+                    claimed.change_id,
+                    event_type="self_change.applying_started",
+                    state=SelfChangeState.APPLYING,
+                    occurred_at=now,
+                )
+                return claimed
+        except _INTEGRITY_ERRORS as error:
+            raise SelfChangeConflictError(
+                "self-change application claim conflicts with durable state"
+            ) from error
+
+    def record_candidate(
+        self,
+        claim: SelfChange,
+        *,
+        candidate_revision: GitRevision,
+        now: datetime,
+    ) -> SelfChange:
+        try:
+            with self._connection.transaction():
+                existing = self._read(claim.owner_id, claim.change_id, for_update=True)
+                self._require_active_claim(
+                    existing,
+                    claim,
+                    SelfChangeState.APPLYING,
+                    now,
+                )
+                if existing.candidate_revision not in {None, candidate_revision}:
+                    raise SelfChangeConflictError(
+                        "self-change already identifies a different candidate commit"
+                    )
+                if existing.candidate_revision == candidate_revision:
+                    return existing
+                row = self._connection.execute(
+                    sql.SQL("""
+                    UPDATE melloa.self_changes
+                       SET candidate_revision = %s,
+                           updated_at = GREATEST(updated_at, %s)
+                     WHERE owner_id = %s AND change_id = %s
+                     RETURNING {}
+                    """).format(_CHANGE_COLUMNS),
+                    (
+                        candidate_revision,
+                        now,
+                        claim.owner_id,
+                        claim.change_id,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise SelfChangeConflictError(
+                        "self-change disappeared while its candidate was retained"
+                    )
+                return self._change(row)
+        except _INTEGRITY_ERRORS as error:
+            raise SelfChangeConflictError(
+                "self-change candidate conflicts with durable state"
+            ) from error
+
+    def record_applying_failure(
+        self,
+        claim: SelfChange,
+        *,
+        error_code: QualifiedName,
+        retry_at: datetime,
+        now: datetime,
+    ) -> SelfChange:
+        if retry_at <= now:
+            raise ValueError("self-change application retry must be scheduled in the future")
+        try:
+            with self._connection.transaction():
+                existing = self._read(claim.owner_id, claim.change_id, for_update=True)
+                self._require_active_claim(
+                    existing,
+                    claim,
+                    SelfChangeState.APPLYING,
+                    now,
+                )
+                terminal = existing.attempt_count >= existing.max_attempts
+                next_state = (
+                    SelfChangeState.FAILED if terminal else SelfChangeState.APPROVED
+                )
+                available_at = now if terminal else retry_at
+                failure_reason = error_code if terminal else None
+                row = self._connection.execute(
+                    sql.SQL("""
+                    UPDATE melloa.self_changes
+                       SET state = %s,
+                           failure_reason = %s,
+                           available_at = %s,
+                           lease_owner = NULL,
+                           lease_expires_at = NULL,
+                           updated_at = GREATEST(updated_at, %s)
+                     WHERE owner_id = %s AND change_id = %s
+                     RETURNING {}
+                    """).format(_CHANGE_COLUMNS),
+                    (
+                        next_state.value,
+                        failure_reason,
+                        available_at,
+                        now,
+                        claim.owner_id,
+                        claim.change_id,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise SelfChangeConflictError(
+                        "self-change disappeared while application failure was retained"
+                    )
+                updated = self._change(row)
+                self._insert_event(
+                    updated.change_id,
+                    event_type=(
+                        "self_change.failed"
+                        if terminal
+                        else "self_change.applying_retry"
+                    ),
+                    state=next_state,
+                    occurred_at=now,
+                    reason_code=error_code,
+                )
+                return updated
+        except _INTEGRITY_ERRORS as error:
+            raise SelfChangeConflictError(
+                "self-change application failure conflicts with durable state"
+            ) from error
+
+    def record_deployed(
+        self,
+        claim: SelfChange,
+        *,
+        candidate_revision: GitRevision,
+        now: datetime,
+    ) -> SelfChange:
+        try:
+            with self._connection.transaction():
+                existing = self._read(claim.owner_id, claim.change_id, for_update=True)
+                if existing.state is SelfChangeState.DEPLOYED:
+                    if existing.candidate_revision == candidate_revision:
+                        return existing
+                    raise SelfChangeConflictError(
+                        "self-change already records a different deployed commit"
+                    )
+                self._require_active_claim(
+                    existing,
+                    claim,
+                    SelfChangeState.APPLYING,
+                    now,
+                )
+                if existing.candidate_revision != candidate_revision:
+                    raise SelfChangeConflictError(
+                        "deployed commit does not match the approved candidate"
+                    )
+                row = self._connection.execute(
+                    sql.SQL("""
+                    UPDATE melloa.self_changes
+                       SET state = 'deployed',
+                           available_at = %s,
+                           lease_owner = NULL,
+                           lease_expires_at = NULL,
+                           deployed_at = %s,
+                           updated_at = GREATEST(updated_at, %s)
+                     WHERE owner_id = %s AND change_id = %s
+                     RETURNING {}
+                    """).format(_CHANGE_COLUMNS),
+                    (
+                        now,
+                        now,
+                        now,
+                        claim.owner_id,
+                        claim.change_id,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise SelfChangeConflictError(
+                        "self-change disappeared while deployment was retained"
+                    )
+                deployed = self._change(row)
+                self._insert_event(
+                    deployed.change_id,
+                    event_type="self_change.deployed",
+                    state=SelfChangeState.DEPLOYED,
+                    occurred_at=now,
+                    revision=candidate_revision,
+                )
+                return deployed
+        except _INTEGRITY_ERRORS as error:
+            raise SelfChangeConflictError(
+                "self-change deployment conflicts with durable state"
+            ) from error
+
     def _read(
         self,
         owner_id: RecordId,
@@ -464,14 +715,15 @@ class PostgresSelfChangeStore:
         occurred_at: datetime,
         telegram_update_id: int | None = None,
         proposal_digest: Sha256Digest | None = None,
+        revision: GitRevision | None = None,
         reason_code: QualifiedName | None = None,
     ) -> None:
         self._connection.execute(
             """
             INSERT INTO melloa.self_change_events (
                 change_id, event_type, state, telegram_update_id,
-                proposal_digest, reason_code, occurred_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                proposal_digest, revision, reason_code, occurred_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 change_id,
@@ -479,6 +731,7 @@ class PostgresSelfChangeStore:
                 state.value,
                 telegram_update_id,
                 proposal_digest,
+                revision,
                 reason_code,
                 occurred_at,
             ),
@@ -520,11 +773,48 @@ class PostgresSelfChangeStore:
                 reason_code="self_change.planning_lease_exhausted",
             )
 
+    def _fail_exhausted_applying(self, now: datetime) -> None:
+        rows = self._connection.execute(
+            sql.SQL("""
+            SELECT {}
+              FROM melloa.self_changes
+             WHERE state = 'applying'
+               AND lease_expires_at <= %s
+               AND attempt_count >= max_attempts
+             ORDER BY available_at, requested_at, change_id
+             FOR UPDATE SKIP LOCKED
+            """).format(_CHANGE_COLUMNS),
+            (now,),
+        ).fetchall()
+        for row in rows:
+            change = self._change(row)
+            self._connection.execute(
+                """
+                UPDATE melloa.self_changes
+                   SET state = 'failed',
+                       failure_reason = 'self_change.application_lease_exhausted',
+                       available_at = %s,
+                       lease_owner = NULL,
+                       lease_expires_at = NULL,
+                       updated_at = GREATEST(updated_at, %s)
+                 WHERE change_id = %s
+                """,
+                (now, now, change.change_id),
+            )
+            self._insert_event(
+                change.change_id,
+                event_type="self_change.failed",
+                state=SelfChangeState.FAILED,
+                occurred_at=now,
+                reason_code="self_change.application_lease_exhausted",
+            )
+
     @staticmethod
     def _require_active_claim(
         existing: SelfChange,
         claim: SelfChange,
         expected_state: SelfChangeState,
+        now: datetime,
     ) -> None:
         if (
             claim.state is not expected_state
@@ -533,6 +823,8 @@ class PostgresSelfChangeStore:
             or existing.attempt_count != claim.attempt_count
             or existing.lease_owner != claim.lease_owner
             or existing.lease_expires_at != claim.lease_expires_at
+            or existing.lease_expires_at is None
+            or existing.lease_expires_at <= now
         ):
             raise SelfChangeConflictError("self-change work lease is stale")
 

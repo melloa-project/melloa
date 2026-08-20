@@ -477,6 +477,44 @@ def test_self_change_queue_and_exact_approval_survive_restart() -> None:
             )
             == approved
         )
+        applying = changes.claim_next_applying(
+            lease_owner="worker_00000000000000000000000000000c03",
+            now=requested_at + timedelta(seconds=10),
+            lease_expires_at=requested_at + timedelta(seconds=20),
+        )
+        assert applying is not None
+        assert applying.attempt_count == 1
+        applying = changes.record_candidate(
+            applying,
+            candidate_revision="b" * 40,
+            now=requested_at + timedelta(seconds=11),
+        )
+        retry_apply = changes.record_applying_failure(
+            applying,
+            error_code="self_change.release_temporarily_unavailable",
+            retry_at=requested_at + timedelta(seconds=14),
+            now=requested_at + timedelta(seconds=12),
+        )
+        assert retry_apply.state is SelfChangeState.APPROVED
+        assert retry_apply.candidate_revision == "b" * 40
+        applying = changes.claim_next_applying(
+            lease_owner="worker_00000000000000000000000000000c04",
+            now=requested_at + timedelta(seconds=15),
+            lease_expires_at=requested_at + timedelta(seconds=25),
+        )
+        assert applying is not None
+        assert applying.attempt_count == 2
+        applying = changes.record_candidate(
+            applying,
+            candidate_revision="b" * 40,
+            now=requested_at + timedelta(seconds=16),
+        )
+        deployed = changes.record_deployed(
+            applying,
+            candidate_revision="b" * 40,
+            now=requested_at + timedelta(seconds=17),
+        )
+        assert deployed.state is SelfChangeState.DEPLOYED
 
         cancelled_request = request_text + " Cancel it."
         cancelled = changes.create(
@@ -503,7 +541,7 @@ def test_self_change_queue_and_exact_approval_survive_restart() -> None:
     with _connect(dsn) as third_connection:
         changes = PostgresSelfChangeStore(third_connection)
         retained = changes.get(OWNER_ID, change.change_id)
-        assert retained.state is SelfChangeState.APPROVED
+        assert retained.state is SelfChangeState.DEPLOYED
         assert retained.proposal_digest == retained.approved_digest
         event_types = [
             str(row[0])
@@ -524,6 +562,10 @@ def test_self_change_queue_and_exact_approval_survive_restart() -> None:
             "self_change.planning_started",
             "self_change.proposal_ready",
             "self_change.approved",
+            "self_change.applying_started",
+            "self_change.applying_retry",
+            "self_change.applying_started",
+            "self_change.deployed",
         ]
         with pytest.raises(psycopg.Error, match="permission denied"):
             third_connection.execute(

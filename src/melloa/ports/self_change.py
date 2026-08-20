@@ -87,6 +87,43 @@ class SelfChangeStore(Protocol):
     ) -> SelfChange:
         """Bind an exact proposal to one exact owner approval."""
 
+    def claim_next_applying(
+        self,
+        *,
+        lease_owner: RecordId,
+        now: datetime,
+        lease_expires_at: datetime,
+    ) -> SelfChange | None:
+        """Lease exact approved work, reclaiming an expired application attempt."""
+
+    def record_candidate(
+        self,
+        claim: SelfChange,
+        *,
+        candidate_revision: GitRevision,
+        now: datetime,
+    ) -> SelfChange:
+        """Retain the exact local commit prepared under an active application lease."""
+
+    def record_applying_failure(
+        self,
+        claim: SelfChange,
+        *,
+        error_code: QualifiedName,
+        retry_at: datetime,
+        now: datetime,
+    ) -> SelfChange:
+        """Release approved work for bounded retry or terminal failure."""
+
+    def record_deployed(
+        self,
+        claim: SelfChange,
+        *,
+        candidate_revision: GitRevision,
+        now: datetime,
+    ) -> SelfChange:
+        """Record a healthy pushed release for the exact approved candidate."""
+
     def cancel(
         self,
         owner_id: RecordId,
