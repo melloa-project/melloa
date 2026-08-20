@@ -177,6 +177,26 @@ Do not treat this as a completed deployment yet. The first real server still has
 verifier, restore drill, and a real later update/rollback path before the repository readiness
 banner can change.
 
+## Private qualification record
+
+Keep a short private record from the first real server run. Do not paste raw logs publicly; verifier
+output can contain the one-time Telegram phrases and provider errors can contain account-specific
+details. A sufficient private record is:
+
+- the installed Melloa commit SHA from `git -C /srv/melloa/release-source rev-parse HEAD`;
+- the backup mount path and confirmation that `findmnt --mountpoint` showed it as an explicit mount
+  independent from `/`;
+- the timestamp when first install's Telegram verifier passed;
+- the `/status` result after setup, including model route health and backup health;
+- the timestamp after reboot when `sudo /usr/local/libexec/melloa/verify-owner-journey` passed;
+- the restore snapshot ID prefix printed by `sudo /usr/local/libexec/melloa/restore-drill`;
+- the timestamp when active verification passed again after the restore drill;
+- after a later reviewed commit reaches `main`, the update revision, successful Telegram verifier,
+  rollback result, and final active verification.
+
+This record is owner evidence for changing the repository readiness banner later; it is not a
+secret handoff file and Melloa does not need to read it.
+
 ## After reboot or maintenance
 
 After rebooting the server, rerun the owner-facing verifier:
