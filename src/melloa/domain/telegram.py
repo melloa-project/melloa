@@ -13,6 +13,7 @@ from melloa.domain.models import ModelRoute
 
 class TelegramDeliveryKind(StrEnum):
     CONVERSATION = "conversation"
+    CONTROL = "control"
     MODEL_ROUTE = "model_route"
     STATUS = "status"
 
@@ -49,6 +50,7 @@ class TelegramDelivery(ContractModel):
     inbound_message_id: RecordId | None = None
     response_message_id: RecordId | None = None
     notice_code: QualifiedName | None = None
+    control_text: Annotated[str, Field(min_length=1, max_length=70_000)] | None = None
     state: TelegramDeliveryState
     sent_part_count: Annotated[int, Field(ge=0)] = 0
     telegram_message_ids: tuple[Annotated[int, Field(ge=0)], ...] = ()
@@ -77,20 +79,33 @@ class TelegramDelivery(ContractModel):
         if self.kind is TelegramDeliveryKind.CONVERSATION:
             if self.inbound_message_id is None:
                 raise ValueError("conversation delivery requires its canonical inbound message")
+            if self.control_text is not None:
+                raise ValueError("conversation delivery cannot contain control text")
             if self.state is TelegramDeliveryState.AWAITING_REPLY:
                 if self.response_message_id is not None or self.notice_code is not None:
                     raise ValueError("awaiting conversation cannot already have a response")
             elif (self.response_message_id is None) == (self.notice_code is None):
                 raise ValueError("conversation delivery requires one response source")
-        elif self.kind is TelegramDeliveryKind.STATUS and any(
-            value is not None
-            for value in (
-                self.inbound_message_id,
-                self.response_message_id,
-                self.notice_code,
-            )
-        ):
-            raise ValueError("status delivery cannot reference conversation content")
+        elif self.kind is TelegramDeliveryKind.STATUS:
+            if any(
+                value is not None
+                for value in (
+                    self.inbound_message_id,
+                    self.response_message_id,
+                    self.notice_code,
+                    self.control_text,
+                )
+            ) or self.state is TelegramDeliveryState.AWAITING_REPLY:
+                raise ValueError("status delivery must contain only a generated status response")
+        elif self.kind is TelegramDeliveryKind.CONTROL:
+            if (
+                self.inbound_message_id is not None
+                or self.response_message_id is not None
+                or self.notice_code is not None
+                or self.control_text is None
+                or self.state is TelegramDeliveryState.AWAITING_REPLY
+            ):
+                raise ValueError("control delivery must contain one bounded exact response")
         elif self.kind is TelegramDeliveryKind.MODEL_ROUTE:
             expected_notices = {
                 "telegram.model_route.capable",
@@ -100,6 +115,7 @@ class TelegramDelivery(ContractModel):
                 self.inbound_message_id is not None
                 or self.response_message_id is not None
                 or self.notice_code not in expected_notices
+                or self.control_text is not None
                 or self.state is TelegramDeliveryState.AWAITING_REPLY
             ):
                 raise ValueError("model-route delivery must contain one durable route notice")

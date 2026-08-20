@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from melloa.domain.base import RecordId, Sha256Digest
-from melloa.domain.self_change import SelfChange
+from melloa.domain.base import QualifiedName, RecordId, Sha256Digest
+from melloa.domain.self_change import ChangePatch, ChangeSummary, GitRevision, SelfChange
 
 
 class SelfChangeConflictError(RuntimeError):
@@ -26,6 +26,36 @@ class SelfChangeStore(Protocol):
 
     def get(self, owner_id: RecordId, change_id: RecordId) -> SelfChange:
         """Return one exact owner change."""
+
+    def claim_next_planning(
+        self,
+        *,
+        lease_owner: RecordId,
+        now: datetime,
+        lease_expires_at: datetime,
+    ) -> SelfChange | None:
+        """Lease the next requested proposal, reclaiming expired planning work."""
+
+    def record_proposal(
+        self,
+        claim: SelfChange,
+        *,
+        base_revision: GitRevision,
+        summary: ChangeSummary,
+        patch: ChangePatch,
+        now: datetime,
+    ) -> SelfChange:
+        """Retain the exact proposal produced under an active planning lease."""
+
+    def record_planning_failure(
+        self,
+        claim: SelfChange,
+        *,
+        error_code: QualifiedName,
+        retry_at: datetime,
+        now: datetime,
+    ) -> SelfChange:
+        """Release failed planning work for bounded retry or terminal failure."""
 
     def approve(
         self,

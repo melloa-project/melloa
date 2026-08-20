@@ -28,6 +28,7 @@ from melloa.adapters.models.routed import ModelRouteConfigs, RoutedModelGateway
 from melloa.adapters.postgres.auth import PostgresOwnerSessionManager
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
+from melloa.adapters.postgres.self_change import PostgresSelfChangeStore
 from melloa.adapters.postgres.store import PostgresEventAuditStore
 from melloa.adapters.postgres.telegram import PostgresTelegramStore
 from melloa.adapters.telegram import TelegramBotClient, TelegramOwnerConfig
@@ -35,6 +36,7 @@ from melloa.application.conversation import ConversationModelLimits, Conversatio
 from melloa.application.exports import OwnerExportService
 from melloa.application.owner_status import OwnerModelRoutes, OwnerStatusReporter
 from melloa.application.retrieval import PolicyConstrainedRetriever
+from melloa.application.self_change import OwnerSelfChangeService
 from melloa.apps.core import AccessScope, create_app
 from melloa.apps.owner_telegram import TELEGRAM_THREAD_ID, OwnerTelegramService
 from melloa.domain.base import (
@@ -48,6 +50,7 @@ from melloa.ports.auth import OwnerSessionManager
 from melloa.ports.conversation import ConversationStore
 from melloa.ports.guardian import GuardianStatusReader
 from melloa.ports.memory import MemoryStore
+from melloa.ports.self_change import SelfChangeStore
 from melloa.ports.store import EventAuditStore
 from melloa.ports.telegram import TelegramStore
 from melloa.release import CURRENT_RELEASE
@@ -70,6 +73,8 @@ class MelloaRuntime:
     model_routes: ModelRouteConfigs | None
     persistence: str
     owner_telegram: OwnerTelegramService | None
+    owner_self_changes: OwnerSelfChangeService | None
+    self_change_store: SelfChangeStore | None
 
 
 class _LockedPort:
@@ -122,6 +127,8 @@ def build_runtime(
         raise ValueError("Telegram owner service requires capable and economy model routes")
 
     database_lock: RLock | None = None
+    self_change_store: SelfChangeStore | None = None
+    owner_self_changes: OwnerSelfChangeService | None = None
     if database_connection is None:
         event_audit_store: EventAuditStore = InMemoryEventAuditStore()
         conversation_store: ConversationStore = InMemoryConversationStore(id_factory=id_factory)
@@ -164,6 +171,16 @@ def build_runtime(
                 ),
                 database_lock,
             ),
+        )
+        self_change_store = cast(
+            SelfChangeStore,
+            _LockedPort(PostgresSelfChangeStore(database_connection), database_lock),
+        )
+        owner_self_changes = OwnerSelfChangeService(
+            owner_id=OWNER_ID,
+            store=self_change_store,
+            clock=clock,
+            id_factory=id_factory,
         )
         persistence = "postgresql"
 
@@ -255,6 +272,7 @@ def build_runtime(
             owner_id=OWNER_ID,
             intelligence_id=MELLI_ID,
             status_text=status_reporter.render,
+            self_change_controls=owner_self_changes,
             clock=clock,
             id_factory=id_factory,
         )
@@ -298,6 +316,8 @@ def build_runtime(
         model_routes=model_routes,
         persistence=persistence,
         owner_telegram=owner_telegram,
+        owner_self_changes=owner_self_changes,
+        self_change_store=self_change_store,
     )
 
 

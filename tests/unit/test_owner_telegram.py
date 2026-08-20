@@ -114,6 +114,7 @@ def _service(
     client: FakeTelegramClient,
     response_text: str = "Synthetic Telegram reply.",
     status_text: str = "Melli status\nOverall: healthy",
+    self_change_controls: Mock | None = None,
 ) -> tuple[OwnerTelegramService, InMemoryConversationStore, FakeModelGateway]:
     conversation, conversation_store, model = _conversation(
         fixed_time,
@@ -136,6 +137,7 @@ def _service(
         owner_id=record_id("owner", 1),
         intelligence_id=record_id("intelligence", 1),
         status_text=lambda: status_text,
+        self_change_controls=self_change_controls,
         clock=lambda: fixed_time,
         id_factory=lambda prefix: record_id(prefix, 90),
     )
@@ -190,6 +192,7 @@ def _delivery(
     inbound_message_id: str | None = None,
     response_message_id: str | None = None,
     notice_code: str | None = None,
+    control_text: str | None = None,
     sent_ids: tuple[int, ...] = (),
     attempt_count: int = 0,
 ) -> TelegramDelivery:
@@ -201,6 +204,7 @@ def _delivery(
         inbound_message_id=inbound_message_id,
         response_message_id=response_message_id,
         notice_code=notice_code,
+        control_text=control_text,
         state=state,
         sent_part_count=len(sent_ids),
         telegram_message_ids=sent_ids,
@@ -283,6 +287,59 @@ def test_model_route_commands_do_not_enter_conversation(fixed_time) -> None:
     assert model.requests == []
     assert "Model route: capable" in service._delivery_parts(capable_notice)[0]
     assert "silently" in service._delivery_parts(capable_notice)[0]
+
+
+def test_change_commands_are_deterministic_controls_not_conversation(fixed_time) -> None:
+    telegram_store = Mock()
+    controls = Mock()
+    controls.handle.return_value = "Change requested: change_exact"
+    client = FakeTelegramClient()
+    service, conversation_store, model = _service(
+        fixed_time,
+        telegram_store=telegram_store,
+        client=client,
+        self_change_controls=controls,
+    )
+
+    service._accept_update(
+        _update(22, text="/change propose Add one bounded owner behavior.")
+    )
+
+    controls.handle.assert_called_once_with(
+        "/change propose Add one bounded owner behavior.",
+        update_id=22,
+    )
+    telegram_store.accept_control_update.assert_called_once_with(
+        update_id=22,
+        incoming_message_id=122,
+        control_text="Change requested: change_exact",
+        now=fixed_time,
+        max_attempts=8,
+    )
+    assert conversation_store.list_threads(record_id("owner", 1)) == ()
+    assert model.requests == []
+
+
+def test_exact_control_response_is_split_without_conversation_lookup(fixed_time) -> None:
+    telegram_store = Mock()
+    client = FakeTelegramClient()
+    service, conversation_store, model = _service(
+        fixed_time,
+        telegram_store=telegram_store,
+        client=client,
+    )
+    response = "A" * 4_010
+    delivery = _delivery(
+        fixed_time,
+        update_id=22,
+        kind=TelegramDeliveryKind.CONTROL,
+        state=TelegramDeliveryState.READY,
+        control_text=response,
+    )
+
+    assert service._delivery_parts(delivery) == ("A" * 4_000, "A" * 10)
+    assert conversation_store.list_threads(record_id("owner", 1)) == ()
+    assert model.requests == []
 
 
 def test_think_uses_capable_once_without_changing_saved_route(fixed_time) -> None:

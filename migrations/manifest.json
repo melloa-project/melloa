@@ -12,6 +12,7 @@
     "0011_owner_conversation_deletion.sql": "sha256:6b2e3170eead9dd83924794dbcb1e44b37a8325113b42e64978db1cb46dbeac8",
     "0012_owner_telegram_channel.sql": "sha256:80783f96e07d0f81a79d8ba5eb40ec971be2da7256a70b16ccf1708724c99e7c",
     "0013_owner_model_routes.sql": "sha256:51081d07163e792041bc7377a6a601505976f6a785a2c7d3b792ae27b625f4d8",
-    "0014_backup_sequence_privileges.sql": "sha256:bd8ca0eddc890cb0c73f8eed62a0d23d8152682f616097007db6bb9f18dbedf6"
+    "0014_backup_sequence_privileges.sql": "sha256:bd8ca0eddc890cb0c73f8eed62a0d23d8152682f616097007db6bb9f18dbedf6",
+    "0015_owner_self_changes.sql": "sha256:0c201a2ef08114deb2eab9d197e0d06c4d5d5d0aef1a42d6215be97e986d923a"
   }
 }

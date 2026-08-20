@@ -66,6 +66,17 @@ class TelegramStore(Protocol):
     ) -> TelegramDelivery:
         """Atomically advance the cursor and enqueue an owner status response."""
 
+    def accept_control_update(
+        self,
+        *,
+        update_id: int,
+        incoming_message_id: int,
+        control_text: str,
+        now: datetime,
+        max_attempts: int,
+    ) -> TelegramDelivery:
+        """Advance the cursor and retain one exact deterministic control response."""
+
     def accept_model_route_update(
         self,
         *,

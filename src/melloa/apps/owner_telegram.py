@@ -14,6 +14,7 @@ from melloa.adapters.telegram import (
     TelegramUpdate,
 )
 from melloa.application.conversation import ConversationService, ConversationUnavailableError
+from melloa.application.self_change import OwnerSelfChangeService
 from melloa.domain.auth import AuthenticatedOwner
 from melloa.domain.base import RecordId, new_record_id, utc_now
 from melloa.domain.classification import Sensitivity
@@ -29,6 +30,7 @@ _TELEGRAM_SOURCE = "client.telegram"
 _LOGGER = logging.getLogger(__name__)
 _CHUNK_SIZE = 4_000
 _STATUS_LIMIT = 4_096
+_CHANGE_UNAVAILABLE = "Source-change controls are unavailable in this runtime."
 _NOTICE_TEXT = {
     "telegram.model_route.capable": (
         "Model route: capable. New messages use the capable model. If it is unavailable, "
@@ -65,6 +67,7 @@ class OwnerTelegramService:
         owner_id: RecordId,
         intelligence_id: RecordId,
         status_text: Callable[[], str],
+        self_change_controls: OwnerSelfChangeService | None = None,
         clock: Callable[[], datetime] = utc_now,
         id_factory: Callable[[str], str] = new_record_id,
         max_delivery_attempts: int = 8,
@@ -85,6 +88,7 @@ class OwnerTelegramService:
         self._owner_id = owner_id
         self._intelligence_id = intelligence_id
         self._status_text = status_text
+        self._self_change_controls = self_change_controls
         self._clock = clock
         self._id_factory = id_factory
         self._max_delivery_attempts = max_delivery_attempts
@@ -149,6 +153,20 @@ class OwnerTelegramService:
             self._store.advance_update(update.update_id, now=self._clock())
             return
         text = message.text.strip()
+        if text == "/change" or text.startswith("/change "):
+            control_text = (
+                _CHANGE_UNAVAILABLE
+                if self._self_change_controls is None
+                else self._self_change_controls.handle(text, update_id=update.update_id)
+            )
+            self._store.accept_control_update(
+                update_id=update.update_id,
+                incoming_message_id=message.message_id,
+                control_text=control_text,
+                now=self._clock(),
+                max_attempts=self._max_delivery_attempts,
+            )
+            return
         if text == "/status":
             self._store.accept_status_update(
                 update_id=update.update_id,
@@ -310,6 +328,10 @@ class OwnerTelegramService:
             if not status or len(status) > _STATUS_LIMIT:
                 status = "Melli status is temporarily unavailable."
             return (status,)
+        if delivery.kind is TelegramDeliveryKind.CONTROL:
+            if delivery.control_text is None:
+                raise TelegramStateConflictError("Telegram control response is missing")
+            return _split_text(delivery.control_text)
         if delivery.notice_code is not None:
             try:
                 return (_NOTICE_TEXT[delivery.notice_code],)

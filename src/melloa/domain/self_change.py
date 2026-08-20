@@ -199,6 +199,9 @@ def self_change_proposal_digest(
 
 
 __all__ = [
+    "ChangePatch",
+    "ChangeSummary",
+    "GitRevision",
     "SelfChange",
     "SelfChangeState",
     "self_change_proposal_digest",

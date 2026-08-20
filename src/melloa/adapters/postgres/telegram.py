@@ -22,7 +22,7 @@ _CHANNEL_KEY = "owner.telegram"
 _CHANNEL_LOCK_ID = 8_412_259_107_311
 _DELIVERY_COLUMNS = sql.SQL("""
     update_id, incoming_message_id, delivery_kind, inbound_message_id,
-    response_message_id, notice_code, state, sent_part_count,
+    response_message_id, notice_code, control_text, state, sent_part_count,
     telegram_message_ids, attempt_count, max_attempts, available_at,
     lease_owner, lease_expires_at, last_error_code, created_at, updated_at,
     delivered_at
@@ -106,6 +106,7 @@ class PostgresTelegramStore:
             incoming_message_id=incoming_message_id,
             kind=TelegramDeliveryKind.CONVERSATION,
             inbound_message_id=inbound_message_id,
+            control_text=None,
             now=now,
             max_attempts=max_attempts,
             model_route=None,
@@ -124,6 +125,27 @@ class PostgresTelegramStore:
             incoming_message_id=incoming_message_id,
             kind=TelegramDeliveryKind.STATUS,
             inbound_message_id=None,
+            control_text=None,
+            now=now,
+            max_attempts=max_attempts,
+            model_route=None,
+        )
+
+    def accept_control_update(
+        self,
+        *,
+        update_id: int,
+        incoming_message_id: int,
+        control_text: str,
+        now: datetime,
+        max_attempts: int,
+    ) -> TelegramDelivery:
+        return self._accept_delivery(
+            update_id=update_id,
+            incoming_message_id=incoming_message_id,
+            kind=TelegramDeliveryKind.CONTROL,
+            inbound_message_id=None,
+            control_text=control_text,
             now=now,
             max_attempts=max_attempts,
             model_route=None,
@@ -143,6 +165,7 @@ class PostgresTelegramStore:
             incoming_message_id=incoming_message_id,
             kind=TelegramDeliveryKind.MODEL_ROUTE,
             inbound_message_id=None,
+            control_text=None,
             now=now,
             max_attempts=max_attempts,
             model_route=model_route,
@@ -381,6 +404,7 @@ class PostgresTelegramStore:
         incoming_message_id: int,
         kind: TelegramDeliveryKind,
         inbound_message_id: RecordId | None,
+        control_text: str | None,
         now: datetime,
         max_attempts: int,
         model_route: ModelRoute | None,
@@ -389,6 +413,8 @@ class PostgresTelegramStore:
             raise ValueError("Telegram update and message IDs cannot be negative")
         if not 1 <= max_attempts <= 100:
             raise ValueError("Telegram delivery attempts must be between 1 and 100")
+        if control_text is not None and not 1 <= len(control_text) <= 70_000:
+            raise ValueError("Telegram control text must contain between 1 and 70,000 characters")
         initial_state = (
             TelegramDeliveryState.AWAITING_REPLY
             if kind is TelegramDeliveryKind.CONVERSATION
@@ -420,9 +446,9 @@ class PostgresTelegramStore:
                     """
                     INSERT INTO melloa.telegram_deliveries (
                         update_id, channel_key, incoming_message_id, delivery_kind,
-                        inbound_message_id, notice_code, state, max_attempts,
+                        inbound_message_id, notice_code, control_text, state, max_attempts,
                         available_at, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         update_id,
@@ -431,6 +457,7 @@ class PostgresTelegramStore:
                         kind.value,
                         inbound_message_id,
                         notice_code,
+                        control_text,
                         initial_state.value,
                         max_attempts,
                         now,
@@ -454,6 +481,7 @@ class PostgresTelegramStore:
                     existing.incoming_message_id != incoming_message_id
                     or existing.kind is not kind
                     or existing.inbound_message_id != inbound_message_id
+                    or existing.control_text != control_text
                     or (
                         kind is TelegramDeliveryKind.MODEL_ROUTE
                         and model_route is not None
@@ -558,18 +586,19 @@ class PostgresTelegramStore:
             inbound_message_id=None if row[3] is None else str(row[3]),
             response_message_id=None if row[4] is None else str(row[4]),
             notice_code=None if row[5] is None else str(row[5]),
-            state=TelegramDeliveryState(str(row[6])),
-            sent_part_count=int(row[7]),
-            telegram_message_ids=tuple(int(value) for value in row[8]),
-            attempt_count=int(row[9]),
-            max_attempts=int(row[10]),
-            available_at=cast(datetime, row[11]),
-            lease_owner=None if row[12] is None else str(row[12]),
-            lease_expires_at=None if row[13] is None else cast(datetime, row[13]),
-            last_error_code=None if row[14] is None else str(row[14]),
-            created_at=cast(datetime, row[15]),
-            updated_at=cast(datetime, row[16]),
-            delivered_at=None if row[17] is None else cast(datetime, row[17]),
+            control_text=None if row[6] is None else str(row[6]),
+            state=TelegramDeliveryState(str(row[7])),
+            sent_part_count=int(row[8]),
+            telegram_message_ids=tuple(int(value) for value in row[9]),
+            attempt_count=int(row[10]),
+            max_attempts=int(row[11]),
+            available_at=cast(datetime, row[12]),
+            lease_owner=None if row[13] is None else str(row[13]),
+            lease_expires_at=None if row[14] is None else cast(datetime, row[14]),
+            last_error_code=None if row[15] is None else str(row[15]),
+            created_at=cast(datetime, row[16]),
+            updated_at=cast(datetime, row[17]),
+            delivered_at=None if row[18] is None else cast(datetime, row[18]),
         )
 
     @staticmethod

@@ -19,8 +19,9 @@ from melloa.adapters.models.openai_compatible import OpenAICompatibleModelConfig
 from melloa.adapters.models.routed import ModelRouteConfigs
 from melloa.adapters.postgres.conversation import PostgresConversationStore
 from melloa.adapters.postgres.memory import PostgresMemoryRepository
+from melloa.adapters.postgres.self_change import PostgresSelfChangeStore
 from melloa.adapters.postgres.telegram import PostgresTelegramStore
-from melloa.adapters.telegram import TelegramOwnerConfig
+from melloa.adapters.telegram import TelegramOwnerConfig, TelegramUpdate
 from melloa.application.conversation import ConversationService
 from melloa.application.retrieval import PolicyConstrainedRetriever
 from melloa.apps.runtime import MELLI_ID, OWNER_ID, build_runtime
@@ -30,7 +31,9 @@ from melloa.domain.classification import EpistemicStatus, Sensitivity, TrustLabe
 from melloa.domain.guardian import GuardianMode, GuardianStatusPayload
 from melloa.domain.memory import Assertion, AssertionStatus
 from melloa.domain.models import ModelRequest, ModelRoute, ProcessingLocation
+from melloa.domain.self_change import SelfChange, SelfChangeState, self_change_request_digest
 from melloa.ports.model import ModelInvocationError
+from melloa.ports.self_change import SelfChangeConflictError
 from melloa.ports.telegram import TelegramStateConflictError
 
 _OWNER_CREDENTIAL = "postgres-owner-test-credential-value-0001"
@@ -381,6 +384,170 @@ def test_failed_external_destination_and_disclosed_memory_survive_restart() -> N
         },)
 
 
+def test_self_change_queue_and_exact_approval_survive_restart() -> None:
+    dsn = os.environ["MELLOA_TEST_DATABASE_DSN"]
+    requested_at = _NOW + timedelta(days=1)
+    request_text = "Add one bounded behavior from this explicit owner request."
+    change = SelfChange(
+        change_id="change_00000000000000000000000000000c01",
+        owner_id=OWNER_ID,
+        request_text=request_text,
+        request_digest=self_change_request_digest(request_text),
+        requested_update_id=501,
+        state=SelfChangeState.REQUESTED,
+        available_at=requested_at,
+        requested_at=requested_at,
+        updated_at=requested_at,
+    )
+    with _connect(dsn) as first_connection:
+        build_runtime(
+            _guardian(),
+            _OWNER_CREDENTIAL,
+            database_connection=first_connection,
+            clock=lambda: requested_at,
+        )
+        changes = PostgresSelfChangeStore(first_connection)
+        created = changes.create(change)
+        replay = changes.create(
+            change.model_copy(
+                update={
+                    "change_id": "change_00000000000000000000000000000cff",
+                    "available_at": requested_at + timedelta(seconds=1),
+                    "requested_at": requested_at + timedelta(seconds=1),
+                    "updated_at": requested_at + timedelta(seconds=1),
+                }
+            )
+        )
+        assert replay == created
+        claim = changes.claim_next_planning(
+            lease_owner="worker_00000000000000000000000000000c01",
+            now=requested_at + timedelta(seconds=1),
+            lease_expires_at=requested_at + timedelta(seconds=11),
+        )
+        assert claim is not None
+        retry = changes.record_planning_failure(
+            claim,
+            error_code="self_change.coding_agent_unavailable",
+            retry_at=requested_at + timedelta(seconds=6),
+            now=requested_at + timedelta(seconds=2),
+        )
+        assert retry.state is SelfChangeState.REQUESTED
+        assert retry.attempt_count == 1
+
+    with _connect(dsn) as second_connection:
+        changes = PostgresSelfChangeStore(second_connection)
+        assert (
+            changes.claim_next_planning(
+                lease_owner="worker_00000000000000000000000000000c02",
+                now=requested_at + timedelta(seconds=5),
+                lease_expires_at=requested_at + timedelta(seconds=15),
+            )
+            is None
+        )
+        claim = changes.claim_next_planning(
+            lease_owner="worker_00000000000000000000000000000c02",
+            now=requested_at + timedelta(seconds=7),
+            lease_expires_at=requested_at + timedelta(seconds=17),
+        )
+        assert claim is not None
+        assert claim.attempt_count == 2
+        proposal = changes.record_proposal(
+            claim,
+            base_revision="a" * 40,
+            summary="Add one bounded owner-approved behavior.",
+            patch="diff --git a/example b/example\n+owner approved\n",
+            now=requested_at + timedelta(seconds=8),
+        )
+        assert proposal.proposal_digest is not None
+        approved = changes.approve(
+            OWNER_ID,
+            change.change_id,
+            proposal_digest=proposal.proposal_digest,
+            approval_update_id=502,
+            now=requested_at + timedelta(seconds=9),
+        )
+        assert approved.state is SelfChangeState.APPROVED
+        assert (
+            changes.approve(
+                OWNER_ID,
+                change.change_id,
+                proposal_digest=proposal.proposal_digest,
+                approval_update_id=502,
+                now=requested_at + timedelta(seconds=10),
+            )
+            == approved
+        )
+
+        cancelled_request = request_text + " Cancel it."
+        cancelled = changes.create(
+            SelfChange(
+                change_id="change_00000000000000000000000000000c02",
+                owner_id=OWNER_ID,
+                request_text=cancelled_request,
+                request_digest=self_change_request_digest(cancelled_request),
+                requested_update_id=503,
+                state=SelfChangeState.REQUESTED,
+                available_at=requested_at + timedelta(seconds=10),
+                requested_at=requested_at + timedelta(seconds=10),
+                updated_at=requested_at + timedelta(seconds=10),
+            )
+        )
+        cancelled = changes.cancel(
+            OWNER_ID,
+            cancelled.change_id,
+            cancellation_update_id=504,
+            now=requested_at + timedelta(seconds=11),
+        )
+        assert cancelled.state is SelfChangeState.CANCELLED
+
+    with _connect(dsn) as third_connection:
+        changes = PostgresSelfChangeStore(third_connection)
+        retained = changes.get(OWNER_ID, change.change_id)
+        assert retained.state is SelfChangeState.APPROVED
+        assert retained.proposal_digest == retained.approved_digest
+        event_types = [
+            str(row[0])
+            for row in third_connection.execute(
+                """
+                SELECT event_type
+                  FROM melloa.self_change_events
+                 WHERE change_id = %s
+                 ORDER BY event_sequence
+                """,
+                (change.change_id,),
+            ).fetchall()
+        ]
+        assert event_types == [
+            "self_change.requested",
+            "self_change.planning_started",
+            "self_change.planning_retry",
+            "self_change.planning_started",
+            "self_change.proposal_ready",
+            "self_change.approved",
+        ]
+        with pytest.raises(psycopg.Error, match="permission denied"):
+            third_connection.execute(
+                "UPDATE melloa.self_change_events SET state = 'failed' WHERE change_id = %s",
+                (change.change_id,),
+            )
+        third_connection.execute("RESET ROLE")
+        with pytest.raises(psycopg.Error, match="append-only"):
+            third_connection.execute(
+                "UPDATE melloa.self_change_events SET state = 'failed' WHERE change_id = %s",
+                (change.change_id,),
+            )
+        third_connection.execute("SET ROLE melloa_core")
+
+        with pytest.raises(SelfChangeConflictError):
+            changes.approve(
+                OWNER_ID,
+                change.change_id,
+                proposal_digest=retained.proposal_digest,
+                approval_update_id=505,
+                now=requested_at + timedelta(seconds=27),
+            )
+
+
 def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
     dsn = os.environ["MELLOA_TEST_DATABASE_DSN"]
     inbound_message_id = "message_00000000000000000000000000000a01"
@@ -514,6 +681,40 @@ def test_telegram_cursor_and_partial_delivery_survive_restart() -> None:
         )
         assert current.notice_code == "telegram.model_route.capable"
         assert store.owner_channel().model_route is ModelRoute.CAPABLE
+        control = store.accept_control_update(
+            update_id=104,
+            incoming_message_id=54,
+            control_text="Exact durable self-change response.",
+            now=_NOW + timedelta(seconds=21),
+            max_attempts=3,
+        )
+        assert control.control_text == "Exact durable self-change response."
+
+    with _connect(dsn) as fourth_connection:
+        store = PostgresTelegramStore(fourth_connection)
+        channel = store.bind_owner_channel(
+            owner_user_id=1_234_567,
+            owner_chat_id=7_654_321,
+            initial_model_route=ModelRoute.ECONOMY,
+            now=_NOW + timedelta(seconds=22),
+        )
+        assert channel.last_update_id == 104
+        replay = store.accept_control_update(
+            update_id=104,
+            incoming_message_id=54,
+            control_text="Exact durable self-change response.",
+            now=_NOW + timedelta(seconds=23),
+            max_attempts=3,
+        )
+        assert replay.control_text == "Exact durable self-change response."
+        with pytest.raises(TelegramStateConflictError, match="identity conflicts"):
+            store.accept_control_update(
+                update_id=104,
+                incoming_message_id=54,
+                control_text="Changed response must not replace the durable one.",
+                now=_NOW + timedelta(seconds=24),
+                max_attempts=3,
+            )
 
 
 def test_runtime_composes_persistent_owner_telegram_service() -> None:
@@ -543,8 +744,45 @@ def test_runtime_composes_persistent_owner_telegram_service() -> None:
             ),
             telegram_bot_token="123456789:abcdefghijklmnopqrstuvwxyz_ABCD123456",
         )
+        assert runtime.owner_telegram is not None
+        runtime.owner_telegram._bind_owner_channel()
+        runtime.owner_telegram._accept_update(
+            TelegramUpdate.model_validate(
+                {
+                    "update_id": 700,
+                    "message": {
+                        "message_id": 800,
+                        "from": {"id": 1_234_567, "is_bot": False},
+                        "chat": {"id": 7_654_321, "type": "private"},
+                        "date": 1_777_000_000,
+                        "text": "/change propose Add one bounded integration behavior.",
+                    },
+                },
+                strict=True,
+            )
+        )
+        change_row = connection.execute(
+            """
+            SELECT state, request_text
+              FROM melloa.self_changes
+             WHERE requested_update_id = 700
+            """
+        ).fetchone()
+        assert change_row == ("requested", "Add one bounded integration behavior.")
+        control_row = connection.execute(
+            """
+            SELECT delivery_kind, control_text
+              FROM melloa.telegram_deliveries
+             WHERE update_id = 700
+            """
+        ).fetchone()
+        assert control_row is not None
+        assert control_row[0] == "control"
+        assert "no commit, push, or deployment is authorized" in str(control_row[1])
 
     assert runtime.persistence == "postgresql"
     assert runtime.model_id is None
     assert runtime.model_routes is not None
     assert runtime.owner_telegram is not None
+    assert runtime.owner_self_changes is not None
+    assert runtime.self_change_store is not None
