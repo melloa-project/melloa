@@ -140,19 +140,33 @@ class TelegramBotClient:
             raise TelegramAPIError("telegram.updates_out_of_order")
         return tuple(updates)
 
-    async def send_text(self, *, chat_id: int, text: str) -> int:
+    async def send_text(
+        self,
+        *,
+        chat_id: int,
+        text: str,
+        reply_to_message_id: int | None = None,
+    ) -> int:
         if chat_id <= 0:
             raise ValueError("Telegram private chat ID must be positive")
         if not 1 <= len(text) <= _TELEGRAM_TEXT_LIMIT:
             raise ValueError("Telegram text must contain between 1 and 4096 characters")
+        if reply_to_message_id is not None and reply_to_message_id < 0:
+            raise ValueError("Telegram reply message ID cannot be negative")
+        payload: dict[str, object] = {
+            "chat_id": chat_id,
+            "text": text,
+            "protect_content": True,
+            "link_preview_options": {"is_disabled": True},
+        }
+        if reply_to_message_id is not None:
+            payload["reply_parameters"] = {
+                "message_id": reply_to_message_id,
+                "allow_sending_without_reply": True,
+            }
         result = await self._request(
             "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": text,
-                "protect_content": True,
-                "link_preview_options": {"is_disabled": True},
-            },
+            payload,
         )
         if not isinstance(result, dict):
             raise TelegramAPIError("telegram.send_result_invalid")

@@ -122,13 +122,23 @@ def test_send_protects_content_and_disables_link_previews() -> None:
 
     client = TelegramBotClient(_TOKEN, transport=httpx.MockTransport(respond))
 
-    message_id = asyncio.run(client.send_text(chat_id=5678, text="Private reply"))
+    message_id = asyncio.run(
+        client.send_text(
+            chat_id=5678,
+            text="Private reply",
+            reply_to_message_id=707,
+        )
+    )
 
     assert message_id == 808
     assert captured == {
         "chat_id": 5678,
         "link_preview_options": {"is_disabled": True},
         "protect_content": True,
+        "reply_parameters": {
+            "allow_sending_without_reply": True,
+            "message_id": 707,
+        },
         "text": "Private reply",
     }
 
