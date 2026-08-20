@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Melloa is the private, owner-controlled home for Melli, a persistent AI partner."
+    />
+    <title>Melloa — first owner deployment status</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="title">
+        <p class="eyebrow">Melloa / Melli</p>
+        <h1 id="title">A private home for Melli.</h1>
+        <p class="lede">
+          Melloa is the owner-controlled system. Melli is the persistent AI partner whose memory,
+          context, and relationship should survive model and provider changes.
+        </p>
+        <div class="status" role="status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span><strong>Current deployment status:</strong> not ready for first owner deployment.</span>
+        </div>
+        <div class="actions" aria-label="Primary links">
+          <a class="button primary" href="https://github.com/melloa-project/melloa/blob/main/README.md">
+            Read the source status
+          </a>
+          <a
+            class="button secondary"
+            href="https://github.com/melloa-project/melloa/blob/main/docs/server-deployment.md"
+          >
+            First-server guide
+          </a>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="target">
+        <div>
+          <p class="section-kicker">Current target</p>
+          <h2 id="target">The first real deployment is a dedicated server, not a demo site.</h2>
+        </div>
+        <div class="grid">
+          <article>
+            <h3>Dedicated Debian server</h3>
+            <p>
+              The qualification path is a low-maintenance home-server install with restart, reboot,
+              backup, recovery, update, and rollback evidence.
+            </p>
+          </article>
+          <article>
+            <h3>Telegram owner chat</h3>
+            <p>
+              The normal owner interface is a private one-to-one Telegram bot chat, paired to the
+              exact owner and backed by canonical conversation continuity.
+            </p>
+          </article>
+          <article>
+            <h3>Hosted model routes</h3>
+            <p>
+              The first path assumes hosted OpenAI-compatible providers: one capable route and one
+              cheaper economy route. A local GPU or local model is not required.
+            </p>
+          </article>
+          <article>
+            <h3>Bounded self-change</h3>
+            <p>
+              Codex/self-change is part of readiness only as an owner-approved loop: proposed diff,
+              exact approval token, commit, push, deploy, and rollback evidence.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="split" aria-labelledby="not-current">
+        <div>
+          <p class="section-kicker">What this replaces</p>
+          <h2 id="not-current">The old MkDocs architecture site was stale.</h2>
+        </div>
+        <p>
+          Pages that led with preview milestones, local no-network tours, camera plans, ADR lists,
+          provider-routing architecture, or a roadmap are not the current owner setup path. The
+          active project direction is subtractive: one obvious conversation-first deployment path,
+          with infrastructure details kept behind the moments where they affect owner decisions.
+        </p>
+      </section>
+
+      <section class="panel dark" aria-labelledby="ready">
+        <p class="section-kicker">Readiness bar</p>
+        <h2 id="ready">The public answer stays “not ready” until the real server proves it.</h2>
+        <ul class="checks">
+          <li>clean bootstrap and guided first install on the dedicated server;</li>
+          <li>live Telegram conversation through real capable and economy model routes;</li>
+          <li>reboot verification, backup health, encrypted restore drill, update, and rollback;</li>
+          <li>one owner-approved Codex/self-change deployment with retained evidence;</li>
+          <li>dogfooding evidence that Melli is useful as a continuing relationship, not a fixture.</li>
+        </ul>
+      </section>
+
+      <section class="links" aria-labelledby="docs">
+        <h2 id="docs">Current documents</h2>
+        <a href="https://github.com/melloa-project/melloa/blob/main/PRODUCT_DIRECTION.md">
+          Product direction
+        </a>
+        <a href="https://github.com/melloa-project/melloa/blob/main/docs/trust-boundaries.md">
+          Trust boundaries
+        </a>
+        <a href="https://github.com/melloa-project/melloa/blob/main/infra/server/README.md">
+          Server engineering notes
+        </a>
+        <a href="https://github.com/melloa-project/melloa">Repository</a>
+      </section>
+    </main>
+  </body>
+</html>
