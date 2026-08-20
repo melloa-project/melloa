@@ -12,17 +12,65 @@ readonly ORIGIN=https://github.com/melloa-project/melloa.git
 readonly BUILD_CA="$WORKDIR/build-ca.pem"
 
 cleanup() {
-  if [[ "$WORKDIR" == /tmp/melloa-update-rollback-test.* && -d "$WORKDIR" ]]; then
-    rm -rf -- "$WORKDIR"
+  local status=$?
+  if ((status != 0)); then
+    for output in \
+      "$WORKDIR/update-output.log" \
+      "$WORKDIR/update-activation-failed.log" \
+      "$WORKDIR/update-verification-failed.log" \
+      "$WORKDIR/rollback-output.log" \
+      "$WORKDIR/rollback-verification-failed.log"; do
+      if [[ -f "$output" ]]; then
+        echo "--- $(basename "$output") ---" >&2
+        sed -n '1,200p' "$output" >&2 || true
+      fi
+    done
+    if [[ -f "$LOG" ]]; then
+      echo "--- fake command log ---" >&2
+      sed -n '1,240p' "$LOG" >&2 || true
+    fi
   fi
+  if [[ "$WORKDIR" == /tmp/melloa-update-rollback-test.* && -d "$WORKDIR" ]]; then
+    if ((EUID == 0)); then
+      rm -rf -- "$WORKDIR"
+    else
+      sudo -n rm -rf -- "$WORKDIR" 2>/dev/null || rm -rf -- "$WORKDIR"
+    fi
+  fi
+  exit "$status"
 }
 trap cleanup EXIT HUP INT TERM
+
+run_server_wrapper() {
+  local -a environment=(
+    "PATH=$FAKEBIN:$PATH"
+    "MELLOA_UPDATE_ROLLBACK_FAKE_LOG=$LOG"
+  )
+  for name in \
+    MELLOA_UPDATE_ACTIVATE_BIN \
+    MELLOA_UPDATE_VERIFY_BIN \
+    MELLOA_ROLLBACK_VERIFY_BIN; do
+    if [[ -n "${!name+x}" ]]; then
+      environment+=("$name=${!name}")
+    fi
+  done
+  if ((EUID == 0)); then
+    env "${environment[@]}" "$@"
+  else
+    command -v sudo >/dev/null 2>&1 ||
+      { echo "update/rollback wrapper test requires root or passwordless sudo" >&2; return 2; }
+    sudo -n true >/dev/null 2>&1 ||
+      { echo "update/rollback wrapper test requires root or passwordless sudo" >&2; return 2; }
+    sudo -n env "${environment[@]}" "$@"
+  fi
+}
 
 install -d -m 0700 \
   "$SOURCE/.git" \
   "$SOURCE/infra/server" \
   "$SOURCE/tools" \
   "$FAKEBIN"
+install -m 0666 /dev/null "$LOG"
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'update-ca-test' \
   '-----END CERTIFICATE-----' >"$BUILD_CA"
 
@@ -110,11 +158,10 @@ esac
 EOF
 chmod +x "$FAKEBIN/git"
 
-PATH="$FAKEBIN:$PATH" \
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
 MELLOA_UPDATE_ACTIVATE_BIN="$WORKDIR/activate" \
 MELLOA_UPDATE_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
-  "$ROOT/infra/server/update.sh" \
+  run_server_wrapper "$ROOT/infra/server/update.sh" \
     --source "$SOURCE" \
     --origin "$ORIGIN" \
     --ca-file "$BUILD_CA" \
@@ -128,11 +175,10 @@ grep --fixed-strings --quiet "verify --source $SOURCE" "$LOG"
 grep --fixed-strings --quiet "Server update finished" "$WORKDIR/update-output.log"
 
 set +e
-PATH="$FAKEBIN:$PATH" \
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
 MELLOA_UPDATE_ACTIVATE_BIN="$WORKDIR/activate-fail" \
 MELLOA_UPDATE_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
-  "$ROOT/infra/server/update.sh" \
+  run_server_wrapper "$ROOT/infra/server/update.sh" \
     --source "$SOURCE" \
     --origin "$ORIGIN" \
     --ca-file "$BUILD_CA" \
@@ -145,11 +191,10 @@ grep --fixed-strings --quiet \
   "$WORKDIR/update-activation-failed.log"
 
 set +e
-PATH="$FAKEBIN:$PATH" \
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
 MELLOA_UPDATE_ACTIVATE_BIN="$WORKDIR/activate" \
 MELLOA_UPDATE_VERIFY_BIN="$WORKDIR/verify-fail" \
-  "$ROOT/infra/server/update.sh" \
+  run_server_wrapper "$ROOT/infra/server/update.sh" \
     --source "$SOURCE" \
     --origin "$ORIGIN" \
     --ca-file "$BUILD_CA" \
@@ -161,10 +206,9 @@ grep --fixed-strings --quiet \
   "Server update failed: owner verification failed after update; run sudo /usr/local/libexec/melloa/verify-owner-journey" \
   "$WORKDIR/update-verification-failed.log"
 
-PATH="$FAKEBIN:$PATH" \
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
 MELLOA_ROLLBACK_VERIFY_BIN="$WORKDIR/verify-owner-journey" \
-  "$ROOT/infra/server/rollback.sh" \
+  run_server_wrapper "$ROOT/infra/server/rollback.sh" \
     --source "$SOURCE" \
     >"$WORKDIR/rollback-output.log" 2>&1
 
@@ -174,10 +218,9 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet "Server rollback finished" "$WORKDIR/rollback-output.log"
 
 set +e
-PATH="$FAKEBIN:$PATH" \
 MELLOA_UPDATE_ROLLBACK_FAKE_LOG="$LOG" \
 MELLOA_ROLLBACK_VERIFY_BIN="$WORKDIR/verify-fail" \
-  "$ROOT/infra/server/rollback.sh" \
+  run_server_wrapper "$ROOT/infra/server/rollback.sh" \
     --source "$SOURCE" \
     >"$WORKDIR/rollback-verification-failed.log" 2>&1
 status=$?
