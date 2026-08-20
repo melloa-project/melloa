@@ -1,9 +1,12 @@
 # First-owner server deployment path
 
-This is the canonical owner-facing path for the first dedicated home-server deployment attempt. It
-does not change the repository readiness banner by itself: the path still needs to pass on the real
-server, survive reboot, prove recovery, and be dogfooded before the root README can honestly say
-ready.
+This is the canonical owner-facing path for the first dedicated home-server deployment. Follow it on
+the real server and keep the evidence it asks for: first Telegram conversation, bounded self-change,
+reboot verification, restore drill, update/rollback, and dogfooding.
+
+The current gap is evidence, not a second hidden installation path. If something fails, fix the
+reported cause, rerun the same step, and improve this guide or the setup scripts from the concrete
+failure.
 
 ## Direction in plain terms
 
@@ -22,10 +25,10 @@ The first deployment path is:
 8. enter two hosted OpenAI-compatible model routes:
    - `capable` for higher-quality replies;
    - `economy` for cheaper routine replies;
-9. enable the bounded self-change workers during setup when running the first real qualification;
+9. enable the bounded self-change workers during setup;
 10. verify one real Telegram conversation through the installed worker;
 11. complete one owner-approved `/change` proposal, approval, deploy, and rollback evidence path
-    before claiming owner-deployment readiness.
+    before treating the first server path as proven.
 
 For this first path, assume hosted model APIs. You do not need Ollama, a GPU, or a local model. A
 cheaper online provider is fine when it offers an owner-reviewed HTTPS OpenAI-compatible endpoint,
@@ -33,19 +36,18 @@ model ID, API style, bearer token, and token pricing. If a provider does not exp
 use a reviewed compatible router or defer it.
 
 Codex CLI is separate from normal Melli conversation. It is required for the bounded self-change
-qualification path: the owner asks for a public-safe source change from Telegram, reviews the exact
-diff, approves the exact proposal token, and the worker may then test, commit, push, and deploy only
-that retained diff. This is not arbitrary self-modification.
+path: the owner asks for a public-safe source change from Telegram, reviews the exact diff, approves
+the exact proposal token, and the worker may then test, commit, push, and deploy only that retained
+diff. This is not arbitrary self-modification.
 
 The currently implemented unattended Codex credential modes are:
 
 - `api-key`: a Codex/OpenAI API key read from a private file by the planner;
 - `local`: an explicitly installed `ollama` or `lmstudio` provider.
 
-Because the first deployment is hosted-provider-first and does not assume local model hardware, the
-first self-change qualification should use `api-key`. An interactive ChatGPT/Codex subscription
-login has not been qualified as unattended systemd service auth in this repository; do not treat it
-as supported until there is real deployment evidence or official documentation proving that mode.
+Because the first deployment is hosted-provider-first and does not assume local model hardware, use
+`api-key` for the first self-change proof. Interactive ChatGPT/Codex subscription login is not the
+supported unattended systemd service auth mode for this path.
 
 ## Fast path
 
@@ -67,10 +69,9 @@ cd ../melloa
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
-When setup asks whether to enable self-change workers, answer `yes` for the first real
-qualification run. On a real interactive server install, `yes` is the default. Choosing `no` can be
-useful for a conversation-only bring-up, but that run cannot qualify the repository as ready for
-owner deployment.
+When setup asks whether to enable self-change workers, answer `yes`. On a real interactive server
+install, `yes` is the default. Choosing `no` can be useful for a deliberate conversation-only
+bring-up, but that run skips the core self-change proof.
 
 The rest of this document explains what must be ready before those commands and how to prove the
 result afterward.
@@ -112,7 +113,7 @@ The guided setup prompts for these values and writes the private files for you:
   GBP token prices, and a per-request cost ceiling;
 - a fine-grained GitHub token for this repository with contents read/write access, used only by the
   self-change applier after exact owner approval;
-- a Codex/OpenAI API key for the self-change planner, unless you are deliberately qualifying a
+- a Codex/OpenAI API key for the self-change planner, unless you are deliberately exercising a
   separate local-provider path;
 - a high-entropy base64url restic password retained away from this server and the backup repository.
 
@@ -149,15 +150,15 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 The setup accepts only 32-128 base64url-safe characters for that password. If the server and backup
 repository are both lost, this retained password is what makes the encrypted backup restorable.
 
-The first owner conversation does not need Codex CLI, but owner-deployment readiness now does. For
-the first real qualification, bootstrap with `--self-change-tools` and choose `yes` when setup asks
-about self-change workers. If you choose `no`, activation stops and disables those units, and the
-units themselves are condition-gated so accidental manual starts are skipped; that is a
-conversation-only bring-up, not a ready-for-owner-deployment qualification.
+The first owner conversation does not need Codex CLI, but the first server path includes bounded
+self-change. Bootstrap with `--self-change-tools` and choose `yes` when setup asks about
+self-change workers. If you choose `no`, activation stops and disables those units, and the units
+themselves are condition-gated so accidental manual starts are skipped; that is a conversation-only
+bring-up.
 
 For unattended tests and staged dry-runs, setup still defaults self-change to disabled unless
 `MELLOA_SETUP_ENABLE_SELF_CHANGE=yes` is supplied. That noninteractive default is not the owner
-qualification path.
+server path.
 
 When setup asks for the Codex self-change planner credential mode, choose `api-key` for this hosted
 first path. The `local` mode is retained for separately tested `ollama` or `lmstudio` deployments,
@@ -200,8 +201,9 @@ Codex CLI. Go is needed only to create the public Guardian handoff used by this 
 path. Codex CLI is needed only by the self-change planner; it is not mounted into the normal
 conversation worker and does not receive private chat history.
 
-If you are doing a conversation-only bring-up and intentionally not qualifying self-change yet, you
-can omit `--self-change-tools`; do not use that run as readiness evidence.
+If you are doing a conversation-only bring-up and intentionally not exercising self-change yet, you
+can omit `--self-change-tools`; run the self-change proof before treating the server path as
+exercised.
 
 If the server needs an owner-approved outbound TLS proxy or private CA, pass its public PEM bundle
 to bootstrap with `--ca-file /absolute/path/to/ca.pem`, then pass the same flag to first install
@@ -257,7 +259,7 @@ uses to report and constrain model cost/disclosure boundaries.
 
 The self-change prompts are intentionally separate from the conversation model prompts:
 
-- answer `yes` to enabling self-change workers for the first real qualification run;
+- answer `yes` to enabling self-change workers;
 - enter the GitHub token only when setup asks for it;
 - choose `api-key` for the Codex self-change planner credential mode;
 - leave the optional Codex model override blank unless you have reviewed a specific model choice for
@@ -265,7 +267,7 @@ The self-change prompts are intentionally separate from the conversation model p
 - enter the Codex/OpenAI API key only when setup asks for the secret.
 
 Do not paste a ChatGPT/Codex subscription login artifact into these prompts. The current server path
-does not qualify interactive subscription login as unattended service auth.
+uses an API key for unattended planner service auth.
 
 Before asking for Telegram, model, or backup secrets, setup checks that the backup repository path
 is a plain absolute path and, on the real server, an explicit mount on storage independent from the
@@ -297,16 +299,15 @@ After the verifier passes, continue in the same Telegram chat:
 Then send the first ordinary message to Melli. Telegram is the normal owner interface; machine login
 should be rare after setup.
 
-Do not treat this as a completed deployment yet. The first real server still has to pass the
-self-change qualification below, the reboot verifier, restore drill, and a real later
-update/rollback path before the repository readiness banner can change.
+Treat the first conversation as the point where Melli is alive, not the end of the first deployment
+proof. Next, prove self-change, reboot recovery, restore, and update/rollback.
 
-## Self-change qualification
+## Self-change proof
 
-Before the repository can say it is ready for owner deployment, prove the bounded self-change loop
-on the real server. This should be a small, public-safe request in the current allowed source/test
-area, not a private-memory feature and not infrastructure, release, authentication, Guardian,
-Telegram binding, database, migration, or self-change-policy work.
+After the first Telegram conversation works, prove the bounded self-change loop on the real server.
+Use a small, public-safe request in the current allowed source/test area, not a private-memory
+feature and not infrastructure, release, authentication, Guardian, Telegram binding, database,
+migration, or self-change-policy work.
 
 In Telegram:
 
@@ -349,7 +350,7 @@ finishes, record:
 If self-change was disabled during first install, this section cannot pass. Treat that server as a
 conversation-only bring-up until you perform a reviewed reconfiguration path and rerun the evidence.
 
-## Private qualification record
+## Private first-run record
 
 Keep a short private record from the first real server run. Do not paste raw logs publicly; verifier
 output can contain the one-time Telegram phrases and provider errors can contain account-specific
@@ -385,8 +386,8 @@ A sufficient private record is:
 - after a later reviewed commit reaches `main`, the `maintenance_history` entries showing the
   verified update and rollback wrappers plus the final active owner-verifier receipt.
 
-This record is owner evidence for changing the repository readiness banner later; it is not a
-secret handoff file and Melloa does not need to read it.
+This record is owner evidence for deciding what to fix next and when the first-server path has been
+exercised end to end. It is not a secret handoff file and Melloa does not need to read it.
 
 ## After reboot or maintenance
 
@@ -408,8 +409,8 @@ backup remains visible until a complete backup and repository check succeeds.
 Keep the restic password outside both Melloa and the backup repository. Without that password, the
 encrypted backup repository cannot be restored.
 
-The detailed restore boundary is in [recovery](recovery.md). Before treating this path as ready for
-owner deployment, run the non-destructive server restore drill:
+The detailed restore boundary is in [recovery](recovery.md). During the first server proof, run the
+non-destructive server restore drill:
 
 ```bash
 sudo /usr/local/libexec/melloa/restore-drill
@@ -453,9 +454,9 @@ sudo /usr/local/libexec/melloa/verify-owner-journey
 
 Rollback proof requires a previous recorded release. Immediately after the first install there may
 not be one: if `main` has not advanced, `update` can refresh the active deployment but it cannot
-create a meaningful rollback target. For first-server qualification, run `update` after a later
-reviewed commit has reached `main`, verify Telegram through that updated release, and only then run
-the rollback wrapper below.
+create a meaningful rollback target. For the first server proof, run `update` after a later reviewed
+commit has reached `main`, verify Telegram through that updated release, and only then run the
+rollback wrapper below.
 
 To roll back after a bad update:
 

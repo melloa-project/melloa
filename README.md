@@ -62,7 +62,7 @@ credentials entered during setup. Codex CLI is used by the bounded owner-approve
 `/change propose`, reviewable diff, exact Telegram approval token, commit, push, deploy, and
 rollback evidence. The currently implemented unattended server credential modes are a Codex/OpenAI
 API key or an explicitly configured local provider; an interactive ChatGPT/Codex subscription login
-has not been qualified as server auth.
+is not supported as unattended server auth for this path.
 
 ## Current status
 
@@ -179,8 +179,8 @@ In the exact-owner private Telegram chat:
 Telegram bot chats are not end-to-end encrypted; "private" here means the bot accepts only the
 configured numeric owner and one-to-one chat, not Secret Chat-level secrecy.
 
-These mechanics are tested across PostgreSQL restart and recovery, but no real provider/server
-journey has yet qualified them for the readiness banner above.
+These mechanics are tested across PostgreSQL restart and recovery. The first real server run still
+needs live provider, backup, reboot, restore, update/rollback, and self-change evidence.
 
 ## What must remain true
 

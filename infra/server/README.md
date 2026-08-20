@@ -1,4 +1,4 @@
-# Persistent server runtime (engineering checkpoint)
+# Persistent server runtime technical reference
 
 Owner-facing installation instructions live in the canonical
 [first-owner server deployment path](../../docs/server-deployment.md). This file is the technical
@@ -7,14 +7,13 @@ reference for the checked-in server runtime and the lower-level commands behind 
 Read this file as implementation reference, not as the owner path. The intended first deployment is
 Telegram plus hosted OpenAI-compatible conversation routes. Local conversation models are not part
 of the guided first-owner setup. Codex CLI is not part of normal conversation, but the first real
-owner-deployment qualification now includes the bounded self-change workers and their evidence.
+server path includes the bounded self-change workers and their evidence.
 
-This is the container runtime intended to become Melloa's low-maintenance server path. The first
-qualification target is now one concrete host: a fresh Debian 13 (`trixie`) amd64 machine booted
-with systemd. It is **not yet an owner deployment instruction** and does not change the
-repository's `NOT READY` status. Real provider and off-device storage configuration, actual server
-installation, one owner-approved Codex/self-change deployment, reboot and recovery drills, and
-deployed dogfooding are still required.
+This is the container runtime behind Melloa's low-maintenance server path. The evidence target is
+one concrete host: a fresh Debian 13 (`trixie`) amd64 machine booted with systemd. Real provider and
+off-device storage configuration, actual server installation, one owner-approved Codex/self-change
+deployment, reboot and recovery drills, and deployed dogfooding are recorded through the canonical
+deployment guide.
 
 The runtime has five bounded roles:
 
@@ -82,7 +81,7 @@ installed as a new machine-wide trust root.
 
 `make server-bootstrap` repeats the toolchain installation in a disposable digest-pinned Debian 13
 container. That proves package and CLI compatibility, not systemd boot behavior; the real target
-still has to pass the live qualification before the root README can say ready.
+still has to pass the live first-server evidence path before the README evidence status changes.
 
 The pinned Codex CLI path uses a separate API key or an explicitly selected local provider. It does
 not claim that unattended service operation can rely on an interactive ChatGPT subscription login.
@@ -107,13 +106,13 @@ Before invoking it, have these owner-controlled values ready:
   repository.
 
 On a real interactive server install, the guided self-change prompt defaults to `yes` because the
-first owner-deployment qualification requires that evidence. For noninteractive tests and staged
-dry-runs, it still defaults to disabled unless `MELLOA_SETUP_ENABLE_SELF_CHANGE=yes` is supplied.
-For the first real owner-deployment qualification, prepare a fine-grained GitHub token for this
-repository with contents read/write access and a separate Codex/OpenAI API key for planning, then
-choose `api-key`. The `ollama`/`lmstudio` local provider mode remains available for a separately
-qualified local-model deployment, not for the hosted first path. First install refuses the enabled
-path on the real server unless bootstrap has prepared the pinned Codex CLI with
+first server path includes that evidence. For noninteractive tests and staged dry-runs, it still
+defaults to disabled unless `MELLOA_SETUP_ENABLE_SELF_CHANGE=yes` is supplied. For the first real
+server path, prepare a fine-grained GitHub token for this repository with contents read/write access
+and a separate Codex/OpenAI API key for planning, then choose `api-key`. The `ollama`/`lmstudio`
+local provider mode remains available for a separately tested local-model deployment, not for the
+hosted first path. First install refuses the enabled path on the real server unless bootstrap has
+prepared the pinned Codex CLI with
 `--self-change-tools`. When disabled, activation stops and disables the planner/applier units, and
 the units have an `ExecCondition` gate so an accidental manual start does not run the workers.
 
@@ -261,10 +260,9 @@ and only then enables the planner and applier if self-change workers were explic
 sudo infra/server/activate.sh --source "$PWD" --initialize-backup
 ```
 
-This remains an engineering command until the same sequence, a reboot, a real conversation, a
-restore drill, and an update/rollback drill have succeeded on the target server. Activation
-deliberately prints that the README is still not ready; a healthy synthetic or partial activation
-cannot change that contract.
+Use `first-install.sh` for the owner path. `activate.sh` remains the lower-level engineering
+transaction behind it; the complete server evidence path also includes a reboot, a real
+conversation, a restore drill, and an update/rollback drill on the target server.
 
 After a reboot or maintenance window, the owner-facing health proof is:
 
@@ -381,8 +379,7 @@ These are not owner-facing installation instructions. The disposable proof sends
 `SIGKILL` during the pre-activation window, confirms that the durable operation journal remains,
 invokes `recover`, and verifies both the previous release and owner data. The installed
 `melloa-release-recovery.service` is now ordered before the planner and applier, but that ordering
-still has to pass during the real dedicated-server reboot drill before the root README can change
-from `NOT READY`.
+still has to pass during the real dedicated-server reboot drill before treating it as live-proven.
 
 ## Mechanical verification
 

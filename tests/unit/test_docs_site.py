@@ -40,6 +40,25 @@ def test_readme_opens_with_first_owner_server_path() -> None:
     assert "Deployment readiness: NOT READY" not in opening
     assert "Do not deploy this repository" not in opening
     assert "disposable preview" not in opening
+    assert "readiness banner" not in readme
+
+
+def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
+    guide = (ROOT / "docs/server-deployment.md").read_text(encoding="utf-8")
+    opening = guide.split("## Supported starting point", 1)[0]
+    server_reference = (ROOT / "infra/server/README.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Follow it on\nthe real server" in opening
+    assert "The current gap is evidence, not a second hidden installation path" in opening
+    assert "Self-change proof" in guide
+    assert "readiness banner" not in guide
+    assert "NOT READY" not in guide
+    assert "not ready" not in guide.lower()
+    assert "Self-change qualification" not in guide
+    assert "NOT READY" not in server_reference
+    assert "readiness banner" not in server_reference
 
 
 def test_public_site_is_static_pages_source_not_mkdocs() -> None:
