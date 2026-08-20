@@ -106,6 +106,60 @@ require_private_file() {
   fi
 }
 
+backup_status_snapshot_id() {
+  local status_file="$1/backup-status.json"
+  if [[ -L "$status_file" ]]; then
+    fail "backup status receipt must not be a symlink"
+  fi
+  if [[ ! -f "$status_file" ]]; then
+    printf 'null'
+    return 0
+  fi
+  jq -er '
+    if .result == "success" and (.snapshot_id | test("^[0-9a-f]{64}$")) then
+      .snapshot_id
+    else
+      empty
+    end
+  ' "$status_file" 2>/dev/null || fail "backup status receipt is unavailable or invalid"
+}
+
+write_restore_drill_receipt() {
+  local backup_snapshot_id="$1"
+  local receipt_directory="$RUNTIME_STATE_DIR"
+  local receipt="$receipt_directory/restore-drill-status.json"
+  local temporary
+  [[ -d "$receipt_directory" && ! -L "$receipt_directory" && -w "$receipt_directory" ]] ||
+    fail "restore-drill receipt directory is unavailable"
+  temporary="$(mktemp "$receipt_directory/.restore-drill-status.XXXXXX")"
+  jq -n \
+    --arg drilled_at "$(date --utc '+%Y-%m-%dT%H:%M:%SZ')" \
+    --arg requested_snapshot "$SNAPSHOT" \
+    --arg backup_snapshot_id "$backup_snapshot_id" \
+    --arg source_revision "$SOURCE_REVISION" \
+    '{
+      contract_version: "1.0.0",
+      result: "success",
+      drilled_at: $drilled_at,
+      requested_snapshot: $requested_snapshot,
+      backup_status_snapshot_id: (
+        if $backup_snapshot_id == "null" then null else $backup_snapshot_id end
+      ),
+      source_revision: $source_revision,
+      proofs: {
+        migration_check: true,
+        owner_identity: true,
+        telegram_owner_binding: true,
+        telegram_conversation: true,
+        readonly_role_cannot_mutate: true
+      }
+    }' >"$temporary"
+  chmod 0600 "$temporary"
+  mv -- "$temporary" "$receipt"
+  sync -f "$receipt"
+  echo "Restore drill receipt updated: $receipt."
+}
+
 compose() {
   docker compose \
     --project-directory "$SOURCE" \
@@ -158,7 +212,7 @@ run_postgres() {
       "$@"
 }
 
-for command in awk chmod chown date docker findmnt install mktemp rm seq sleep stat; do
+for command in awk chmod chown date docker findmnt install jq mktemp rm seq sleep stat sync; do
   require_command "$command"
 done
 
@@ -183,6 +237,10 @@ readonly RUNTIME_GID="$(read_environment_value "$ENV_FILE" MELLOA_RUNTIME_GID)"
 readonly BACKUP_IMAGE="$(read_environment_value "$ENV_FILE" MELLOA_BACKUP_IMAGE)"
 docker image inspect "$BACKUP_IMAGE" >/dev/null ||
   fail "configured backup image is not available locally; run activation before the restore drill"
+readonly SOURCE_REVISION="$(read_environment_value "$ENV_FILE" MELLOA_SOURCE_REVISION)"
+[[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "source revision is invalid"
+readonly RUNTIME_STATE_DIR="$(read_environment_path "$ENV_FILE" MELLOA_RUNTIME_STATE_DIR)"
 readonly MIGRATION_PASSWORD_FILE="$(
   read_environment_path "$ENV_FILE" MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE
 )"
@@ -283,4 +341,5 @@ if run_postgres --command \
   >/dev/null 2>&1; then
   fail "restored database allowed melloa_readonly to mutate owner data"
 fi
+write_restore_drill_receipt "$(backup_status_snapshot_id "$RUNTIME_STATE_DIR")"
 echo "Encrypted restore drill passed using snapshot $SNAPSHOT."

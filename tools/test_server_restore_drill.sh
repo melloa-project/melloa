@@ -8,6 +8,8 @@ readonly FAKEBIN="$WORKDIR/fakebin"
 readonly LOG="$WORKDIR/commands.log"
 readonly STAGE="$WORKDIR/stage"
 readonly MIGRATION_PASSWORD='migration_RESTORE_DRILL_TEST_123456789012345678901234'
+readonly SOURCE_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+readonly SNAPSHOT=1111111111111111111111111111111111111111111111111111111111111111
 
 cleanup() {
   local status=$?
@@ -52,15 +54,30 @@ run_restore_drill() {
   fi
 }
 
-install -d -m 0700 "$TARGET/etc/melloa/private" "$TARGET/backup-repository" "$FAKEBIN"
+install -d -m 0700 \
+  "$TARGET/etc/melloa/private" \
+  "$TARGET/backup-repository" \
+  "$TARGET/runtime-state" \
+  "$FAKEBIN"
 install -m 0666 /dev/null "$LOG"
 install -m 0600 /dev/null "$TARGET/etc/melloa/private/postgres-migration-password"
 printf '%s\n' "$MIGRATION_PASSWORD" >"$TARGET/etc/melloa/private/postgres-migration-password"
+jq -n \
+  --arg snapshot "$SNAPSHOT" \
+  '{
+    contract_version: "1.0.0",
+    result: "success",
+    checked_at: "2026-08-20T02:00:00Z",
+    completed_at: "2026-08-20T02:00:01Z",
+    snapshot_id: $snapshot
+  }' >"$TARGET/runtime-state/backup-status.json"
 {
   printf 'MELLOA_COMPOSE_PROJECT_NAME=melloa-server\n'
   printf 'MELLOA_BACKUP_IMAGE=melloa-local/backup:test\n'
+  printf 'MELLOA_SOURCE_REVISION=%s\n' "$SOURCE_REVISION"
   printf 'MELLOA_RUNTIME_UID=10001\n'
   printf 'MELLOA_RUNTIME_GID=10001\n'
+  printf 'MELLOA_RUNTIME_STATE_DIR=%s\n' "$TARGET/runtime-state"
   printf 'MELLOA_STATE_SUBNET=172.30.37.0/28\n'
   printf 'MELLOA_DATABASE_ADDRESS=172.30.37.2\n'
   printf 'MELLOA_POSTGRES_MIGRATION_PASSWORD_FILE=%s\n' \
@@ -88,9 +105,19 @@ chmod +x "$FAKEBIN/chown"
 cat >"$FAKEBIN/mktemp" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$1" == -d && "$2" == /var/tmp/melloa-restore-drill.XXXXXX ]]
-install -d -m 0700 "$MELLOA_RESTORE_DRILL_FAKE_STAGE"
-printf '%s\n' "$MELLOA_RESTORE_DRILL_FAKE_STAGE"
+if [[ "$1" == -d && "$2" == /var/tmp/melloa-restore-drill.XXXXXX ]]; then
+  install -d -m 0700 "$MELLOA_RESTORE_DRILL_FAKE_STAGE"
+  printf '%s\n' "$MELLOA_RESTORE_DRILL_FAKE_STAGE"
+  exit 0
+fi
+if [[ "$1" == */.restore-drill-status.XXXXXX ]]; then
+  output="${1%XXXXXX}test"
+  install -m 0600 /dev/null "$output"
+  printf '%s\n' "$output"
+  exit 0
+fi
+echo "unexpected fake mktemp invocation: $*" >&2
+exit 64
 EOF
 chmod +x "$FAKEBIN/mktemp"
 
@@ -157,12 +184,46 @@ run_restore_drill \
   >"$WORKDIR/output.log" 2>&1
 
 grep --fixed-strings --quiet "Encrypted restore drill passed" "$WORKDIR/output.log"
+grep --fixed-strings --quiet "Restore drill receipt updated:" "$WORKDIR/output.log"
 grep --fixed-strings --quiet "run --rm --no-deps restore restore-database latest" "$LOG"
 grep --fixed-strings --quiet "run --rm --no-deps migrate migrate check" "$LOG"
 grep --fixed-strings --quiet "restored Telegram conversation proof is missing" "$LOG"
 grep --fixed-strings --quiet "has_table_privilege" "$LOG"
 if grep --fixed-strings --quiet "melloa-server --" "$LOG"; then
   echo "Restore drill used the active compose project" >&2
+  exit 1
+fi
+readonly RESTORE_RECEIPT="$TARGET/runtime-state/restore-drill-status.json"
+[[ -f "$RESTORE_RECEIPT" && ! -L "$RESTORE_RECEIPT" ]]
+[[ "$(stat --format='%a' "$RESTORE_RECEIPT")" == 600 ]]
+jq -e \
+  --arg revision "$SOURCE_REVISION" \
+  --arg snapshot "$SNAPSHOT" \
+  '{
+    contract_version,
+    result,
+    requested_snapshot,
+    backup_status_snapshot_id,
+    source_revision,
+    proofs
+  } == {
+    contract_version: "1.0.0",
+    result: "success",
+    requested_snapshot: "latest",
+    backup_status_snapshot_id: $snapshot,
+    source_revision: $revision,
+    proofs: {
+      migration_check: true,
+      owner_identity: true,
+      telegram_owner_binding: true,
+      telegram_conversation: true,
+      readonly_role_cannot_mutate: true
+    }
+  } and
+  (.drilled_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' \
+  "$RESTORE_RECEIPT" >/dev/null
+if grep --fixed-strings --quiet "$MIGRATION_PASSWORD" "$RESTORE_RECEIPT"; then
+  echo "Restore drill receipt exposed the migration password" >&2
   exit 1
 fi
 

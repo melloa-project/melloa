@@ -188,8 +188,8 @@ verification phrase or reply text:
 sudo jq . /var/lib/melloa/runtime-state/owner-verification-status.json
 ```
 
-For a fuller redacted snapshot of the installed release, backup receipt, latest owner verifier
-receipt, and recent release history, run:
+For a fuller redacted snapshot of the installed release, backup receipt, restore-drill receipt,
+latest owner verifier receipt, and recent release history, run:
 
 ```bash
 sudo /usr/local/libexec/melloa/qualification-record
@@ -205,7 +205,8 @@ A sufficient private record is:
 - the `/status` result after setup, including model route health and backup health;
 - the verifier receipt values after reboot when
   `sudo /usr/local/libexec/melloa/verify-owner-journey` passed;
-- the restore snapshot ID prefix printed by `sudo /usr/local/libexec/melloa/restore-drill`;
+- the restore-drill receipt values printed by
+  `sudo /usr/local/libexec/melloa/qualification-record`;
 - the verifier receipt values after active verification passed again after the restore drill;
 - after a later reviewed commit reaches `main`, the update revision, successful Telegram verifier,
   rollback result, and final active verification.
@@ -240,9 +241,11 @@ sudo /usr/local/libexec/melloa/restore-drill
 ```
 
 It restores the latest encrypted snapshot into a separate temporary Docker Compose project and
-database volume, runs migration check against that restored database, and removes the temporary
-project before exit. It does not stop or overwrite the active Melloa deployment. If it fails, fix
-the reported backup or migration issue and rerun the active owner verifier before continuing.
+database volume, runs migration check against that restored database, proves the restored owner
+identity, Telegram binding, conversation proof, and read-only role boundary, writes a redacted local
+receipt, and removes the temporary project before exit. It does not stop or overwrite the active
+Melloa deployment. If it fails, fix the reported backup or migration issue and rerun the active
+owner verifier before continuing.
 
 Then rerun the owner-facing verifier against the active deployment:
 

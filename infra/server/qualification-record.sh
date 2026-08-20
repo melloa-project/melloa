@@ -241,6 +241,55 @@ elif [[ -f "$BACKUP_STATUS_FILE" ]]; then
   backup_reason="$(jq -r '.reason_code // "none"' "$BACKUP_STATUS_FILE")"
 fi
 
+restore_drill_status=missing
+restore_drill_at=missing
+restore_drill_requested_snapshot=missing
+restore_drill_backup_snapshot_prefix=missing
+restore_drill_source_revision=missing
+restore_drill_migration_check=missing
+restore_drill_owner_identity=missing
+restore_drill_telegram_owner_binding=missing
+restore_drill_telegram_conversation=missing
+restore_drill_readonly_role=missing
+readonly RESTORE_DRILL_STATUS_FILE="$(destination "$RUNTIME_STATE_DIR/restore-drill-status.json")"
+if [[ -L "$RESTORE_DRILL_STATUS_FILE" ]]; then
+  fail "restore-drill receipt must not be a symlink"
+elif [[ -f "$RESTORE_DRILL_STATUS_FILE" ]]; then
+  jq -e '
+    .contract_version == "1.0.0" and
+    .result == "success" and
+    (.drilled_at | type == "string" and length > 0) and
+    (.requested_snapshot | type == "string" and test("^(latest|[0-9a-f]{8,64})$")) and
+    (.backup_status_snapshot_id == null or
+      (.backup_status_snapshot_id | type == "string" and test("^[0-9a-f]{64}$"))) and
+    (.source_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+    .proofs.migration_check == true and
+    .proofs.owner_identity == true and
+    .proofs.telegram_owner_binding == true and
+    .proofs.telegram_conversation == true and
+    .proofs.readonly_role_cannot_mutate == true
+  ' "$RESTORE_DRILL_STATUS_FILE" >/dev/null ||
+    fail "restore-drill receipt is invalid"
+  restore_drill_status=present
+  restore_drill_at="$(jq -er .drilled_at "$RESTORE_DRILL_STATUS_FILE")"
+  restore_drill_requested_snapshot="$(jq -er .requested_snapshot "$RESTORE_DRILL_STATUS_FILE")"
+  restore_drill_backup_snapshot_prefix="$(
+    snapshot_prefix "$(jq -r '.backup_status_snapshot_id // ""' "$RESTORE_DRILL_STATUS_FILE")"
+  )"
+  restore_drill_source_revision="$(jq -er .source_revision "$RESTORE_DRILL_STATUS_FILE")"
+  restore_drill_migration_check="$(jq -er .proofs.migration_check "$RESTORE_DRILL_STATUS_FILE")"
+  restore_drill_owner_identity="$(jq -er .proofs.owner_identity "$RESTORE_DRILL_STATUS_FILE")"
+  restore_drill_telegram_owner_binding="$(
+    jq -er .proofs.telegram_owner_binding "$RESTORE_DRILL_STATUS_FILE"
+  )"
+  restore_drill_telegram_conversation="$(
+    jq -er .proofs.telegram_conversation "$RESTORE_DRILL_STATUS_FILE"
+  )"
+  restore_drill_readonly_role="$(
+    jq -er .proofs.readonly_role_cannot_mutate "$RESTORE_DRILL_STATUS_FILE"
+  )"
+fi
+
 verification_status=missing
 verification_at=missing
 verification_revision=missing
@@ -300,6 +349,18 @@ backup:
   snapshot_prefix: $backup_snapshot_prefix
   reason: $backup_reason
 
+restore_drill:
+  status: $restore_drill_status
+  drilled_at: $restore_drill_at
+  source_revision: $restore_drill_source_revision
+  requested_snapshot: $restore_drill_requested_snapshot
+  backup_status_snapshot_prefix: $restore_drill_backup_snapshot_prefix
+  migration_check: $restore_drill_migration_check
+  owner_identity: $restore_drill_owner_identity
+  telegram_owner_binding: $restore_drill_telegram_owner_binding
+  telegram_conversation: $restore_drill_telegram_conversation
+  readonly_role_cannot_mutate: $restore_drill_readonly_role
+
 owner_verification:
   status: $verification_status
   verified_at: $verification_at
@@ -342,5 +403,6 @@ cat <<'EOF'
 notes:
   - Keep this output private with the deployment notes; it intentionally omits secrets.
   - If owner_verification.status is missing, run: sudo /usr/local/libexec/melloa/verify-owner-journey
+  - If restore_drill.status is missing, run: sudo /usr/local/libexec/melloa/restore-drill
   - If backup.result is not success, inspect /status and rerun the backup or restore-drill path.
 EOF

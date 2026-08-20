@@ -99,6 +99,24 @@ jq -n \
     backup_snapshot_id: $snapshot,
     response_message_id: "message_reply_00000000000000000000000000000001"
   }' >"$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json"
+jq -n \
+  --arg revision "$SOURCE_REVISION" \
+  --arg snapshot "$SNAPSHOT" \
+  '{
+    contract_version: "1.0.0",
+    result: "success",
+    drilled_at: "2026-08-20T02:30:00Z",
+    requested_snapshot: "latest",
+    backup_status_snapshot_id: $snapshot,
+    source_revision: $revision,
+    proofs: {
+      migration_check: true,
+      owner_identity: true,
+      telegram_owner_binding: true,
+      telegram_conversation: true,
+      readonly_role_cannot_mutate: true
+    }
+  }' >"$TARGET/var/lib/melloa/runtime-state/restore-drill-status.json"
 jq -cn \
   --arg revision "$SOURCE_REVISION" \
   --arg snapshot "$SNAPSHOT" \
@@ -123,6 +141,11 @@ grep --fixed-strings --quiet "backup_mount_check: not_checked_under_staging_root
 grep --fixed-strings --quiet "active_revision: $SOURCE_REVISION" "$OUTPUT"
 grep --fixed-strings --quiet "previous_revision: $PREVIOUS_REVISION" "$OUTPUT"
 grep --fixed-strings --quiet "snapshot_prefix: ${SNAPSHOT:0:12}" "$OUTPUT"
+grep --fixed-strings --quiet "restore_drill:" "$OUTPUT"
+grep --fixed-strings --quiet "drilled_at: 2026-08-20T02:30:00Z" "$OUTPUT"
+grep --fixed-strings --quiet "requested_snapshot: latest" "$OUTPUT"
+grep --fixed-strings --quiet "telegram_conversation: true" "$OUTPUT"
+grep --fixed-strings --quiet "readonly_role_cannot_mutate: true" "$OUTPUT"
 grep --fixed-strings --quiet "verified_at: 2026-08-20T03:00:00Z" "$OUTPUT"
 grep --fixed-strings --quiet "deploy succeeded revision=${SOURCE_REVISION:0:12}" "$OUTPUT"
 grep --fixed-strings --quiet "Keep this output private" "$OUTPUT"
@@ -138,5 +161,13 @@ rm -f "$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json"
   >"$OUTPUT"
 grep --fixed-strings --quiet "status: missing" "$OUTPUT"
 grep --fixed-strings --quiet "run: sudo /usr/local/libexec/melloa/verify-owner-journey" "$OUTPUT"
+
+rm -f "$TARGET/var/lib/melloa/runtime-state/restore-drill-status.json"
+"$ROOT/infra/server/qualification-record.sh" \
+  --source "$ROOT" \
+  --root "$TARGET" \
+  >"$OUTPUT"
+grep --fixed-strings --quiet "restore_drill:" "$OUTPUT"
+grep --fixed-strings --quiet "run: sudo /usr/local/libexec/melloa/restore-drill" "$OUTPUT"
 
 echo "Server qualification record checks passed."

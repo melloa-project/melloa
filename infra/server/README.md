@@ -270,7 +270,8 @@ On success it also updates `/var/lib/melloa/runtime-state/owner-verification-sta
 redacted receipt containing the verification time, active revision, backup snapshot ID, and internal
 reply message ID; it deliberately does not store the Telegram verification phrase or reply text.
 `/usr/local/libexec/melloa/qualification-record` prints that receipt together with the installed
-revision, backup receipt, backup mount status, and recent release history for private owner notes.
+revision, backup receipt, restore-drill receipt, backup mount status, and recent release history
+for private owner notes.
 
 For a non-destructive restore proof against the installed encrypted repository:
 
@@ -279,7 +280,9 @@ sudo /usr/local/libexec/melloa/restore-drill
 ```
 
 The drill restores into a separate temporary Compose project and volume, runs migration check, and
-removes the temporary project. It does not stop or overwrite the active deployment.
+proves the restored owner identity, Telegram binding, conversation proof, and read-only role
+boundary before writing `/var/lib/melloa/runtime-state/restore-drill-status.json` and removing the
+temporary project. It does not stop or overwrite the active deployment.
 
 The backup database password is a third independent secret. The scheduler converts it to a
 mode-`0600` `.pgpass` in container tmpfs, so the password does not appear in process arguments or
