@@ -28,6 +28,20 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
         assert claim not in homepage
 
 
+def test_readme_opens_with_first_owner_server_path() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    opening = readme.split("## Current status", 1)[0]
+
+    assert "## Start here: first-owner home server" in opening
+    assert "https://melloa-project.github.io/melloa/deploy/" in opening
+    assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in opening
+    assert 'sudo infra/server/first-install.sh --source "$PWD"' in opening
+    assert "## Evidence status" in opening
+    assert "Deployment readiness: NOT READY" not in opening
+    assert "Do not deploy this repository" not in opening
+    assert "disposable preview" not in opening
+
+
 def test_public_site_is_static_pages_source_not_mkdocs() -> None:
     workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
     config = (DOCS_SITE / "astro.config.mjs").read_text(encoding="utf-8")

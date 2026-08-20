@@ -4,21 +4,58 @@ Melloa is the private, owner-controlled home of Melli: a persistent AI partner d
 person better through time, remember useful history, follow through, and remain continuous when the
 underlying model changes.
 
-> **Deployment readiness: NOT READY**
->
-> Do not deploy this repository as your persistent Melli yet. The runnable path below is a disposable
-> engineering baseline, not the low-maintenance server product described in “What ready means.”
+## Start here: first-owner home server
 
-If your immediate goal is the dedicated home-server path, start with the
-[first-owner server deployment guide](docs/server-deployment.md), not the disposable preview below.
-The current intended first-server shape is:
+If your goal is to run Melli on a dedicated home server, use the public setup path:
+
+- [Run Melloa on a home server](https://melloa-project.github.io/melloa/)
+- [Deploy the server](https://melloa-project.github.io/melloa/deploy/)
+- [Repository server deployment guide](docs/server-deployment.md)
+
+The current first-server path is:
 
 - Debian server, not the owner's laptop;
 - Telegram bot chat as the normal owner interface;
 - two hosted OpenAI-compatible conversation routes: one capable route and one cheaper economy route;
-- no expected local model or GPU setup for the first deployment;
-- bounded Codex/self-change workers explicitly enabled and proven before this repository can be
-  called ready for owner deployment.
+- no expected local model or GPU setup;
+- automatic exact-owner Telegram pairing during guided setup;
+- encrypted off-device backup setup and restore proof;
+- bounded Codex/self-change workers enabled as part of the first server path.
+
+Command spine:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes --no-install-recommends ca-certificates git
+git clone https://github.com/melloa-project/melloa.git
+cd melloa
+sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+
+cd ..
+git clone https://github.com/melloa-project/melloa-guardian.git
+cd melloa-guardian
+make preview-state
+cd ../melloa
+
+sudo infra/server/first-install.sh --source "$PWD"
+```
+
+Before running it, have a mounted off-device backup path, a dedicated Telegram bot token, two hosted
+model route choices with reviewed pricing, a restic password retained away from the server, a GitHub
+token for this repository, and a Codex/OpenAI API key for the bounded planner worker. The public
+deploy page explains each input and the exact setup prompts.
+
+## Evidence status
+
+The path is implemented and covered by local/CI checks, including bootstrap smoke tests, guided setup
+tests, Telegram verifier tests, backup/restore wrapper tests, Pages deployment, and visual smoke
+checks. The remaining evidence is the owner's real dedicated-server run: live provider choices,
+off-device backup retention, first Telegram conversation, reboot verification, restore drill,
+owner-approved self-change deployment, update/rollback proof, and dogfooding.
+
+That distinction is important, but it should not block the first manual deployment attempt. The
+current job is to follow the guide, capture the concrete failures, and use the bounded self-change
+loop to improve the path.
 
 Codex CLI is not the normal conversation model route. The conversation path uses model-provider API
 credentials entered during setup. Codex CLI is used by the bounded owner-approved self-change path:
@@ -29,69 +66,41 @@ has not been qualified as server auth.
 
 ## Current status
 
-Melloa is in an owner-experience reset. The existing `v0.2.0` preview proves private conversation,
-model disclosure, owner-data controls, and consumption of a signed read-only Guardian projection,
-but it is not yet a compelling daily-use partner. The preview does not prove host isolation or
-timely Guardian enforcement. Without an explicitly configured model, conversation is unavailable;
-the preview no longer substitutes a fixture response for Melli thinking.
-
-The active work is subtractive: collapse the operations-console experience, remove speculative
-architecture and preview machinery, and make conversation with Melli the unmistakable product.
-There is no milestone implementation queue and no compatibility promise for preview behavior.
+Melloa is in an owner-experience reset. The active work is subtractive: collapse the
+operations-console experience, remove speculative architecture and preview machinery, and make
+conversation with Melli the unmistakable product. There is no milestone implementation queue and no
+compatibility promise for preview behavior.
 
 The main branch now has an exact-owner Telegram long-polling path with a PostgreSQL cursor,
 canonical conversation continuity, restart-safe reply delivery, and explicit `capable`/`economy`
 model routing. The selected route and actual model destination survive retries and are retained with
-the conversation; Melloa never silently falls back across routes. A generic, unexposed container
-runtime now gates startup on migrations and recovers from application or PostgreSQL restarts, but
-it remains an [engineering checkpoint](infra/server/README.md), not a qualified owner deployment
-path. It now streams automatic encrypted snapshots into an owner-mounted repository, reports backup
-health through `/status`, and proves a clean restore of representative owner state. A release tool
-now builds reviewed commits, holds Telegram and model work until atomic activation, takes an exact
-pre-deploy snapshot, recovers interrupted or unhealthy candidates, and supports schema-checked
-rollback. Its durable release journal now also survives an uncatchable process termination and
-recovers through an installed boot-reconciliation unit. A Debian 13 bootstrap and guided
-first-install wrapper now compose the prerequisite installation, private configuration prompts,
-generated model route JSON, exact Telegram owner pairing, backup initialization, activation, and a
-database-backed first Telegram conversation proof into one server path. This is still not a
-qualified owner deployment: real provider selections, a real off-device repository and recovery-key
-retention, live server installation, reboot/recovery drills, one owner-approved Codex/self-change
-deployment, update/rollback evidence, and deployed dogfooding remain incomplete.
+the conversation; Melloa never silently falls back across routes. The server runtime gates startup
+on migrations, restarts cleanly after application or PostgreSQL failure, streams encrypted snapshots
+into an owner-mounted repository, reports backup health through `/status`, and has restore-drill,
+update, rollback, and boot-reconciliation wrappers. A Debian 13 bootstrap and guided first-install
+wrapper now compose prerequisite installation, private configuration prompts, generated model route
+JSON, exact Telegram owner pairing, backup initialization, activation, and a database-backed first
+Telegram conversation proof into one server path.
 
 Read [the current product direction](PRODUCT_DIRECTION.md) before treating any existing code or test
 as a requirement.
-
-The current first-owner server deployment path is the
-[server deployment guide](docs/server-deployment.md). It is intentionally still a qualification path,
-not a readiness claim, until it has succeeded on the real dedicated server with reboot, recovery,
-update/rollback, and dogfooding evidence.
 
 The public project website is a Starlight site in [docs-site](docs-site), deployed by the Pages
 workflow. It is the owner-facing setup path; the old MkDocs architecture bundle is not active
 guidance.
 
-## What “ready” means
+## What the first real server run must prove
 
-This banner will change to **READY FOR OWNER DEPLOYMENT** only when this README also provides one
-tested server installation and recovery path that:
+The first manual server deployment should produce evidence that:
 
 - runs Melli persistently, survives reboots, restarts cleanly, and can roll back a failed release;
 - gives the owner a simple private Telegram chat as the normal interface;
-- supports deliberate routing across OpenAI/Codex-capable workflows and configurable cheaper or
-  open models without pretending one model is Melli;
-- proves the bounded owner-approved Codex self-change loop on the real server: explicit public-safe
-  request, retained proposal diff, exact Telegram approval, verified commit/push/deploy, and a
-  rollback path;
+- supports deliberate routing across capable and cheaper hosted model routes without pretending one
+  model is Melli;
+- proves the bounded owner-approved Codex self-change loop: explicit public-safe request, retained
+  proposal diff, exact Telegram approval, verified commit/push/deploy, and rollback path;
 - needs machine login only for rare maintenance and makes failures visible from the owner interface;
 - keeps a controlled, incremental path for connecting more owner services and data later.
-
-Until every item is exercised as a real owner journey on a deployed machine, Melloa is not ready in
-the sense used by this project or this README.
-
-The banner at the top of this README is the authoritative answer. When the system is ready, it will
-say **READY FOR OWNER DEPLOYMENT** and this README will contain the tested installation command,
-first Telegram conversation, update, rollback, and recovery journey. If it still says `NOT READY`,
-there is no supported persistent deployment to infer from lower-level engineering notes.
 
 ## Disposable local preview, not server setup
 
@@ -167,7 +176,7 @@ In the exact-owner private Telegram chat:
 - `/think …` uses the capable route once without changing the saved route;
 - `/status` reports the selected route and health of both configured targets.
 
-Telegram bot chats are not end-to-end encrypted; “private” here means the bot accepts only the
+Telegram bot chats are not end-to-end encrypted; "private" here means the bot accepts only the
 configured numeric owner and one-to-one chat, not Secret Chat-level secrecy.
 
 These mechanics are tested across PostgreSQL restart and recovery, but no real provider/server

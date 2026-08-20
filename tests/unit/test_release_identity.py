@@ -61,8 +61,13 @@ def test_repository_package_metadata_matches_canonical_release() -> None:
     }
 
 
-def test_readme_keeps_owner_deployment_readiness_explicit() -> None:
+def test_readme_keeps_owner_deployment_evidence_explicit() -> None:
     readme = (_PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    opening = readme.split("## Current status", 1)[0]
 
-    assert readme.count("> **Deployment readiness: NOT READY**") == 1
-    assert "> **Deployment readiness: READY FOR OWNER DEPLOYMENT**" not in readme
+    assert "## Start here: first-owner home server" in opening
+    assert "## Evidence status" in opening
+    assert "remaining evidence is the owner's real dedicated-server run" in opening
+    assert "first Telegram conversation" in opening
+    assert "owner-approved self-change deployment" in opening
+    assert "READY FOR OWNER DEPLOYMENT" not in readme
