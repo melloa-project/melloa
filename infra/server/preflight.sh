@@ -13,8 +13,10 @@ readonly TOOLCHAIN_HELPERS="$ROOT/infra/server/toolchain.sh"
 source "$TOOLCHAIN_HELPERS"
 readonly MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain
 readonly MELLOA_TOOLCHAIN_BIN="$MELLOA_TOOLCHAIN_DIR/bin"
+readonly MELLOA_HOST_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 readonly MELLOA_RUNTIME_PATH="$(melloa_runtime_path "$MELLOA_TOOLCHAIN_BIN")"
-export PATH="$MELLOA_RUNTIME_PATH"
+# Do not execute a pre-existing private toolchain before its root-ownership checks below.
+export PATH="$MELLOA_HOST_PATH"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"
 INSTALLED=false
@@ -77,6 +79,20 @@ EOF
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command is unavailable: $1"
+}
+
+verify_toolchain_layout() {
+  local mode
+  local path
+  for path in /opt/melloa "$MELLOA_TOOLCHAIN_DIR" "$MELLOA_TOOLCHAIN_BIN"; do
+    [[ -d "$path" && ! -L "$path" ]] ||
+      fail "Melloa toolchain path is unsafe: $path"
+    [[ "$(stat --format='%u:%g' "$path")" == 0:0 ]] ||
+      fail "Melloa toolchain path is not root-owned: $path"
+    mode="$(stat --format='%a' "$path")"
+    (((8#$mode & 0022) == 0)) ||
+      fail "Melloa toolchain path is writable by non-root users: $path"
+  done
 }
 
 apply_ca_file() {
@@ -196,6 +212,9 @@ source "$TOOLCHAIN_LOCK"
 readonly MELLOA_DOCKER_COMPOSE_MIN_VERSION MELLOA_PYTHON_MIN_VERSION MELLOA_PYTHON_VERSION
 readonly MELLOA_NODE_MIN_VERSION MELLOA_NODE_VERSION MELLOA_NPM_MIN_VERSION
 readonly MELLOA_GO_MIN_VERSION MELLOA_UV_MIN_VERSION MELLOA_CODEX_CLI_VERSION
+
+verify_toolchain_layout
+export PATH="$MELLOA_RUNTIME_PATH"
 
 for command in \
   awk basename bash bwrap chown docker find findmnt getent git grep groupadd head id install \

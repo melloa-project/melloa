@@ -15,7 +15,8 @@ readonly MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain
 readonly MELLOA_TOOLCHAIN_BIN="$MELLOA_TOOLCHAIN_DIR/bin"
 readonly MELLOA_HOST_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 readonly MELLOA_RUNTIME_PATH="$(melloa_runtime_path "$MELLOA_TOOLCHAIN_BIN")"
-export PATH="$MELLOA_RUNTIME_PATH"
+# Do not execute a pre-existing private toolchain before its root-ownership checks below.
+export PATH="$MELLOA_HOST_PATH"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"
 CHECK_ONLY=false
@@ -257,8 +258,21 @@ if [[ -z "${no_proxy:-}" && -n "${NO_PROXY:-}" ]]; then
   export no_proxy="$NO_PROXY"
 fi
 
-ensure_toolchain_layout() {
+verify_toolchain_layout() {
   local mode
+  local path
+  for path in /opt/melloa "$MELLOA_TOOLCHAIN_DIR" "$MELLOA_TOOLCHAIN_BIN"; do
+    [[ -d "$path" && ! -L "$path" ]] ||
+      fail "Melloa toolchain path is unsafe: $path"
+    [[ "$(stat --format='%u:%g' "$path")" == 0:0 ]] ||
+      fail "Melloa toolchain path is not root-owned: $path"
+    mode="$(stat --format='%a' "$path")"
+    (((8#$mode & 0022) == 0)) ||
+      fail "Melloa toolchain path is writable by non-root users: $path"
+  done
+}
+
+ensure_toolchain_layout() {
   local path
   for path in /opt/melloa "$MELLOA_TOOLCHAIN_DIR" "$MELLOA_TOOLCHAIN_BIN"; do
     if [[ -e "$path" || -L "$path" ]]; then
@@ -266,12 +280,8 @@ ensure_toolchain_layout() {
         fail "Melloa toolchain path is unsafe: $path"
     fi
     install -d -m 0755 "$path"
-    [[ "$(stat --format='%u:%g' "$path")" == 0:0 ]] ||
-      fail "Melloa toolchain path is not root-owned: $path"
-    mode="$(stat --format='%a' "$path")"
-    (((8#$mode & 0022) == 0)) ||
-      fail "Melloa toolchain path is writable by non-root users: $path"
   done
+  verify_toolchain_layout
 }
 
 link_selected_tool() {
@@ -360,6 +370,8 @@ verify_toolchain() {
 
 if [[ "$CHECK_ONLY" == true ]]; then
   BOOTSTRAP_PHASE="verifying existing host toolchain"
+  verify_toolchain_layout
+  export PATH="$MELLOA_RUNTIME_PATH"
   verify_toolchain
   systemctl is-active --quiet docker.service || fail "Docker is not active"
   systemctl is-enabled --quiet docker.service || fail "Docker is not enabled for reboot"
@@ -722,6 +734,8 @@ select_uv
 select_python
 
 select_go
+
+export PATH="$MELLOA_RUNTIME_PATH"
 
 if [[ "$SELF_CHANGE_TOOLS" == true ]]; then
   BOOTSTRAP_PHASE="installing private Codex CLI"

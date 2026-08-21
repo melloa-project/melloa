@@ -52,6 +52,10 @@ grep --fixed-strings --quiet -- "UV_PYTHON_DOWNLOADS=manual" \
   "$BOOTSTRAP"
 grep --fixed-strings --quiet -- "MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain" \
   "$BOOTSTRAP"
+grep --fixed-strings --quiet -- 'export PATH="$MELLOA_HOST_PATH"' \
+  "$BOOTSTRAP"
+grep --fixed-strings --quiet -- "verify_toolchain_layout" \
+  "$BOOTSTRAP"
 grep --fixed-strings --quiet -- "melloa_version_at_least" \
   "$BOOTSTRAP"
 grep --fixed-strings --quiet -- "find_supported_host_python" \
@@ -189,24 +193,24 @@ run_newer_host_toolchain_smoke() {
         "#!/usr/bin/env bash" "exit 0"
       make_fake /usr/local/bin/node \
         "#!/usr/bin/env bash" \
-        "[[ \"${1:-}\" == --version ]] && printf \"%s\\n\" v24.1.2"
+        "[[ \"\${1:-}\" == --version ]] && printf \"%s\\n\" v24.1.2"
       make_fake /usr/local/bin/npm \
         "#!/usr/bin/env bash" \
-        "[[ \"${1:-}\" == --version ]] && printf \"%s\\n\" 11.3.0"
+        "[[ \"\${1:-}\" == --version ]] && printf \"%s\\n\" 11.3.0"
       make_fake /usr/local/bin/uv \
         "#!/usr/bin/env bash" \
-        "[[ \"${1:-}\" == --version ]] && printf \"%s\\n\" \"uv 0.13.0\""
+        "[[ \"\${1:-}\" == --version ]] && printf \"%s\\n\" \"uv 0.13.0\""
       make_fake /usr/local/bin/python3.14 \
         "#!/usr/bin/env bash" \
-        "[[ \"${1:-}\" == -c ]] && printf \"%s\\n\" 3.14.1"
+        "[[ \"\${1:-}\" == -c ]] && printf \"%s\\n\" 3.14.1"
       make_fake /usr/local/bin/go \
         "#!/usr/bin/env bash" \
-        "[[ \"${1:-}\" == env && \"${2:-}\" == GOVERSION ]] && printf \"%s\\n\" go1.28.0"
+        "[[ \"\${1:-}\" == env && \"\${2:-}\" == GOVERSION ]] && printf \"%s\\n\" go1.28.0"
       make_fake /usr/local/bin/gofmt \
         "#!/usr/bin/env bash" "exit 0"
       make_fake /usr/local/bin/docker \
         "#!/usr/bin/env bash" \
-        "if [[ \"${1:-}\" == compose && \"${2:-}\" == version ]]; then printf \"%s\\n\" v2.30.0; fi"
+        "if [[ \"\${1:-}\" == compose && \"\${2:-}\" == version ]]; then printf \"%s\\n\" v2.30.0; fi"
       for command in bwrap git jq make rsync; do
         make_fake "/usr/local/bin/$command" "#!/usr/bin/env bash" "exit 0"
       done

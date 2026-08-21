@@ -190,6 +190,10 @@ def test_server_runtime_uses_private_toolchain_paths() -> None:
 
     assert "MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain" in bootstrap
     assert "MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain" in preflight
+    assert 'export PATH="$MELLOA_HOST_PATH"' in bootstrap
+    assert 'export PATH="$MELLOA_HOST_PATH"' in preflight
+    assert "verify_toolchain_layout" in bootstrap
+    assert "verify_toolchain_layout" in preflight
     assert "/usr/local/bin/codex" not in bootstrap
     assert "/usr/local/bin/codex" not in preflight
     assert "CODEX_EXECUTABLE=/opt/melloa/toolchain/codex/bin/codex" in wrapper
