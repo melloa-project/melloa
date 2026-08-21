@@ -139,6 +139,14 @@ The guided setup prompts for these values and writes the private files for you:
 Do not paste secret values into shell commands. The setup prompts read them without echoing and
 stores them as owner-private files.
 
+From the checkout, print the same preparation list without starting setup:
+
+```bash
+infra/server/first-install.sh --print-input-checklist
+```
+
+That command does not require `sudo`, does not prompt for secrets, and does not install files.
+
 Use this worksheet before starting the server install:
 
 | Setup prompt area | What to have ready | What to enter for this first path |

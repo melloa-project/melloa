@@ -78,6 +78,14 @@ public files and offers them as the defaults. Press Enter at the Guardian prompt
 
 The installer asks for the owner-controlled values. Do not put these into Git.
 
+From the Melloa checkout, you can print the same preparation list without starting setup:
+
+```bash
+infra/server/first-install.sh --print-input-checklist
+```
+
+That command does not require `sudo`, does not prompt for secrets, and does not install files.
+
 | Input | What to prepare |
 | --- | --- |
 | Telegram bot token | Create one dedicated BotFather bot for Melli. Do not reuse a bot already connected to another service. |

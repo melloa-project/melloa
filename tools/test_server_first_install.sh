@@ -18,6 +18,7 @@ readonly BAD_LOCAL_TARGET="$WORKDIR/bad-local-target"
 readonly SELF_CHANGE_TARGET="$WORKDIR/self-change-target"
 readonly CA_RESUME_TARGET="$WORKDIR/ca-resume-target"
 readonly LOG="$WORKDIR/first-install.log"
+readonly CHECKLIST_LOG="$WORKDIR/first-install-checklist.log"
 readonly MOUNT_LOG="$WORKDIR/first-install-mount.log"
 readonly DEFAULT_MODEL_LOG="$WORKDIR/first-install-default-model.log"
 readonly RESUME_LOG="$WORKDIR/first-install-resume.log"
@@ -72,6 +73,26 @@ printf '%s\n' '-----BEGIN PUBLIC KEY-----' 'default-guardian-test' \
   '-----END PUBLIC KEY-----' >"$DEFAULT_GUARDIAN_ROOT/state/local-preview/public.pem"
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'first-install-ca-test' \
   '-----END CERTIFICATE-----' >"$INPUTS/build-ca.pem"
+
+"$ROOT/infra/server/first-install.sh" --print-input-checklist >"$CHECKLIST_LOG" 2>&1
+grep --fixed-strings --quiet "Melloa first-owner setup input checklist" "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  'sudo infra/server/first-install.sh --source "$PWD"' \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup." \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet "@BotFather" "$CHECKLIST_LOG"
+grep --fixed-strings --quiet "Default model IDs: capable gpt-5.6-terra; economy gpt-5.6-luna." \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet "Enable self-change for the first server proof." "$CHECKLIST_LOG"
+grep --fixed-strings --quiet "does not require root, prompt for secrets" \
+  <("$ROOT/infra/server/first-install.sh" --help 2>&1)
+if grep --fixed-strings --quiet "Melloa first-owner setup will now collect private values." \
+  "$CHECKLIST_LOG"; then
+  echo "First-install input checklist started the installer" >&2
+  exit 1
+fi
 
 MELLOA_TEST_GUARDIAN_ROOT="$DEFAULT_GUARDIAN_ROOT" \
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \

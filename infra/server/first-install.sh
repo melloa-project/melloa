@@ -10,14 +10,17 @@ ORIGIN="https://github.com/melloa-project/melloa.git"
 DESTINATION_ROOT=/
 SKIP_ACTIVATION=false
 SKIP_VERIFICATION=false
+PRINT_INPUT_CHECKLIST=false
 STAGE=""
 CA_FILE=""
 
 usage() {
+  local status="${1:-2}"
   cat >&2 <<'EOF'
 Usage: infra/server/first-install.sh [--source PATH] [--origin HTTPS_URL] [--ca-file PATH]
                                      [--root PATH] [--skip-activation]
                                      [--skip-verification]
+       infra/server/first-install.sh --print-input-checklist
 
 Runs the reviewed first-owner server setup:
   1. install immutable host assets;
@@ -31,8 +34,54 @@ Runs the reviewed first-owner server setup:
 
 Secret values are accepted only through prompts in normal use. Environment answers exist to test
 the setup path against a staging root and are not documented as an owner secret-passing interface.
+
+Use --print-input-checklist before setup to see the owner-controlled values to prepare. That mode
+does not require root, prompt for secrets, install files, or contact external services.
 EOF
-  exit 2
+  exit "$status"
+}
+
+print_input_checklist() {
+  cat <<'EOF'
+Melloa first-owner setup input checklist
+
+Prepare these owner-controlled values before running:
+  sudo infra/server/first-install.sh --source "$PWD"
+
+Public paths:
+  - Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup.
+  - Guardian handoff: public status.json and public.pem from:
+      git clone https://github.com/melloa-project/melloa-guardian.git
+      cd melloa-guardian && make preview-state
+
+Telegram:
+  - Create one dedicated bot with @BotFather using /newbot.
+  - Keep it out of groups and stop any other long poller using that token.
+  - Leave owner ID blank during setup unless you already know the numeric ID; setup prints the
+    exact /start pairing phrase for the private chat.
+
+Hosted model routes:
+  - Prepare a capable route for higher-quality replies and an economy route for routine replies.
+  - The simplest first path is openai for both routes.
+  - Default model IDs: capable gpt-5.6-terra; economy gpt-5.6-luna.
+  - Enter reviewed GBP input/output prices per million tokens and a GBP request ceiling.
+  - Use external only when the provider gives an HTTPS OpenAI-compatible base URL, exact model ID,
+    API style (responses or chat_completions), bearer token, and reviewed prices.
+
+Private recovery:
+  - Restic recovery password: 32-128 base64url-safe characters kept outside the server and backup
+    disk. One generator:
+      python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+
+Bounded self-change:
+  - Enable self-change for the first server proof.
+  - Prepare a fine-grained GitHub token for this repository with Contents read/write.
+  - Prepare a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription
+    login artifact.
+
+Do not put these secrets in Git, shell history, prompts, screenshots, or general logs. The guided
+installer reads secret values without echoing them and writes private files under /etc/melloa.
+EOF
 }
 
 while (($#)); do
@@ -66,11 +115,23 @@ while (($#)); do
       SKIP_VERIFICATION=true
       shift
       ;;
+    --print-input-checklist)
+      PRINT_INPUT_CHECKLIST=true
+      shift
+      ;;
+    --help|-h)
+      usage 0
+      ;;
     *)
       usage
       ;;
   esac
 done
+
+if [[ "$PRINT_INPUT_CHECKLIST" == true ]]; then
+  print_input_checklist
+  exit 0
+fi
 
 fail() {
   echo "First owner setup failed: $1" >&2
