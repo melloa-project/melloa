@@ -404,8 +404,15 @@ if [[ -e "$PYTHON_DIR" || -L "$PYTHON_DIR" ]]; then
   [[ "$("$PYTHON_DIR/bin/python3.13" -c 'import platform; print(platform.python_version())')" == \
     "$MELLOA_PYTHON_VERSION" ]] || fail "existing managed Python has the wrong version"
 else
-  UV_PYTHON_DOWNLOADS=manual UV_SYSTEM_CERTS=true /usr/local/bin/uv --no-config \
-    python install --install-dir "$PYTHON_INSTALL_DIR" "$MELLOA_PYTHON_VERSION"
+  python_install_output="$(
+    UV_PYTHON_DOWNLOADS=manual UV_SYSTEM_CERTS=true /usr/local/bin/uv --no-config \
+      python install --install-dir "$PYTHON_INSTALL_DIR" "$MELLOA_PYTHON_VERSION" 2>&1
+  )" || {
+    printf '%s\n' "$python_install_output" >&2
+    printf '::error title=Managed Python install failed::%s\n' \
+      "$(tr '\n' ' ' <<<"$python_install_output" | cut -c 1-800)" >&2
+    exit 1
+  }
   [[ -x "$PYTHON_DIR/bin/python3.13" ]] || fail "managed Python installation failed"
 fi
 chown -R root:root "$PYTHON_INSTALL_DIR"
