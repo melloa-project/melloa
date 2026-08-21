@@ -62,7 +62,7 @@ grep --fixed-strings --quiet -- "Melloa's private Codex CLI" \
   "$BOOTSTRAP"
 ! grep --fixed-strings --quiet -- "/usr/local/bin/codex" "$BOOTSTRAP"
 ! grep --fixed-strings --quiet -- "install_managed_link" "$BOOTSTRAP"
-grep --fixed-strings --quiet -- "go.dev/dl/\$GO_BASENAME.tar.gz" \
+grep --fixed-strings --quiet -- "go.dev/dl/\$go_basename.tar.gz" \
   "$BOOTSTRAP"
 grep --fixed-strings --quiet -- 'if [[ "$SELF_CHANGE_TOOLS" == true ]]; then' \
   "$BOOTSTRAP"
@@ -167,5 +167,71 @@ run_container_smoke() {
       --container-smoke
 }
 
+run_newer_host_toolchain_smoke() {
+  local image="$1"
+  pull_image "$image"
+  CURRENT_PHASE="reusing newer host tools without global ownership in $image"
+  docker run --rm --platform linux/amd64 \
+    "${proxy_environment[@]}" \
+    --volume "$host_ca:/run/melloa-bootstrap-ca.pem:ro" \
+    --volume "$ROOT:/source:ro" \
+    "$image" \
+    /bin/bash -ceu '
+      make_fake() {
+        local path="$1"
+        shift
+        install -d -m 0755 "$(dirname "$path")"
+        printf "%s\\n" "$@" >"$path"
+        chmod 0755 "$path"
+      }
+
+      make_fake /usr/local/bin/apt-get \
+        "#!/usr/bin/env bash" "exit 0"
+      make_fake /usr/local/bin/node \
+        "#!/usr/bin/env bash" \
+        "[[ \"${1:-}\" == --version ]] && printf \"%s\\n\" v24.1.2"
+      make_fake /usr/local/bin/npm \
+        "#!/usr/bin/env bash" \
+        "[[ \"${1:-}\" == --version ]] && printf \"%s\\n\" 11.3.0"
+      make_fake /usr/local/bin/uv \
+        "#!/usr/bin/env bash" \
+        "[[ \"${1:-}\" == --version ]] && printf \"%s\\n\" \"uv 0.13.0\""
+      make_fake /usr/local/bin/python3.14 \
+        "#!/usr/bin/env bash" \
+        "[[ \"${1:-}\" == -c ]] && printf \"%s\\n\" 3.14.1"
+      make_fake /usr/local/bin/go \
+        "#!/usr/bin/env bash" \
+        "[[ \"${1:-}\" == env && \"${2:-}\" == GOVERSION ]] && printf \"%s\\n\" go1.28.0"
+      make_fake /usr/local/bin/gofmt \
+        "#!/usr/bin/env bash" "exit 0"
+      make_fake /usr/local/bin/docker \
+        "#!/usr/bin/env bash" \
+        "if [[ \"${1:-}\" == compose && \"${2:-}\" == version ]]; then printf \"%s\\n\" v2.30.0; fi"
+      for command in bwrap git jq make rsync; do
+        make_fake "/usr/local/bin/$command" "#!/usr/bin/env bash" "exit 0"
+      done
+      make_fake /usr/local/bin/melloa-unrelated-tool \
+        "#!/usr/bin/env bash" "exit 37"
+      before="$(sha256sum /usr/local/bin/melloa-unrelated-tool)"
+
+      /source/infra/server/bootstrap-linux.sh \
+        --source /source \
+        --ca-file /run/melloa-bootstrap-ca.pem \
+        --container-smoke
+      [[ "$(readlink /opt/melloa/toolchain/bin/node)" == /usr/local/bin/node ]]
+      [[ "$(readlink /opt/melloa/toolchain/bin/npm)" == /usr/local/bin/npm ]]
+      [[ "$(readlink /opt/melloa/toolchain/bin/python3)" == /usr/local/bin/python3.14 ]]
+      [[ "$(readlink /opt/melloa/toolchain/bin/go)" == /usr/local/bin/go ]]
+      [[ "$(sha256sum /usr/local/bin/melloa-unrelated-tool)" == "$before" ]]
+
+      /source/infra/server/bootstrap-linux.sh \
+        --source /source \
+        --ca-file /run/melloa-bootstrap-ca.pem \
+        --container-smoke
+      [[ "$(readlink /opt/melloa/toolchain/bin/node)" == /usr/local/bin/node ]]
+    '
+}
+
+run_newer_host_toolchain_smoke "$MELLOA_DEBIAN_TEST_IMAGE"
 run_container_smoke "$MELLOA_DEBIAN_TEST_IMAGE"
 run_container_smoke "$MELLOA_UBUNTU_TEST_IMAGE"
