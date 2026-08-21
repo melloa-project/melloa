@@ -20,6 +20,15 @@ grep --fixed-strings --quiet -- \
 grep --fixed-strings --quiet -- \
   "Then run the guided first install:" \
   "$ROOT/infra/server/bootstrap-debian.sh"
+grep --fixed-strings --quiet -- \
+  "source checkout is not the current remote main revision." \
+  "$ROOT/infra/server/preflight.sh"
+grep --fixed-strings --quiet -- \
+  'git -C $quoted_source pull --ff-only origin main' \
+  "$ROOT/infra/server/preflight.sh"
+grep --fixed-strings --quiet -- \
+  "Then rerun the same Melloa command." \
+  "$ROOT/infra/server/preflight.sh"
 
 "$ROOT/infra/server/install.sh" --source "$ROOT" --root "$WORKDIR" >/dev/null
 

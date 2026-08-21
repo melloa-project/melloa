@@ -48,6 +48,22 @@ fail() {
   exit 1
 }
 
+fail_stale_source() {
+  local quoted_source
+  printf -v quoted_source '%q' "$SOURCE"
+  cat >&2 <<EOF
+Server preflight failed: source checkout is not the current remote main revision.
+Local revision: $REVISION
+Remote main: ${REMOTE_REVISION:-unavailable}
+Recovery:
+  git -C $quoted_source fetch --prune origin main
+  git -C $quoted_source pull --ff-only origin main
+Then rerun the same Melloa command.
+If fetch fails, fix network, proxy, or CA access to $ORIGIN and rerun.
+EOF
+  exit 1
+}
+
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command is unavailable: $1"
 }
@@ -237,7 +253,7 @@ readonly REMOTE_REVISION="$(
     git ls-remote --refs "$ORIGIN" refs/heads/main |
     awk 'NR == 1 && $2 == "refs/heads/main" {print $1}'
 )"
-[[ "$REMOTE_REVISION" == "$REVISION" ]] || fail "source is not the current remote main revision"
+[[ "$REMOTE_REVISION" == "$REVISION" ]] || fail_stale_source
 
 if [[ "$INSTALLED" == false ]]; then
   echo "Server build preflight passed for $REVISION."
