@@ -136,6 +136,13 @@ grep --fixed-strings --quiet 'MELLOA_SELF_CHANGE_ENABLED=false' \
 [[ "$(wc -c <"$PRIVATE/git-credentials")" == 1 ]]
 [[ "$(wc -c <"$PRIVATE/codex-api-key")" == 1 ]]
 grep --fixed-strings --quiet "Public path checks passed." "$LOG"
+grep --fixed-strings --quiet "Telegram bot input:" "$LOG"
+grep --fixed-strings --quiet \
+  "Create one dedicated bot with @BotFather using /newbot, then paste only the HTTP API token." \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "Do not send /start to the bot yet; if owner ID is blank, setup prints the exact pairing phrase." \
+  "$LOG"
 grep --fixed-strings --quiet \
   "Configure the capable model route: higher-quality replies when accuracy matters." \
   "$LOG"
@@ -153,6 +160,20 @@ grep --fixed-strings --quiet \
   "$LOG"
 grep --fixed-strings --quiet \
   "Token limits and timeouts use setup defaults unless a staged environment override is supplied." \
+  "$LOG"
+grep --fixed-strings --quiet "Backup recovery password:" "$LOG"
+grep --fixed-strings --quiet \
+  "Enter a 32-128 character base64url-safe restic password that you keep outside this server and backup disk." \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "python3 -c 'import secrets; print(secrets.token_urlsafe(48))'" \
+  "$LOG"
+grep --fixed-strings --quiet "Bounded self-change setup:" "$LOG"
+grep --fixed-strings --quiet \
+  "The first server proof expects self-change workers enabled." \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "Use a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription login artifact." \
   "$LOG"
 if grep --fixed-strings --quiet "model max input tokens" "$LOG"; then
   echo "First-install setup prompted for advanced model token defaults" >&2
@@ -283,6 +304,12 @@ grep --fixed-strings --quiet 'MELLOA_CODEX_MODEL=codex-first-install-test' \
 [[ "$(jq -r .codex_mode "$SELF_CHANGE_TARGET/etc/melloa/configuration.json")" == api_key ]]
 [[ "$(jq -r .max_input_tokens "$SELF_CHANGE_PRIVATE/capable-model.json")" == 32768 ]]
 [[ "$(jq -r .timeout_ms "$SELF_CHANGE_PRIVATE/capable-model.json")" == 45000 ]]
+grep --fixed-strings --quiet \
+  "If enabled, use a fine-grained GitHub token for this repository with Contents read/write." \
+  "$SELF_CHANGE_LOG"
+grep --fixed-strings --quiet \
+  "Use a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription login artifact." \
+  "$SELF_CHANGE_LOG"
 grep --fixed-strings --quiet \
   'https://x-access-token:githubpatfirstinstall1234567890@github.com' \
   "$SELF_CHANGE_PRIVATE/git-credentials"

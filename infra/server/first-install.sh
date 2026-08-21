@@ -890,6 +890,12 @@ guardian_public_key_file="$(
 )"
 validate_public_setup_inputs
 echo "Public path checks passed. Setup will now ask for private Telegram, model, and backup values." >&2
+cat >&2 <<'EOF'
+Telegram bot input:
+  Create one dedicated bot with @BotFather using /newbot, then paste only the HTTP API token.
+  Do not send /start to the bot yet; if owner ID is blank, setup prints the exact pairing phrase.
+  Keep this bot out of groups for the first deployment and stop any other long poller using it.
+EOF
 telegram_bot_token="$(
   prompt_secret MELLOA_SETUP_TELEGRAM_BOT_TOKEN \
     "Dedicated Telegram bot token"
@@ -942,6 +948,12 @@ if [[ "$DESTINATION_ROOT" == / ]]; then
   echo "Live Guardian, model, and Telegram checks passed before private configuration was installed." >&2
 fi
 
+cat >&2 <<'EOF'
+Backup recovery password:
+  Enter a 32-128 character base64url-safe restic password that you keep outside this server and backup disk.
+  If needed, generate one on a trusted machine with:
+    python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+EOF
 restic_password="$(
   prompt_secret MELLOA_SETUP_RESTIC_PASSWORD \
     "Restic recovery password retained outside Melloa"
@@ -952,6 +964,12 @@ unset restic_password
 
 declare -a SELF_CHANGE_ARGS=(--self-change-disabled)
 readonly SELF_CHANGE_DEFAULT="$(self_change_prompt_default)"
+cat >&2 <<'EOF'
+Bounded self-change setup:
+  The first server proof expects self-change workers enabled.
+  If enabled, use a fine-grained GitHub token for this repository with Contents read/write.
+  Use a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription login artifact.
+EOF
 if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \
   "Enable bounded self-change workers for the first-server proof" "$SELF_CHANGE_DEFAULT"; then
   require_codex_self_change_tools
