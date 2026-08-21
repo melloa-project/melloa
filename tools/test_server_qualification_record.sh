@@ -181,6 +181,15 @@ grep --fixed-strings --quiet \
   "$OUTPUT"
 grep --fixed-strings --quiet "deploy succeeded revision=${SOURCE_REVISION:0:12}" "$OUTPUT"
 grep --fixed-strings --quiet "Keep this output private" "$OUTPUT"
+grep --fixed-strings --quiet "next_steps:" "$OUTPUT"
+grep --fixed-strings --quiet "backup receipt: present" "$OUTPUT"
+grep --fixed-strings --quiet "owner verification: present" "$OUTPUT"
+grep --fixed-strings --quiet "restore drill: present" "$OUTPUT"
+grep --fixed-strings --quiet \
+  "self-change workers disabled: this is conversation-only and cannot qualify the first self-change server proof" \
+  "$OUTPUT"
+grep --fixed-strings --quiet "update evidence: present" "$OUTPUT"
+grep --fixed-strings --quiet "rollback evidence: present" "$OUTPUT"
 if grep --fixed-strings --quiet "/etc/melloa/private" "$OUTPUT"; then
   echo "Qualification record exposed private credential file paths" >&2
   exit 1
@@ -193,6 +202,9 @@ rm -f "$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json"
   >"$OUTPUT"
 grep --fixed-strings --quiet "status: missing" "$OUTPUT"
 grep --fixed-strings --quiet "run: sudo /usr/local/libexec/melloa/verify-owner-journey" "$OUTPUT"
+grep --fixed-strings --quiet \
+  "owner verification missing: run sudo /usr/local/libexec/melloa/verify-owner-journey" \
+  "$OUTPUT"
 
 rm -f "$TARGET/var/lib/melloa/runtime-state/restore-drill-status.json"
 "$ROOT/infra/server/qualification-record.sh" \
@@ -201,5 +213,8 @@ rm -f "$TARGET/var/lib/melloa/runtime-state/restore-drill-status.json"
   >"$OUTPUT"
 grep --fixed-strings --quiet "restore_drill:" "$OUTPUT"
 grep --fixed-strings --quiet "run: sudo /usr/local/libexec/melloa/restore-drill" "$OUTPUT"
+grep --fixed-strings --quiet \
+  "restore drill missing: run sudo /usr/local/libexec/melloa/restore-drill" \
+  "$OUTPUT"
 
 echo "Server qualification record checks passed."

@@ -319,6 +319,34 @@ elif [[ -f "$VERIFICATION_RECEIPT_FILE" ]]; then
   verification_response_id="$(jq -er .response_message_id "$VERIFICATION_RECEIPT_FILE")"
 fi
 
+readonly MAINTENANCE_HISTORY_FILE="$(destination "$RUNTIME_STATE_DIR/maintenance-history.jsonl")"
+maintenance_update_verified=false
+maintenance_rollback_verified=false
+if [[ -L "$MAINTENANCE_HISTORY_FILE" ]]; then
+  fail "maintenance history receipt must not be a symlink"
+elif [[ -s "$MAINTENANCE_HISTORY_FILE" ]]; then
+  jq -sr '
+    def valid_event:
+      .contract_version == "1.0.0" and
+      (.operation == "update" or .operation == "rollback") and
+      (.result == "verified" or .result == "verification_skipped") and
+      (.completed_at | type == "string" and length > 0) and
+      (.from_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+      (.active_revision | type == "string" and test("^[0-9a-f]{40}$")) and
+      (.verification_kind == null or .verification_kind == "telegram_conversation");
+    all(.[]; valid_event)
+  ' "$MAINTENANCE_HISTORY_FILE" >/dev/null ||
+    fail "maintenance history receipt is invalid"
+  if jq -sr -e 'any(.[]; .operation == "update" and .result == "verified")' \
+    "$MAINTENANCE_HISTORY_FILE" >/dev/null; then
+    maintenance_update_verified=true
+  fi
+  if jq -sr -e 'any(.[]; .operation == "rollback" and .result == "verified")' \
+    "$MAINTENANCE_HISTORY_FILE" >/dev/null; then
+    maintenance_rollback_verified=true
+  fi
+fi
+
 cat <<EOF
 Melloa private first-server qualification snapshot
 generated_at: $(date --utc '+%Y-%m-%dT%H:%M:%SZ')
@@ -371,28 +399,12 @@ owner_verification:
 maintenance_history:
 EOF
 
-readonly MAINTENANCE_HISTORY_FILE="$(destination "$RUNTIME_STATE_DIR/maintenance-history.jsonl")"
-if [[ -L "$MAINTENANCE_HISTORY_FILE" ]]; then
-  fail "maintenance history receipt must not be a symlink"
-elif [[ -s "$MAINTENANCE_HISTORY_FILE" ]]; then
+if [[ -s "$MAINTENANCE_HISTORY_FILE" ]]; then
   jq -sr '
-    def valid_event:
-      .contract_version == "1.0.0" and
-      (.operation == "update" or .operation == "rollback") and
-      (.result == "verified" or .result == "verification_skipped") and
-      (.completed_at | type == "string" and length > 0) and
-      (.from_revision | type == "string" and test("^[0-9a-f]{40}$")) and
-      (.active_revision | type == "string" and test("^[0-9a-f]{40}$")) and
-      (.verification_kind == null or .verification_kind == "telegram_conversation");
-    if all(.[]; valid_event) then
-      .[-10:][] |
-      "  - \(.completed_at) \(.operation) \(.result) from=\(.from_revision[0:12]) active=\(.active_revision[0:12]) verification=" +
-      (if .verification_kind == null then "skipped" else .verification_kind end)
-    else
-      error("invalid maintenance history receipt")
-    end
-  ' "$MAINTENANCE_HISTORY_FILE" ||
-    fail "maintenance history receipt is invalid"
+    .[-10:][] |
+    "  - \(.completed_at) \(.operation) \(.result) from=\(.from_revision[0:12]) active=\(.active_revision[0:12]) verification=" +
+    (if .verification_kind == null then "skipped" else .verification_kind end)
+  ' "$MAINTENANCE_HISTORY_FILE"
 else
   echo "  - none"
 fi
@@ -437,3 +449,38 @@ notes:
   - If restore_drill.status is missing, run: sudo /usr/local/libexec/melloa/restore-drill
   - If backup.result is not success, inspect /status and rerun the backup or restore-drill path.
 EOF
+
+cat <<'EOF'
+
+next_steps:
+EOF
+if [[ "$backup_result" == success ]]; then
+  echo "  - backup receipt: present"
+else
+  echo "  - backup receipt missing or failed: send /status in Telegram, fix the backup line, then run sudo /usr/local/libexec/melloa/verify-owner-journey"
+fi
+if [[ "$verification_status" == present ]]; then
+  echo "  - owner verification: present"
+else
+  echo "  - owner verification missing: run sudo /usr/local/libexec/melloa/verify-owner-journey"
+fi
+if [[ "$restore_drill_status" == present ]]; then
+  echo "  - restore drill: present"
+else
+  echo "  - restore drill missing: run sudo /usr/local/libexec/melloa/restore-drill"
+fi
+if [[ "$SELF_CHANGE_ENABLED" == true ]]; then
+  echo "  - self-change workers: enabled; retain Telegram /change show <change_id> after State: deployed as the self-change proof"
+else
+  echo "  - self-change workers disabled: this is conversation-only and cannot qualify the first self-change server proof"
+fi
+if [[ "$maintenance_update_verified" == true ]]; then
+  echo "  - update evidence: present"
+else
+  echo "  - update evidence missing: after a later reviewed main commit exists, run sudo /usr/local/libexec/melloa/update"
+fi
+if [[ "$maintenance_rollback_verified" == true ]]; then
+  echo "  - rollback evidence: present"
+else
+  echo "  - rollback evidence missing: after update evidence exists, run sudo /usr/local/libexec/melloa/rollback"
+fi
