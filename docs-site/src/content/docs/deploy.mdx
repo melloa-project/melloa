@@ -169,6 +169,11 @@ Do not enter example or zero prices just to get through setup. Melloa stores the
 The GitHub token and Codex/OpenAI API key are for the bounded self-change workers. They are separate
 from normal conversation routing:
 
+- create a fine-grained GitHub personal access token scoped only to `melloa-project/melloa`;
+- set repository access to only this repository;
+- set repository permissions to `Contents: Read and write`;
+- do not grant admin, workflow, package, organization-wide, or all-repository access for the first
+  proof;
 - the GitHub token is used only by the applier after exact owner approval;
 - the Codex/OpenAI API key is used by the confined planner worker;
 - do not paste a ChatGPT/Codex subscription login artifact into setup.

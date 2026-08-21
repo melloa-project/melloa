@@ -173,6 +173,11 @@ Use this worksheet before starting the server install:
 | Restic recovery | 32-128 character base64url password stored away from this server and backup disk | The exact retained password |
 | Self-change | GitHub repository token plus Codex/OpenAI API key | `yes`, `api-key`, optional model override blank unless reviewed |
 
+For the GitHub token, use a fine-grained personal access token scoped only to
+`melloa-project/melloa`, with repository access limited to that repository and repository
+permissions set to `Contents: Read and write`. Do not grant admin, workflow, package,
+organization-wide, or all-repository access for the first proof.
+
 For external hosted model routes, do not guess. The provider must give you an HTTPS
 OpenAI-compatible base URL, exact model ID, whether to use `responses` or `chat_completions`,
 bearer token, input price per million tokens, and output price per million tokens. If the provider

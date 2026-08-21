@@ -86,7 +86,10 @@ Private recovery:
 
 Bounded self-change:
   - Enable self-change for the first server proof.
-  - Prepare a fine-grained GitHub token for this repository with Contents read/write.
+  - Prepare a fine-grained GitHub personal access token scoped only to this repository, with
+    Repository permissions -> Contents: Read and write.
+  - Do not grant admin, workflow, package, organization-wide, or all-repository access for the
+    first proof.
   - Prepare a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription
     login artifact.
 
@@ -1045,7 +1048,9 @@ readonly SELF_CHANGE_DEFAULT="$(self_change_prompt_default)"
 cat >&2 <<'EOF'
 Bounded self-change setup:
   The first server proof expects self-change workers enabled.
-  If enabled, use a fine-grained GitHub token for this repository with Contents read/write.
+  If enabled, use a fine-grained GitHub personal access token scoped only to this repository, with
+  Repository permissions -> Contents: Read and write. Do not grant admin, workflow, package,
+  organization-wide, or all-repository access for the first proof.
   Use a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription login artifact.
 EOF
 if prompt_yes_no MELLOA_SETUP_ENABLE_SELF_CHANGE \

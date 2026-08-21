@@ -108,6 +108,10 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "Melloa will not format disks for you" in guide
     assert "lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS" in guide
     assert "Do not run\n`mkfs` from this guide" in guide
+    assert "fine-grained personal access token scoped only" in guide
+    assert "repository access limited to that repository" in guide
+    assert "`Contents: Read and write`" in guide
+    assert "Do not grant admin, workflow, package" in guide
     assert "infra/server/first-install.sh --print-input-checklist" in guide
     assert "Self-change proof" in guide
     assert "Read the `next_steps` section" in guide
@@ -173,6 +177,10 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "Melloa will not format disks for you" in deploy
     assert "lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS" in deploy
     assert "Do not run\n`mkfs` from this guide" in deploy
+    assert "fine-grained GitHub personal access token scoped only" in deploy
+    assert "set repository access to only this repository" in deploy
+    assert "`Contents: Read and write`" in deploy
+    assert "do not grant admin, workflow, package" in deploy
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
     assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy
     assert "make preview-state" in deploy

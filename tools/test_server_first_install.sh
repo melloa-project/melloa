@@ -98,6 +98,12 @@ grep --fixed-strings --quiet "@BotFather" "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "Default model IDs: capable gpt-5.6-terra; economy gpt-5.6-luna." \
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "Enable self-change for the first server proof." "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "fine-grained GitHub personal access token scoped only to this repository" \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "Repository permissions -> Contents: Read and write." \
+  "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "does not require root, prompt for secrets" \
   <("$ROOT/infra/server/first-install.sh" --help 2>&1)
 grep --fixed-strings --quiet \
@@ -210,6 +216,12 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet "Bounded self-change setup:" "$LOG"
 grep --fixed-strings --quiet \
   "The first server proof expects self-change workers enabled." \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "If enabled, use a fine-grained GitHub personal access token scoped only to this repository" \
+  "$LOG"
+grep --fixed-strings --quiet \
+  "Repository permissions -> Contents: Read and write." \
   "$LOG"
 grep --fixed-strings --quiet \
   "Use a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription login artifact." \
@@ -344,7 +356,10 @@ grep --fixed-strings --quiet 'MELLOA_CODEX_MODEL=codex-first-install-test' \
 [[ "$(jq -r .max_input_tokens "$SELF_CHANGE_PRIVATE/capable-model.json")" == 32768 ]]
 [[ "$(jq -r .timeout_ms "$SELF_CHANGE_PRIVATE/capable-model.json")" == 45000 ]]
 grep --fixed-strings --quiet \
-  "If enabled, use a fine-grained GitHub token for this repository with Contents read/write." \
+  "If enabled, use a fine-grained GitHub personal access token scoped only to this repository" \
+  "$SELF_CHANGE_LOG"
+grep --fixed-strings --quiet \
+  "Repository permissions -> Contents: Read and write." \
   "$SELF_CHANGE_LOG"
 grep --fixed-strings --quiet \
   "Use a Codex/OpenAI API key for the planner; do not paste a ChatGPT/Codex subscription login artifact." \
