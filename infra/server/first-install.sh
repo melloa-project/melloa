@@ -64,6 +64,9 @@ Public paths:
   - Guardian handoff: public status.json and public.pem from:
       git clone https://github.com/melloa-project/melloa-guardian.git
       cd melloa-guardian && make preview-state
+    Guardian calls this preview-state because it creates an offline public status projection. The
+    first server path still uses it deliberately. Pass only status.json and public.pem to Melloa;
+    do not pass Guardian private keys, journals, locks, or control commands.
 
 Telegram:
   - Create one dedicated bot with @BotFather using /newbot.

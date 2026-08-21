@@ -82,8 +82,10 @@ cd ../melloa
 .../melloa-guardian/state/local-preview/public.pem
 ```
 
-Only those public files go into Melloa. Guardian private keys, journals, locks, and control commands
-stay outside Melloa.
+Guardian calls this `preview-state` because it creates an offline public status projection. The
+first server path still uses it deliberately; it is not a Melloa preview deployment mode. Only those
+two public files go into Melloa. Guardian private keys, journals, locks, and control commands stay
+outside Melloa.
 
 If the Guardian checkout is beside Melloa exactly as shown above, first install detects those two
 public files and offers them as the defaults. Press Enter at the Guardian prompts to use them.

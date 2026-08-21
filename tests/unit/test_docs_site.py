@@ -112,6 +112,12 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "repository access limited to that repository" in guide
     assert "`Contents: Read and write`" in guide
     assert "Do not grant admin, workflow, package" in guide
+    assert "offline public status projection" in guide
+    assert "not a Melloa preview deployment mode" in guide
+    assert (
+        "Do not pass Guardian private keys, journals, lock files, or control commands"
+        in normalized_guide
+    )
     assert "infra/server/first-install.sh --print-input-checklist" in guide
     assert "Self-change proof" in guide
     assert "Read the `next_steps` section" in guide
@@ -169,6 +175,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     harnesses = (DOCS_SITE / "src/content/docs/harnesses.mdx").read_text(
         encoding="utf-8"
     )
+    normalized_deploy = " ".join(deploy.split())
     normalized_runtime_loop = " ".join(runtime_loop.split())
 
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
@@ -184,6 +191,12 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
     assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy
     assert "make preview-state" in deploy
+    assert "offline public status projection" in deploy
+    assert "not a Melloa preview deployment mode" in deploy
+    assert (
+        "Guardian private keys, journals, locks, and control commands stay outside Melloa"
+        in normalized_deploy
+    )
     assert "infra/server/first-install.sh --print-input-checklist" in deploy
     assert "does not require `sudo`, does not prompt for secrets" in deploy
     assert "Press Enter at the Guardian prompts" in deploy

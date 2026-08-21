@@ -99,6 +99,15 @@ grep --fixed-strings --quiet "Default model IDs: capable gpt-5.6-terra; economy 
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "Enable self-change for the first server proof." "$CHECKLIST_LOG"
 grep --fixed-strings --quiet \
+  "Guardian calls this preview-state because it creates an offline public status projection." \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "Pass only status.json and public.pem to Melloa" \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "do not pass Guardian private keys, journals, locks, or control commands" \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
   "fine-grained GitHub personal access token scoped only to this repository" \
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet \

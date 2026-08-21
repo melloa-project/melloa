@@ -282,8 +282,10 @@ cd ../melloa
 .../melloa-guardian/state/local-preview/public.pem
 ```
 
-Only those two public files are passed to Melloa. Do not pass Guardian private keys, journals, lock
-files, or control commands.
+Guardian calls this `preview-state` because it creates an offline public status projection. The
+first server path still uses it deliberately; it is not a Melloa preview deployment mode. Only those
+two public files are passed to Melloa. Do not pass Guardian private keys, journals, lock files, or
+control commands.
 
 When the Guardian checkout is the sibling directory shown above, first install detects
 `../melloa-guardian/state/local-preview/status.json` and
