@@ -46,6 +46,7 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
         in command_spine
     )
     assert "make preview-state" in command_spine
+    assert 'infra/server/first-install.sh --print-input-checklist' in command_spine
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in command_spine
     assert "owner-approved self-change" in command_spine
     runtime_loop = (DOCS_SITE / "src/components/RuntimeLoop.astro").read_text(
@@ -76,6 +77,7 @@ def test_readme_opens_with_first_owner_server_path() -> None:
     assert "https://melloa-project.github.io/melloa/deploy/" in opening
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in opening
+    assert 'infra/server/first-install.sh --print-input-checklist' in opening
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in opening
     assert "## Evidence status" in opening
     assert "Telegram message → routed hosted-model reply" in opening
@@ -103,6 +105,7 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "gpt-5.6-luna" in guide
     assert "separate reviewed hardening pass" in normalized_guide
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
+    assert "infra/server/first-install.sh --print-input-checklist" in guide
     assert "Self-change proof" in guide
     assert "readiness banner" not in guide
     assert "NOT READY" not in guide

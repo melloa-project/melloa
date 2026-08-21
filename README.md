@@ -47,6 +47,7 @@ cd melloa-guardian
 make preview-state
 cd ../melloa
 
+infra/server/first-install.sh --print-input-checklist
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
