@@ -11,6 +11,16 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+grep --fixed-strings --quiet -- \
+  "Next create the Guardian public handoff if it is not already beside this checkout:" \
+  "$ROOT/infra/server/bootstrap-debian.sh"
+grep --fixed-strings --quiet -- \
+  "%q --print-input-checklist" \
+  "$ROOT/infra/server/bootstrap-debian.sh"
+grep --fixed-strings --quiet -- \
+  "Then run the guided first install:" \
+  "$ROOT/infra/server/bootstrap-debian.sh"
+
 "$ROOT/infra/server/install.sh" --source "$ROOT" --root "$WORKDIR" >/dev/null
 
 [[ "$(stat --format='%a' "$WORKDIR/usr/local/libexec/melloa/codex")" == 755 ]]

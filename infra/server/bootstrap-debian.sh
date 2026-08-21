@@ -351,7 +351,16 @@ systemctl is-enabled --quiet docker.service || fail "Docker is not enabled for r
 docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable after installation"
 "$SOURCE/infra/server/preflight.sh" --source "$SOURCE" --origin "$ORIGIN"
 
-echo "Debian server prerequisites are installed and verified. Next run:"
+echo "Debian server prerequisites are installed and verified."
+echo "Next create the Guardian public handoff if it is not already beside this checkout:"
+printf '  cd %q\n' "$(dirname "$SOURCE")"
+echo "  git clone https://github.com/melloa-project/melloa-guardian.git"
+echo "  cd melloa-guardian"
+echo "  make preview-state"
+printf '  cd %q\n' "$SOURCE"
+echo "Then print the setup input checklist:"
+printf '  %q --print-input-checklist\n' "$SOURCE/infra/server/first-install.sh"
+echo "Then run the guided first install:"
 printf '  sudo %q/infra/server/first-install.sh --source %q --origin %q' \
   "$SOURCE" "$SOURCE" "$ORIGIN"
 if [[ -n "$CA_FILE" ]]; then

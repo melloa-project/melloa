@@ -20,6 +20,15 @@ grep --fixed-strings --quiet -- "--self-change-tools" \
   "$ROOT/infra/server/bootstrap-debian.sh"
 grep --fixed-strings --quiet -- 'if [[ "$SELF_CHANGE_TOOLS" == true ]]; then' \
   "$ROOT/infra/server/bootstrap-debian.sh"
+grep --fixed-strings --quiet -- \
+  "Next create the Guardian public handoff if it is not already beside this checkout:" \
+  "$ROOT/infra/server/bootstrap-debian.sh"
+grep --fixed-strings --quiet -- \
+  "%q --print-input-checklist" \
+  "$ROOT/infra/server/bootstrap-debian.sh"
+grep --fixed-strings --quiet -- \
+  "Then run the guided first install:" \
+  "$ROOT/infra/server/bootstrap-debian.sh"
 
 declare -a proxy_environment=()
 for variable in HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy; do
