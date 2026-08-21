@@ -16,7 +16,9 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     )
 
     assert "Run Melloa on a home server" in homepage
-    assert "Debian 13 (`trixie`) amd64 server booted" in homepage
+    assert "Ubuntu 24.04 LTS" in homepage
+    assert "Pop!_OS 24.04" in homepage
+    assert "amd64 server booted with systemd" in homepage
     assert "setup discovers your numeric owner ID during private pairing" in homepage
     assert "hosted OpenAI-compatible model routes" in homepage
     assert "You do not need a local GPU or local model to begin" in homepage
@@ -34,11 +36,11 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "One real dedicated-server run" in status_strip
     assert "Fork decision" in status_strip
     assert "First server path" in command_spine
-    assert "Debian 13 trixie amd64" in command_spine
+    assert "Debian 13, Ubuntu 24.04 LTS, or Pop!_OS 24.04 on amd64" in command_spine
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in command_spine
     assert 'stat --format=\'%d\' /mnt/melloa-off-device-backup' in command_spine
     assert (
-        'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools'
+        'sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools'
         in command_spine
     )
     assert (
@@ -73,10 +75,12 @@ def test_readme_opens_with_first_owner_server_path() -> None:
     opening = readme.split("## Current status", 1)[0]
 
     assert "## Start here: first-owner home server" in opening
-    assert "Debian 13 (`trixie`) amd64 systemd server" in opening
+    assert "Ubuntu 24.04 LTS (`noble`)" in opening
+    assert "Pop!_OS 24.04 (`noble`)" in opening
+    assert "amd64 systemd server" in opening
     assert "https://melloa-project.github.io/melloa/deploy/" in opening
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
-    assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in opening
+    assert 'sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools' in opening
     assert 'infra/server/first-install.sh --print-input-checklist' in opening
     assert 'sudo infra/server/first-install.sh --source "$PWD"' in opening
     assert "## Evidence status" in opening
@@ -103,6 +107,9 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "Telegram message → hosted model reply → owner-approved" in opening
     assert "not a generic\nmulti-agent harness" in opening
     assert "gpt-5.6-luna" in guide
+    assert "Ubuntu 24.04 LTS (`noble`)" in guide
+    assert "Pop!_OS 24.04 (`noble`)" in guide
+    assert "NVIDIA hardware is fine but unused" in guide
     assert "separate reviewed hardening pass" in normalized_guide
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert "Melloa will not format disks for you" in guide
@@ -179,7 +186,9 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     normalized_runtime_loop = " ".join(runtime_loop.split())
 
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
-    assert "Debian 13 (`trixie`) amd64 host booted with systemd" in deploy
+    assert "Ubuntu 24.04 LTS (`noble`)" in deploy
+    assert "Pop!_OS 24.04 (`noble`)" in deploy
+    assert "NVIDIA hardware is fine but not used" in deploy
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
     assert "Melloa will not format disks for you" in deploy
     assert "lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS" in deploy
@@ -188,7 +197,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "set repository access to only this repository" in deploy
     assert "`Contents: Read and write`" in deploy
     assert "do not grant admin, workflow, package" in deploy
-    assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
+    assert 'sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools' in deploy
     assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy
     assert "make preview-state" in deploy
     assert "offline public status projection" in deploy

@@ -9,11 +9,11 @@ Telegram plus hosted OpenAI-compatible conversation routes. Local conversation m
 of the guided first-owner setup. Codex CLI is not part of normal conversation, but the first real
 server path includes the bounded self-change workers and their evidence.
 
-This is the container runtime behind Melloa's low-maintenance server path. The evidence target is
-one concrete host: a fresh Debian 13 (`trixie`) amd64 machine booted with systemd. Real provider and
-off-device storage configuration, actual server installation, one owner-approved Codex/self-change
-deployment, reboot and recovery drills, and deployed dogfooding are recorded through the canonical
-deployment guide.
+This is the container runtime behind Melloa's low-maintenance server path. The evidence target is a
+fresh supported amd64 machine booted with systemd: Debian 13 (`trixie`), Ubuntu 24.04 LTS
+(`noble`), or Pop!_OS 24.04 (`noble`). Real provider and off-device storage configuration, actual
+server installation, one owner-approved Codex/self-change deployment, reboot and recovery drills,
+and deployed dogfooding are recorded through the canonical deployment guide.
 
 The runtime has five bounded roles:
 
@@ -39,25 +39,26 @@ incomplete restic snapshot created while a dump fails is removed before the fail
 
 ## Selected host bootstrap
 
-Start from a fresh Debian 13 amd64 server with root access and an independently mounted backup
-volume. The bootstrap intentionally refuses other distributions, architectures, containers outside
-its own disposable CI smoke test, conflicting distro Docker packages, and pre-existing commands it
-does not own. On a minimal image, install only the two tools needed to obtain the reviewed checkout,
-then run the checked-in bootstrap:
+Start from a fresh supported amd64 server with root access and an independently mounted backup
+volume. The bootstrap intentionally refuses other distributions or versions, unsupported
+architectures, containers outside its own disposable CI smoke test, conflicting distro Docker
+packages, and pre-existing commands it does not own. On a minimal image, install only the two tools
+needed to obtain the reviewed checkout, then run the checked-in bootstrap:
 
 ```bash
 sudo apt-get update
 sudo apt-get install --yes --no-install-recommends ca-certificates git
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
 The reviewed versions and artifact hashes live in `toolchain.lock`. The bootstrap verifies Docker's
-repository signing-key fingerprint, installs Docker CE and Compose from its Debian repository,
-installs checksum-pinned Node.js and uv artifacts, and installs Go for the public Guardian handoff
-drill. It starts and enables Docker, then runs the normal clean/current-main build preflight. With
+repository signing-key fingerprint, installs Docker CE and Compose from Docker's Debian or Ubuntu
+repository selected by the host profile, installs checksum-pinned Node.js, uv, and Go artifacts, and
+installs managed Python 3.13 through the pinned uv tool. It starts and enables Docker, then runs the
+normal clean/current-main build preflight. With
 `--self-change-tools`, it also installs the integrity-pinned Codex CLI npm packages needed by the
 planner worker. Bootstrap does not configure secrets, initialize storage, or start Melloa. The guided
 `first-install.sh` step installs host assets, prompts for the owner-private values, generates the
@@ -68,7 +69,7 @@ that the message was accepted, answered, and delivered back through Telegram. Re
 read-only host check with:
 
 ```bash
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --check
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --check
 ```
 
 An owner-approved outbound TLS proxy can be supplied as a public PEM bundle with `--ca-file`; pass
@@ -79,9 +80,11 @@ dependency fetches. If activation fails before that bundle was configured, rerun
 with `--ca-file` updates only that public build CA setting and resumes activation. It is not
 installed as a new machine-wide trust root.
 
-`make server-bootstrap` repeats the toolchain installation in a disposable digest-pinned Debian 13
-container. That proves package and CLI compatibility, not systemd boot behavior; the real target
-still has to pass the live first-server evidence path before the README evidence status changes.
+`make server-bootstrap` repeats the toolchain installation in disposable digest-pinned Debian 13 and
+Ubuntu 24.04 containers. That proves package and CLI compatibility, not systemd boot behavior; the
+real target still has to pass the live first-server evidence path before the README evidence status
+changes. Pop!_OS support uses the Ubuntu 24.04 (`noble`) Docker repository and is covered by
+os-release profile tests plus the real-server evidence path.
 
 The pinned Codex CLI path uses a separate API key or an explicitly selected local provider. It does
 not claim that unattended service operation can rely on an interactive ChatGPT subscription login.
@@ -229,7 +232,7 @@ are installed by the host-asset installer and verified before activation, but th
 needs to pass on the actual server after reboot.
 
 `install.sh` is the host-asset installer called by `first-install.sh`. It requires a clean current
-`main` checkout, the Node.js and uv versions in `toolchain.lock`, Python 3.13+, Docker Compose
+`main` checkout, the Node.js, uv, Python, and Go versions in `toolchain.lock`, Docker Compose
 2.27+, systemd 249+, and Bubblewrap. The installed preflight requires the pinned Codex CLI only
 when self-change workers are enabled, and then verifies the exact sandbox, approval, ephemeral,
 user-config, and local-provider controls used by the planner. The installer creates the dedicated

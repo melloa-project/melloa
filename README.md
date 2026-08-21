@@ -14,7 +14,8 @@ If your goal is to run Melli on a dedicated home server, use the public setup pa
 
 The current first-server path is:
 
-- Debian 13 (`trixie`) amd64 systemd server, not the owner's laptop;
+- Debian 13 (`trixie`), Ubuntu 24.04 LTS (`noble`), or Pop!_OS 24.04 (`noble`) on an
+  amd64 systemd server, not the owner's laptop;
 - Telegram bot chat as the normal owner interface;
 - two hosted OpenAI-compatible conversation routes: one capable route and one cheaper economy route;
 - no expected local model or GPU setup;
@@ -39,7 +40,7 @@ sudo mkdir -p /mnt/melloa-off-device-backup
 findmnt --mountpoint /mnt/melloa-off-device-backup
 test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
 
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 
 cd ..
 git clone https://github.com/melloa-project/melloa-guardian.git
@@ -51,10 +52,10 @@ infra/server/first-install.sh --print-input-checklist
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
-Before running `first-install.sh`, use a Debian 13 (`trixie`) amd64 server booted with systemd and
-have that off-device backup path mounted, a dedicated Telegram bot token, two hosted model route
-choices with reviewed pricing, a restic password retained away from the server, a GitHub token for
-this repository, and a Codex/OpenAI API key for the bounded planner worker. The public deploy page
+Before running `first-install.sh`, use one of the supported amd64 systemd hosts and have that
+off-device backup path mounted, a dedicated Telegram bot token, two hosted model route choices with
+reviewed pricing, a restic password retained away from the server, a GitHub token for this
+repository, and a Codex/OpenAI API key for the bounded planner worker. The public deploy page
 explains each input and the exact setup prompts.
 
 ## Evidence status
@@ -98,7 +99,7 @@ model routing. The selected route and actual model destination survive retries a
 the conversation; Melloa never silently falls back across routes. The server runtime gates startup
 on migrations, restarts cleanly after application or PostgreSQL failure, streams encrypted snapshots
 into an owner-mounted repository, reports backup health through `/status`, and has restore-drill,
-update, rollback, and boot-reconciliation wrappers. A Debian 13 bootstrap and guided first-install
+update, rollback, and boot-reconciliation wrappers. A supported-host bootstrap and guided first-install
 wrapper now compose prerequisite installation, private configuration prompts, generated model route
 JSON, exact Telegram owner pairing, backup initialization, activation, and a database-backed first
 Telegram conversation proof into one server path.

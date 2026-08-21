@@ -49,8 +49,8 @@ Prepare these owner-controlled values before running:
   sudo infra/server/first-install.sh --source "$PWD"
 
 Supported host:
-  - Debian 13 (trixie) amd64 booted with systemd. Bootstrap checks this before installing
-    prerequisites.
+  - Debian 13 (trixie), Ubuntu 24.04 LTS (noble), or Pop!_OS 24.04 (noble) on amd64,
+    booted with systemd. Bootstrap checks this before installing prerequisites.
 
 Public paths:
   - Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup.
@@ -85,7 +85,7 @@ Hosted model routes:
 Private recovery:
   - Restic recovery password: 32-128 base64url-safe characters kept outside the server and backup
     disk. One generator:
-      python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+      python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
 
 Bounded self-change:
   - Enable self-change for the first server proof.
@@ -730,7 +730,7 @@ self_change_prompt_default() {
 codex_self_change_tools_command() {
   local command_line
   local -a bootstrap_command=(
-    sudo "$SOURCE/infra/server/bootstrap-debian.sh"
+    sudo "$SOURCE/infra/server/bootstrap-linux.sh"
     --source "$SOURCE"
     --origin "$ORIGIN"
     --self-change-tools
@@ -1036,7 +1036,7 @@ cat >&2 <<'EOF'
 Backup recovery password:
   Enter a 32-128 character base64url-safe restic password that you keep outside this server and backup disk.
   If needed, generate one on a trusted machine with:
-    python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+    python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
 EOF
 restic_password="$(
   prompt_secret MELLOA_SETUP_RESTIC_PASSWORD \

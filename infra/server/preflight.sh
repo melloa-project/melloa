@@ -190,7 +190,7 @@ source "$TOOLCHAIN_LOCK"
 
 for command in \
   awk basename bash bwrap chown docker find findmnt getent git grep groupadd head id install \
-  flock jq make mktemp node npm python3.13 rm rsync runuser sed sha256sum sort stat sync \
+  flock go jq make mktemp node npm python3.13 rm rsync runuser sed sha256sum sort stat sync \
   systemctl systemd-analyze tar timeout uname useradd uv wc; do
   require_command "$command"
 done
@@ -203,7 +203,11 @@ readonly UV_VERSION="$(uv --version | awk 'NR == 1 {print $2}')"
 [[ "$UV_VERSION" == "$MELLOA_UV_VERSION" ]] ||
   fail "uv $MELLOA_UV_VERSION is required"
 readonly PYTHON_VERSION="$(python3.13 -c 'import platform; print(platform.python_version())')"
-version_at_least "$PYTHON_VERSION" 3.13 || fail "Python 3.13 or newer is required"
+[[ "$PYTHON_VERSION" == "$MELLOA_PYTHON_VERSION" ]] ||
+  fail "Python $MELLOA_PYTHON_VERSION is required"
+readonly GO_VERSION="$(go env GOVERSION | sed 's/^go//')"
+[[ "$GO_VERSION" == "$MELLOA_GO_VERSION" ]] ||
+  fail "Go $MELLOA_GO_VERSION is required"
 readonly NODE_VERSION="$(node --version | sed 's/^v//; s/+.*//')"
 [[ "$NODE_VERSION" == "$MELLOA_NODE_VERSION" ]] ||
   fail "Node.js $MELLOA_NODE_VERSION is required"

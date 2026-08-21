@@ -9,6 +9,7 @@ ORIGIN="https://github.com/melloa-project/melloa.git"
 CHECK_ONLY=false
 CONTAINER_SMOKE=false
 SELF_CHANGE_TOOLS=false
+PRINT_HOST_PROFILE_OS_RELEASE=""
 DOWNLOAD_DIR=""
 CA_FILE=""
 
@@ -17,8 +18,9 @@ usage() {
 Usage: infra/server/bootstrap-debian.sh [--source PATH] [--origin HTTPS_URL] [--ca-file PATH]
                                          [--self-change-tools] [--check]
 
-Installs and verifies the reviewed Melloa host toolchain on a fresh Debian 13 amd64
-systemd server. --check performs no package or tool installation.
+Installs and verifies the reviewed Melloa host toolchain on a supported amd64
+systemd server. The public entry point is infra/server/bootstrap-linux.sh.
+--check performs no package or tool installation.
 
 --self-change-tools also installs and verifies the pinned Codex CLI required by the
 bounded self-change workers used in the first-server proof.
@@ -55,6 +57,11 @@ while (($#)); do
       SELF_CHANGE_TOOLS=true
       shift
       ;;
+    --print-host-profile)
+      [[ $# -ge 2 ]] || usage
+      PRINT_HOST_PROFILE_OS_RELEASE="$2"
+      shift 2
+      ;;
     *)
       usage
       ;;
@@ -62,8 +69,61 @@ while (($#)); do
 done
 
 fail() {
-  echo "Debian server bootstrap failed: $1" >&2
+  echo "Melloa server bootstrap failed: $1" >&2
   exit 1
+}
+
+supported_hosts() {
+  printf 'Debian 13 (trixie), Ubuntu 24.04 LTS (noble), or Pop!_OS 24.04 (noble)'
+}
+
+select_host_profile() {
+  local os_release_file="$1"
+  local host_codename
+  local ubuntu_codename
+  local ID=""
+  local ID_LIKE=""
+  local NAME=""
+  local PRETTY_NAME=""
+  local UBUNTU_CODENAME=""
+  local VERSION_CODENAME=""
+  local VERSION_ID=""
+
+  [[ "$os_release_file" == /* && -f "$os_release_file" && ! -L "$os_release_file" && \
+    -r "$os_release_file" ]] || fail "os-release file must be an absolute readable regular file"
+
+  # /etc/os-release is root-controlled host metadata and shell-compatible by contract.
+  # shellcheck disable=SC1090
+  source "$os_release_file"
+
+  ubuntu_codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
+  host_codename="${VERSION_CODENAME:-$ubuntu_codename}"
+
+  if [[ "$ID" == debian && "$VERSION_ID" == 13 && "$host_codename" == trixie ]]; then
+    HOST_PROFILE=debian-13-trixie
+    HOST_LABEL="Debian 13 (trixie)"
+    HOST_DOCKER_APT_OS=debian
+    HOST_DOCKER_APT_CODENAME=trixie
+    return 0
+  fi
+
+  if [[ "$ID" == ubuntu && "$VERSION_ID" == 24.04 && "$ubuntu_codename" == noble ]]; then
+    HOST_PROFILE=ubuntu-24.04-noble
+    HOST_LABEL="Ubuntu 24.04 LTS (noble)"
+    HOST_DOCKER_APT_OS=ubuntu
+    HOST_DOCKER_APT_CODENAME=noble
+    return 0
+  fi
+
+  if [[ "$ID" == pop && "$VERSION_ID" == 24.04 && "$ubuntu_codename" == noble ]]; then
+    HOST_PROFILE=pop-24.04-noble
+    HOST_LABEL="Pop!_OS 24.04 (noble)"
+    HOST_DOCKER_APT_OS=ubuntu
+    HOST_DOCKER_APT_CODENAME=noble
+    return 0
+  fi
+
+  fail "supported hosts are $(supported_hosts) on amd64 with systemd"
 }
 
 require_command() {
@@ -83,7 +143,6 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-((EUID == 0)) || fail "bootstrap must run as root"
 [[ "$SOURCE" == /* && -d "$SOURCE" && ! -L "$SOURCE" ]] ||
   fail "source must be an absolute directory"
 [[ "$ORIGIN" == https://* && "$ORIGIN" != *'@'* && "$ORIGIN" != *'?'* && \
@@ -101,26 +160,36 @@ readonly TOOLCHAIN_LOCK="$SOURCE/infra/server/toolchain.lock"
 # shellcheck disable=SC1090
 source "$TOOLCHAIN_LOCK"
 
-readonly MELLOA_SERVER_OS_ID MELLOA_SERVER_OS_VERSION MELLOA_SERVER_OS_CODENAME
-readonly MELLOA_SERVER_ARCHITECTURE MELLOA_DEBIAN_TEST_IMAGE
-readonly MELLOA_DOCKER_APT_KEY_FINGERPRINT MELLOA_NODE_VERSION MELLOA_NODE_SHA256
-readonly MELLOA_GO_MIN_VERSION MELLOA_UV_VERSION MELLOA_UV_SHA256 MELLOA_CODEX_CLI_VERSION
+readonly MELLOA_SUPPORTED_HOSTS MELLOA_SERVER_ARCHITECTURE MELLOA_DEBIAN_TEST_IMAGE
+readonly MELLOA_UBUNTU_TEST_IMAGE MELLOA_DOCKER_APT_KEY_FINGERPRINT MELLOA_PYTHON_VERSION
+readonly MELLOA_NODE_VERSION MELLOA_NODE_SHA256 MELLOA_GO_VERSION MELLOA_GO_MIN_VERSION
+readonly MELLOA_GO_SHA256 MELLOA_UV_VERSION MELLOA_UV_SHA256 MELLOA_CODEX_CLI_VERSION
 readonly MELLOA_CODEX_NPM_INTEGRITY MELLOA_CODEX_LINUX_X64_NPM_INTEGRITY
 
-for digest in "$MELLOA_NODE_SHA256" "$MELLOA_UV_SHA256"; do
+for digest in "$MELLOA_NODE_SHA256" "$MELLOA_GO_SHA256" "$MELLOA_UV_SHA256"; do
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail "toolchain lock contains an invalid SHA-256"
 done
 [[ "$MELLOA_DOCKER_APT_KEY_FINGERPRINT" =~ ^[0-9A-F]{40}$ ]] ||
   fail "toolchain lock contains an invalid Docker key fingerprint"
+[[ "$MELLOA_SUPPORTED_HOSTS" == *debian-13-trixie* && \
+  "$MELLOA_SUPPORTED_HOSTS" == *ubuntu-24.04-noble* && \
+  "$MELLOA_SUPPORTED_HOSTS" == *pop-24.04-noble* ]] ||
+  fail "toolchain lock does not list the reviewed supported hosts"
+[[ "$MELLOA_PYTHON_VERSION" =~ ^3\.13\.[0-9]+$ ]] ||
+  fail "toolchain lock contains an invalid Python version"
+[[ "$MELLOA_GO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  fail "toolchain lock contains an invalid Go version"
 
-# /etc/os-release is root-controlled host metadata. Debian may expose it as a symlink.
-# shellcheck disable=SC1091
-source /etc/os-release
-[[ "${ID:-}" == "$MELLOA_SERVER_OS_ID" ]] || fail "the selected target requires Debian"
-[[ "${VERSION_ID:-}" == "$MELLOA_SERVER_OS_VERSION" ]] ||
-  fail "the selected target requires Debian $MELLOA_SERVER_OS_VERSION"
-[[ "${VERSION_CODENAME:-}" == "$MELLOA_SERVER_OS_CODENAME" ]] ||
-  fail "the selected target requires Debian $MELLOA_SERVER_OS_CODENAME"
+if [[ -n "$PRINT_HOST_PROFILE_OS_RELEASE" ]]; then
+  select_host_profile "$PRINT_HOST_PROFILE_OS_RELEASE"
+  printf '%s\t%s\t%s\t%s\n' \
+    "$HOST_PROFILE" "$HOST_LABEL" "$HOST_DOCKER_APT_OS" "$HOST_DOCKER_APT_CODENAME"
+  exit 0
+fi
+
+((EUID == 0)) || fail "bootstrap must run as root"
+select_host_profile /etc/os-release
+readonly HOST_PROFILE HOST_LABEL HOST_DOCKER_APT_OS HOST_DOCKER_APT_CODENAME
 [[ "$(dpkg --print-architecture)" == "$MELLOA_SERVER_ARCHITECTURE" ]] ||
   fail "the selected target requires $MELLOA_SERVER_ARCHITECTURE"
 [[ "$(uname -m)" == x86_64 ]] || fail "the selected target requires an x86_64 kernel"
@@ -177,10 +246,11 @@ verify_toolchain() {
   [[ "$(uv --version | awk 'NR == 1 {print $2}')" == "$MELLOA_UV_VERSION" ]] ||
     fail "uv does not match the reviewed version $MELLOA_UV_VERSION"
   python_version="$(python3.13 -c 'import platform; print(platform.python_version())')"
-  version_at_least "$python_version" 3.13 || fail "Python 3.13 or newer is required"
+  [[ "$python_version" == "$MELLOA_PYTHON_VERSION" ]] ||
+    fail "Python does not match the reviewed version $MELLOA_PYTHON_VERSION"
   go_version="$(go env GOVERSION | sed 's/^go//')"
-  version_at_least "$go_version" "$MELLOA_GO_MIN_VERSION" ||
-    fail "Go $MELLOA_GO_MIN_VERSION or newer is required for the Guardian public handoff"
+  [[ "$go_version" == "$MELLOA_GO_VERSION" ]] ||
+    fail "Go does not match the reviewed version $MELLOA_GO_VERSION"
   compose_version="$(docker compose version --short | sed 's/^v//')"
   version_at_least "$compose_version" 2.27.0 || fail "Docker Compose 2.27 or newer is required"
   docker compose \
@@ -200,7 +270,7 @@ if [[ "$CHECK_ONLY" == true ]]; then
   systemctl is-enabled --quiet docker.service || fail "Docker is not enabled for reboot"
   docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable"
   "$SOURCE/infra/server/preflight.sh" --source "$SOURCE" --origin "$ORIGIN"
-  echo "Debian server bootstrap check passed."
+  echo "Melloa server bootstrap check passed on $HOST_LABEL."
   exit 0
 fi
 
@@ -224,7 +294,7 @@ done
 DOWNLOAD_DIR="$(mktemp -d /var/tmp/melloa-bootstrap.XXXXXX)"
 readonly DOCKER_KEY="$DOWNLOAD_DIR/docker.asc"
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
-  --output "$DOCKER_KEY" https://download.docker.com/linux/debian/gpg
+  --output "$DOCKER_KEY" "https://download.docker.com/linux/$HOST_DOCKER_APT_OS/gpg"
 install -d -m 0700 "$DOWNLOAD_DIR/gnupg"
 readonly DOCKER_KEY_FINGERPRINT="$(
   GNUPGHOME="$DOWNLOAD_DIR/gnupg" gpg --batch --show-keys --with-colons "$DOCKER_KEY" |
@@ -235,15 +305,15 @@ readonly DOCKER_KEY_FINGERPRINT="$(
 install -d -m 0755 /etc/apt/keyrings
 install -m 0644 "$DOCKER_KEY" /etc/apt/keyrings/melloa-docker.asc
 printf '%s\n' \
-  "deb [arch=amd64 signed-by=/etc/apt/keyrings/melloa-docker.asc] https://download.docker.com/linux/debian trixie stable" \
+  "deb [arch=amd64 signed-by=/etc/apt/keyrings/melloa-docker.asc] https://download.docker.com/linux/$HOST_DOCKER_APT_OS $HOST_DOCKER_APT_CODENAME stable" \
   >"$DOWNLOAD_DIR/melloa-docker.list"
 install -m 0644 "$DOWNLOAD_DIR/melloa-docker.list" /etc/apt/sources.list.d/melloa-docker.list
 
 apt-get "${apt_options[@]}" update
 apt-get "${apt_options[@]}" install --yes --no-install-recommends \
   bash bubblewrap coreutils docker-buildx-plugin docker-ce docker-ce-cli \
-  docker-compose-plugin findutils git golang-go grep jq make mawk passwd procps python3.13 \
-  python3.13-venv rsync sed systemd tar util-linux xz-utils
+  docker-compose-plugin findutils git grep jq make mawk passwd procps \
+  rsync sed systemd tar util-linux xz-utils
 
 readonly TOOLCHAIN_DIR=/opt/melloa/toolchain
 readonly NODE_BASENAME="node-v$MELLOA_NODE_VERSION-linux-x64"
@@ -304,6 +374,45 @@ else
   install -m 0755 "$DOWNLOAD_DIR/$UV_BASENAME/uvx" /usr/local/bin/uvx
 fi
 
+readonly PYTHON_INSTALL_DIR="$TOOLCHAIN_DIR/python"
+readonly PYTHON_DIR="$PYTHON_INSTALL_DIR/cpython-3.13-linux-x86_64-gnu"
+install -d -m 0755 "$PYTHON_INSTALL_DIR"
+if [[ -e "$PYTHON_DIR" || -L "$PYTHON_DIR" ]]; then
+  [[ -x "$PYTHON_DIR/bin/python3.13" ]] || fail "existing managed Python is unsafe"
+  [[ "$("$PYTHON_DIR/bin/python3.13" -c 'import platform; print(platform.python_version())')" == \
+    "$MELLOA_PYTHON_VERSION" ]] || fail "existing managed Python has the wrong version"
+else
+  UV_PYTHON_DOWNLOADS=manual UV_SYSTEM_CERTS=true /usr/local/bin/uv --no-config \
+    python install --install-dir "$PYTHON_INSTALL_DIR" "$MELLOA_PYTHON_VERSION"
+  [[ -x "$PYTHON_DIR/bin/python3.13" ]] || fail "managed Python installation failed"
+fi
+chown -R root:root "$PYTHON_INSTALL_DIR"
+install_managed_link "$PYTHON_DIR/bin/python3.13" /usr/local/bin/python3.13
+
+readonly GO_BASENAME="go$MELLOA_GO_VERSION.linux-amd64"
+readonly GO_DIR="$TOOLCHAIN_DIR/$GO_BASENAME"
+if [[ -e "$GO_DIR" || -L "$GO_DIR" ]]; then
+  [[ -d "$GO_DIR" && ! -L "$GO_DIR" && -x "$GO_DIR/bin/go" && -x "$GO_DIR/bin/gofmt" ]] ||
+    fail "existing managed Go directory is unsafe"
+  [[ "$("$GO_DIR/bin/go" env GOVERSION)" == "go$MELLOA_GO_VERSION" ]] ||
+    fail "existing managed Go directory has the wrong version"
+else
+  readonly GO_ARCHIVE="$DOWNLOAD_DIR/$GO_BASENAME.tar.gz"
+  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
+    --output "$GO_ARCHIVE" \
+    "https://go.dev/dl/$GO_BASENAME.tar.gz"
+  printf '%s  %s\n' "$MELLOA_GO_SHA256" "$(basename "$GO_ARCHIVE")" \
+    >"$DOWNLOAD_DIR/go.sha256"
+  (cd "$DOWNLOAD_DIR" && sha256sum --check go.sha256)
+  tar --extract --file "$GO_ARCHIVE" --directory "$DOWNLOAD_DIR"
+  [[ -x "$DOWNLOAD_DIR/go/bin/go" && -x "$DOWNLOAD_DIR/go/bin/gofmt" ]] ||
+    fail "Go archive did not contain the expected tools"
+  mv "$DOWNLOAD_DIR/go" "$GO_DIR"
+  chown -R root:root "$GO_DIR"
+fi
+install_managed_link "$GO_DIR/bin/go" /usr/local/bin/go
+install_managed_link "$GO_DIR/bin/gofmt" /usr/local/bin/gofmt
+
 if [[ "$SELF_CHANGE_TOOLS" == true ]]; then
   if [[ -e /usr/local/bin/codex || -L /usr/local/bin/codex ]]; then
     [[ -x /usr/local/bin/codex && \
@@ -341,7 +450,7 @@ fi
 verify_toolchain
 
 if [[ "$CONTAINER_SMOKE" == true ]]; then
-  echo "Disposable Debian bootstrap toolchain smoke test passed."
+  echo "Disposable $HOST_LABEL bootstrap toolchain smoke test passed."
   exit 0
 fi
 
@@ -351,7 +460,7 @@ systemctl is-enabled --quiet docker.service || fail "Docker is not enabled for r
 docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable after installation"
 "$SOURCE/infra/server/preflight.sh" --source "$SOURCE" --origin "$ORIGIN"
 
-echo "Debian server prerequisites are installed and verified."
+echo "Melloa server prerequisites are installed and verified on $HOST_LABEL."
 echo "Next create the Guardian public handoff if it is not already beside this checkout:"
 printf '  cd %q\n' "$(dirname "$SOURCE")"
 echo "  git clone https://github.com/melloa-project/melloa-guardian.git"

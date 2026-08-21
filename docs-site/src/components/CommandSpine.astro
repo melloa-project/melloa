@@ -9,7 +9,7 @@ sudo mkdir -p /mnt/melloa-off-device-backup
 findmnt --mountpoint /mnt/melloa-off-device-backup
 test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
 
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 
 cd ..
 git clone https://github.com/melloa-project/melloa-guardian.git
@@ -28,9 +28,9 @@ sudo infra/server/first-install.sh --source "$PWD"`;
       Clone it, pair Telegram, talk to Melli, then improve the system from inside the system.
     </h2>
     <p>
-      Start on Debian 13 trixie amd64 with hosted providers. No local GPU is expected for the first
-      deployment. The first proof is a real Telegram conversation followed by one bounded
-      owner-approved self-change.
+      Start on Debian 13, Ubuntu 24.04 LTS, or Pop!_OS 24.04 on amd64 with hosted providers. No
+      local GPU is expected for the first deployment. The first proof is a real Telegram
+      conversation followed by one bounded owner-approved self-change.
     </p>
   </div>
   <pre aria-label="Melloa first server command spine"><code>{commands}</code></pre>

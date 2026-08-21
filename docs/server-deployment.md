@@ -15,7 +15,7 @@ project and it is not an operations console project.
 
 The first deployment path is:
 
-1. prepare a fresh Debian server;
+1. prepare a fresh supported server;
 2. mount off-device backup storage;
 3. clone Melloa and bootstrap host prerequisites;
 4. prepare Guardian's public-only handoff;
@@ -77,7 +77,7 @@ sudo mkdir -p /mnt/melloa-off-device-backup
 findmnt --mountpoint /mnt/melloa-off-device-backup
 test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
 
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 
 cd ..
 git clone https://github.com/melloa-project/melloa-guardian.git
@@ -98,8 +98,11 @@ result afterward.
 
 ## Supported starting point
 
-Use a fresh Debian 13 (`trixie`) amd64 machine booted with systemd. The machine should be a
-dedicated always-on server, not the owner's everyday laptop or desktop.
+Use a fresh supported amd64 machine booted with systemd. The supported first-owner hosts are Debian
+13 (`trixie`), Ubuntu 24.04 LTS (`noble`), and Pop!_OS 24.04 (`noble`). The machine should be a
+dedicated always-on server, not the owner's everyday laptop or desktop. Intel/AMD CPUs are expected;
+NVIDIA hardware is fine but unused by the first deployment because the normal conversation route is
+hosted.
 
 Before cloning Melloa, attach and mount backup storage that is independent from the server's root
 disk. Keep the restic password somewhere the server and backup repository cannot both lose.
@@ -190,7 +193,7 @@ place that is not the server and not the backup disk. If you need a command, run
 machine and store the exact output:
 
 ```bash
-python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
 The setup accepts only 32-128 base64url-safe characters for that password. If the server and backup
@@ -248,13 +251,13 @@ sudo apt-get update
 sudo apt-get install --yes --no-install-recommends ca-certificates git
 git clone https://github.com/melloa-project/melloa.git
 cd melloa
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 ```
 
-The bootstrap installs and verifies Docker, Compose, Python, Node.js, uv, Go, and the reviewed
-Codex CLI. Go is needed only to create the public Guardian handoff used by this first deployment
-path. Codex CLI is needed only by the self-change planner; it is not mounted into the normal
-conversation worker and does not receive private chat history.
+The bootstrap installs and verifies Docker, Compose, managed Python 3.13, Node.js, uv, managed Go,
+and the reviewed Codex CLI. Go is needed only to create the public Guardian handoff used by this
+first deployment path. Codex CLI is needed only by the self-change planner; it is not mounted into
+the normal conversation worker and does not receive private chat history.
 
 If you are doing a conversation-only bring-up and intentionally not exercising self-change yet, you
 can omit `--self-change-tools`; run the self-change proof before treating the server path as
@@ -545,8 +548,8 @@ Activation failures include a phase-specific recovery or rerun command; follow t
 rerunning first install or update.
 Common recoveries:
 
-- bootstrap rejects the host: use Debian 13 amd64 with systemd and remove conflicting Docker
-  packages from the fresh-host path;
+- bootstrap rejects the host: use Debian 13, Ubuntu 24.04 LTS, or Pop!_OS 24.04 on amd64 with
+  systemd and remove conflicting Docker packages from the fresh-host path;
 - Telegram pairing fails: stop any other long poller, confirm the dedicated bot token is valid, and
   retry; if setup reports the webhook still exists, remove it manually from the previous owner and
   rerun;

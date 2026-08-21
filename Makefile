@@ -70,6 +70,7 @@ check-generated:
 		infra/server/activate.sh \
 		infra/server/backup.sh \
 		infra/server/bootstrap-debian.sh \
+		infra/server/bootstrap-linux.sh \
 		infra/server/codex-wrapper.sh \
 		infra/server/configure.sh \
 		infra/server/first-install.sh \

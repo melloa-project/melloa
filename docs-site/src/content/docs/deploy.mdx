@@ -3,13 +3,20 @@ title: Deploy the server
 description: The first-owner server setup path for Melloa.
 ---
 
-This is the setup path to follow on the actual home server. It goes from a clean Debian 13
-(`trixie`) amd64 machine booted with systemd to one persistent Telegram conversation with Melli.
+This is the setup path to follow on the actual home server. It goes from a clean supported amd64
+machine booted with systemd to one persistent Telegram conversation with Melli.
 
 ## 1. Prepare the machine and clone Melloa
 
-Use a dedicated Debian 13 (`trixie`) amd64 host booted with systemd. Log in with a user that can run
-`sudo`, then install the two packages needed to fetch the reviewed source:
+Use one of these dedicated amd64 hosts booted with systemd:
+
+- Debian 13 (`trixie`);
+- Ubuntu 24.04 LTS (`noble`);
+- Pop!_OS 24.04 (`noble`).
+
+Intel/AMD CPUs are expected. NVIDIA hardware is fine but not used by the first deployment because
+Melli talks to hosted models. Log in with a user that can run `sudo`, then install the two packages
+needed to fetch the reviewed source:
 
 ```bash
 sudo apt-get update
@@ -56,12 +63,12 @@ a NAS share, create the equivalent NFS or CIFS mount first, then repeat the same
 Run the bootstrap from the Melloa checkout:
 
 ```bash
-sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools
+sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 ```
 
-That installs Docker, Compose, Python, Node.js, uv, Go, and the pinned Codex CLI toolchain used by
-the owner-approved self-change workers. Codex is for self-change planning; it is not Melli’s normal
-conversation model.
+That installs Docker, Compose, managed Python 3.13, Node.js, uv, managed Go, and the pinned Codex
+CLI toolchain used by the owner-approved self-change workers. Codex is for self-change planning; it
+is not Melli’s normal conversation model.
 
 ## 4. Create the Guardian public handoff
 
@@ -183,7 +190,7 @@ from normal conversation routing:
 If you need a restic password generator:
 
 ```bash
-python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
+python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
 Store that output somewhere the server and backup repository cannot both lose.
@@ -312,7 +319,7 @@ private configuration instead of overwriting it.
 Common stops:
 
 - backup path is not a mount: mount off-device storage at the path and rerun;
-- Codex CLI is missing: rerun `sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools`;
+- Codex CLI is missing: rerun `sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools`;
 - Telegram pairing does not complete: make sure the bot is dedicated to Melli, then send the exact
   `/start ...` phrase to the bot’s private chat;
 - model route check fails: verify the base URL, API style, model ID, bearer token, and GBP prices;

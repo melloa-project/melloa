@@ -23,10 +23,10 @@ import CommandSpine from "../../components/CommandSpine.astro";
 import RuntimeLoop from "../../components/RuntimeLoop.astro";
 import StatusStrip from "../../components/StatusStrip.astro";
 
-The current path is intentionally concrete: a dedicated Debian 13 (`trixie`) amd64 server booted
-with systemd, a private Telegram bot chat, two hosted OpenAI-compatible model routes, encrypted
-backups, and a bounded self-change loop that can propose, commit, push, deploy, and roll back
-owner-approved changes.
+The current path is intentionally concrete: a dedicated Debian 13 (`trixie`), Ubuntu 24.04 LTS
+(`noble`), or Pop!_OS 24.04 (`noble`) amd64 server booted with systemd, a private Telegram bot chat,
+two hosted OpenAI-compatible model routes, encrypted backups, and a bounded self-change loop that
+can propose, commit, push, deploy, and roll back owner-approved changes.
 
 This site is the public front door. It should help you get a working Melli, then use Melli to improve
 the system from there.
@@ -77,8 +77,8 @@ self-change.
 
 ## What you need
 
-- a dedicated Debian 13 (`trixie`) amd64 server booted with systemd that you can administer with
-  `sudo`;
+- a dedicated Debian 13 (`trixie`), Ubuntu 24.04 LTS (`noble`), or Pop!_OS 24.04 (`noble`) amd64
+  server booted with systemd that you can administer with `sudo`;
 - a Telegram bot token; setup discovers your numeric owner ID during private pairing;
 - a capable hosted model endpoint, model ID, bearer token, and reviewed pricing;
 - an economy hosted model endpoint, model ID, bearer token, and reviewed pricing;

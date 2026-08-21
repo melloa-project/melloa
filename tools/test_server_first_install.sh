@@ -80,7 +80,7 @@ grep --fixed-strings --quiet \
   'sudo infra/server/first-install.sh --source "$PWD"' \
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet \
-  "Debian 13 (trixie) amd64 booted with systemd." \
+  "Debian 13 (trixie), Ubuntu 24.04 LTS (noble), or Pop!_OS 24.04 (noble) on amd64" \
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet \
   "Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup." \
@@ -220,7 +220,7 @@ grep --fixed-strings --quiet \
   "Enter a 32-128 character base64url-safe restic password that you keep outside this server and backup disk." \
   "$LOG"
 grep --fixed-strings --quiet \
-  "python3 -c 'import secrets; print(secrets.token_urlsafe(48))'" \
+  "python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'" \
   "$LOG"
 grep --fixed-strings --quiet "Bounded self-change setup:" "$LOG"
 grep --fixed-strings --quiet \
