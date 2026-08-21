@@ -258,6 +258,7 @@ if [[ -z "${no_proxy:-}" && -n "${NO_PROXY:-}" ]]; then
 fi
 
 ensure_toolchain_layout() {
+  local mode
   local path
   for path in /opt/melloa "$MELLOA_TOOLCHAIN_DIR" "$MELLOA_TOOLCHAIN_BIN"; do
     if [[ -e "$path" || -L "$path" ]]; then
@@ -265,6 +266,11 @@ ensure_toolchain_layout() {
         fail "Melloa toolchain path is unsafe: $path"
     fi
     install -d -m 0755 "$path"
+    [[ "$(stat --format='%u:%g' "$path")" == 0:0 ]] ||
+      fail "Melloa toolchain path is not root-owned: $path"
+    mode="$(stat --format='%a' "$path")"
+    (((8#$mode & 0022) == 0)) ||
+      fail "Melloa toolchain path is writable by non-root users: $path"
   done
 }
 
@@ -630,8 +636,17 @@ install_codex_cli() {
   local codex_integrity
   local codex_platform_integrity
 
+  secure_private_codex_dir() {
+    local directory="$1"
+    [[ -d "$directory" && ! -L "$directory" ]] ||
+      fail "existing private Codex CLI directory is unsafe"
+    chown -R root:root "$directory"
+    chmod -R a+rX,go-w "$directory"
+  }
+
   if [[ -x "$codex_executable" && \
     "$("$codex_executable" --version 2>/dev/null || true)" == "codex-cli $MELLOA_CODEX_CLI_VERSION" ]]; then
+    secure_private_codex_dir "$codex_dir"
     verify_codex_cli
     return 0
   fi
@@ -669,6 +684,7 @@ install_codex_cli() {
   fi
   mv "$CODEX_STAGING_DIR" "$codex_dir"
   CODEX_STAGING_DIR=""
+  secure_private_codex_dir "$codex_dir"
   verify_codex_cli
 }
 BOOTSTRAP_PHASE="installing base apt prerequisites"

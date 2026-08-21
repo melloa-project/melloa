@@ -240,6 +240,10 @@ verify_codex_cli() {
   codex_executable="$MELLOA_TOOLCHAIN_DIR/codex/bin/codex"
   [[ -x "$codex_executable" ]] ||
     fail "Melloa's private Codex CLI is unavailable; rerun bootstrap with --self-change-tools"
+  if [[ "$INSTALLED" == true ]]; then
+    runuser -u melloa-codex -- test -x "$codex_executable" ||
+      fail "Melloa's private Codex CLI is not executable by melloa-codex"
+  fi
   codex_version="$("$codex_executable" --version | awk 'NR == 1 {print $2}')"
   [[ "$codex_version" == "$MELLOA_CODEX_CLI_VERSION" ]] ||
     fail "Melloa's private Codex CLI $MELLOA_CODEX_CLI_VERSION is required"

@@ -193,6 +193,8 @@ def test_server_runtime_uses_private_toolchain_paths() -> None:
     assert "/usr/local/bin/codex" not in bootstrap
     assert "/usr/local/bin/codex" not in preflight
     assert "CODEX_EXECUTABLE=/opt/melloa/toolchain/codex/bin/codex" in wrapper
+    assert "chmod -R a+rX,go-w" in bootstrap
+    assert "runuser -u melloa-codex -- test -x" in preflight
     for path in sorted(SYSTEMD.glob("*.service")):
         unit = path.read_text(encoding="utf-8")
         assert "Environment=PATH=/opt/melloa/toolchain/bin:" in unit
