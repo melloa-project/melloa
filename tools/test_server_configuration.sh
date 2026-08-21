@@ -173,6 +173,18 @@ for secret in \
 done
 
 "$ROOT/infra/server/install.sh" --source "$ROOT" --root "$DUPLICATE_TARGET" >/dev/null
+grep --fixed-strings --quiet \
+  "backup repository mount is unavailable; mount off-device storage at \$BACKUP_REPOSITORY and rerun setup" \
+  "$ROOT/infra/server/configure.sh"
+grep --fixed-strings --quiet \
+  "backup repository must use storage independent from the server root filesystem; mount off-device storage at \$BACKUP_REPOSITORY and rerun setup" \
+  "$ROOT/infra/server/configure.sh"
+grep --fixed-strings --quiet \
+  "backup repository directory must be an explicit mount point; mount off-device storage at \$BACKUP_REPOSITORY_DIR and rerun preflight" \
+  "$ROOT/infra/server/preflight.sh"
+grep --fixed-strings --quiet \
+  "backup repository must be on storage independent from the server root filesystem; mount off-device storage at \$BACKUP_REPOSITORY_DIR and rerun preflight" \
+  "$ROOT/infra/server/preflight.sh"
 if "$ROOT/infra/server/configure.sh" \
   --source "$ROOT" \
   --root "$DUPLICATE_TARGET" \

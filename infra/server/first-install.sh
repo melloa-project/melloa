@@ -349,7 +349,7 @@ validate_public_setup_inputs() {
   findmnt --mountpoint "$backup_repository" >/dev/null ||
     fail "backup repository must be an explicit mount point; mount off-device storage at $backup_repository and rerun setup"
   [[ "$(stat --format='%d' "$backup_repository")" != "$(stat --format='%d' /)" ]] ||
-    fail "backup repository must use storage independent from the server root filesystem"
+    fail "backup repository must use storage independent from the server root filesystem; mount off-device storage at $backup_repository and rerun setup"
 }
 
 validate_telegram_bot_token() {

@@ -192,6 +192,12 @@ set -e
 grep --fixed-strings --quiet \
   "backup repository must be an explicit mount point" \
   "$WORKDIR/missing-mount-output.log"
+grep --fixed-strings --quiet \
+  "mount off-device storage at /mnt/melloa-off-device-backup and rerun this verifier" \
+  "$WORKDIR/missing-mount-output.log"
+grep --fixed-strings --quiet \
+  "backup repository must use storage independent from the server root filesystem; mount off-device storage at \$BACKUP_REPOSITORY_DIR and rerun this verifier" \
+  "$ROOT/infra/server/verify-owner-journey.sh"
 [[ ! -f "$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json" ]]
 
 set +e

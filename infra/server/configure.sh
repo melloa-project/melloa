@@ -441,11 +441,11 @@ if [[ "$DESTINATION_ROOT" == / ]]; then
 fi
 if [[ "$DESTINATION_ROOT" == / || "${MELLOA_TEST_VALIDATE_BACKUP_MOUNT:-}" == yes ]]; then
   [[ -d "$BACKUP_REPOSITORY" && ! -L "$BACKUP_REPOSITORY" ]] ||
-    fail "backup repository mount is unavailable"
+    fail "backup repository mount is unavailable; mount off-device storage at $BACKUP_REPOSITORY and rerun setup"
   findmnt --mountpoint "$BACKUP_REPOSITORY" >/dev/null ||
-    fail "backup repository must be an explicit mount point"
+    fail "backup repository must be an explicit mount point; mount off-device storage at $BACKUP_REPOSITORY and rerun setup"
   [[ "$(stat --format='%d' "$BACKUP_REPOSITORY")" != "$(stat --format='%d' /)" ]] ||
-    fail "backup repository must use storage independent from the server root filesystem"
+    fail "backup repository must use storage independent from the server root filesystem; mount off-device storage at $BACKUP_REPOSITORY and rerun setup"
 fi
 if [[ "$DESTINATION_ROOT" == / ]]; then
   if [[ -e "$RELEASE_STATE_DIR/release.json" ]]; then

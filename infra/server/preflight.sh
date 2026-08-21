@@ -342,9 +342,9 @@ fi
 require_private_directory \
   "$BACKUP_REPOSITORY_DIR" "backup repository directory" "$RUNTIME_UID" "$RUNTIME_GID"
 findmnt --mountpoint "$BACKUP_REPOSITORY_DIR" >/dev/null ||
-  fail "backup repository directory must be an explicit mount point"
+  fail "backup repository directory must be an explicit mount point; mount off-device storage at $BACKUP_REPOSITORY_DIR and rerun preflight"
 [[ "$(stat --format='%d' "$BACKUP_REPOSITORY_DIR")" != "$(stat --format='%d' /)" ]] ||
-  fail "backup repository must be on storage independent from the server root filesystem"
+  fail "backup repository must be on storage independent from the server root filesystem; mount off-device storage at $BACKUP_REPOSITORY_DIR and rerun preflight"
 
 readonly GUARDIAN_HANDOFF_DIR="$(read_environment_path MELLOA_GUARDIAN_HANDOFF_DIR)"
 [[ "$GUARDIAN_HANDOFF_DIR" == /var/lib/melloa/guardian-handoff ]] ||

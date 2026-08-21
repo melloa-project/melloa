@@ -132,7 +132,7 @@ require_backup_mount() {
   findmnt --mountpoint "$backup_path" >/dev/null ||
     fail "backup repository must be an explicit mount point; mount off-device storage at $BACKUP_REPOSITORY_DIR and rerun this verifier"
   [[ "$(stat --format='%d' "$backup_path")" != "$(stat --format='%d' "$root_path")" ]] ||
-    fail "backup repository must use storage independent from the server root filesystem"
+    fail "backup repository must use storage independent from the server root filesystem; mount off-device storage at $BACKUP_REPOSITORY_DIR and rerun this verifier"
 }
 
 compose() {

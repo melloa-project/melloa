@@ -490,6 +490,9 @@ fi
 grep --fixed-strings --quiet \
   "backup repository must be an explicit mount point; mount off-device storage at $BAD_MOUNT_REPOSITORY and rerun setup" \
   "$BAD_MOUNT_LOG"
+grep --fixed-strings --quiet \
+  "backup repository must use storage independent from the server root filesystem; mount off-device storage at" \
+  "$ROOT/infra/server/first-install.sh"
 if grep --fixed-strings --quiet "TELEGRAM_BOT_TOKEN is required" "$BAD_MOUNT_LOG"; then
   echo "First-install setup prompted for secrets before backup mount validation" >&2
   exit 1
