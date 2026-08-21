@@ -24,10 +24,20 @@ Use the installed wrappers rather than hand-editing runtime state:
 sudo /usr/local/libexec/melloa/update
 sudo /usr/local/libexec/melloa/rollback
 sudo /usr/local/libexec/melloa/restore-drill
+sudo /usr/local/libexec/melloa/verify-owner-journey
+sudo /usr/local/libexec/melloa/qualification-record
 ```
 
-The server keeps release and maintenance history so update, rollback, and restore claims can be
-checked after the fact.
+`update` refreshes the managed `/srv/melloa/release-source` checkout, installs host assets, activates
+the new release, and ends with the Telegram verifier. `rollback` snapshots current owner data first,
+restores the previous recorded release when it is migration-compatible, and also ends with the
+Telegram verifier. `restore-drill` restores the latest encrypted backup into a separate temporary
+Compose project; it does not stop or overwrite the active server.
+
+`qualification-record` prints the private redacted evidence snapshot. Read its `next_steps` section
+after setup, update, rollback, reboot, and restore drill. It tells you which local proof is still
+missing and gives the next command. Keep Telegram `/change show <change_id>` separately for
+self-change evidence because the deployed proposal digest and revision live in app state.
 
 ## What to prove after changes
 
@@ -36,8 +46,16 @@ After an update or self-change deployment:
 - Telegram still replies to the exact owner;
 - `/status` reports healthy runtime and backup state;
 - the selected model route did not silently change;
-- the release journal records the deployed commit;
+- `qualification-record` shows owner verification, restore drill, update, and rollback evidence;
+- `/change show <change_id>` reports `State: deployed` for a self-change deployment;
 - rollback remains available if the result is wrong.
+
+After a reboot:
+
+```bash
+sudo /usr/local/libexec/melloa/verify-owner-journey
+sudo /usr/local/libexec/melloa/qualification-record
+```
 
 If a step fails, fix the concrete failed step. Avoid broad rebuilds or secret rotation unless the
 failure points there.

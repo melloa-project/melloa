@@ -156,6 +156,9 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     runtime_loop = (DOCS_SITE / "src/content/docs/runtime-loop.mdx").read_text(
         encoding="utf-8"
     )
+    operate = (DOCS_SITE / "src/content/docs/operate.mdx").read_text(
+        encoding="utf-8"
+    )
     harnesses = (DOCS_SITE / "src/content/docs/harnesses.mdx").read_text(
         encoding="utf-8"
     )
@@ -196,6 +199,14 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "every local evidence line is present" in deploy
     assert "Keep `/change show <change_id>` from Telegram" in deploy
     assert "the self-change proof" in deploy
+    assert "sudo /usr/local/libexec/melloa/update" in operate
+    assert "sudo /usr/local/libexec/melloa/rollback" in operate
+    assert "sudo /usr/local/libexec/melloa/restore-drill" in operate
+    assert "sudo /usr/local/libexec/melloa/verify-owner-journey" in operate
+    assert "sudo /usr/local/libexec/melloa/qualification-record" in operate
+    assert "Read its `next_steps` section" in operate
+    assert "Keep Telegram `/change show <change_id>` separately" in operate
+    assert "After a reboot" in operate
     assert "/change propose" in self_change
     assert "/change show <change_id>" in self_change
     assert "Avoid recovery-spine changes" in self_change
