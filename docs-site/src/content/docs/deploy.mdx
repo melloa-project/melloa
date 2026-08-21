@@ -255,6 +255,12 @@ sudo /usr/local/libexec/melloa/qualification-record
 sudo /usr/local/libexec/melloa/verify-owner-journey
 ```
 
+Read the `next_steps` section in `qualification-record`. It is the local evidence checklist: it
+tells you whether backup, Telegram verification, restore drill, self-change, update, and rollback
+evidence are present, and gives the next command for anything missing. Run it again after each
+proof until every local evidence line is present. Keep `/change show <change_id>` from Telegram as
+the self-change proof because that deployed proposal receipt lives in the app conversation state.
+
 Open [Runtime loop](../runtime-loop/) for the closed-loop design and [Self-change loop](../self-change/)
 for the safety model.
 
@@ -270,7 +276,12 @@ After the server returns:
 sudo /usr/local/libexec/melloa/verify-owner-journey
 sudo /usr/local/libexec/melloa/restore-drill
 sudo /usr/local/libexec/melloa/verify-owner-journey
+sudo /usr/local/libexec/melloa/qualification-record
 ```
+
+If `qualification-record` still reports missing update or rollback evidence, wait until a later
+reviewed `main` commit exists, then run the installed `update` and `rollback` wrappers from the
+repository deployment guide.
 
 ## If setup stops
 

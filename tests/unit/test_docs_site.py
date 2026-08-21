@@ -107,6 +107,9 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert "infra/server/first-install.sh --print-input-checklist" in guide
     assert "Self-change proof" in guide
+    assert "Read the `next_steps` section" in guide
+    assert "Rerun `qualification-record` after each proof" in guide
+    assert "Keep the Telegram `/change show <change_id>` output separately" in guide
     assert "readiness banner" not in guide
     assert "NOT READY" not in guide
     assert "not ready" not in guide.lower()
@@ -188,6 +191,11 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "/change diff <change_id>" in deploy
     assert "/change approve <change_id> <16-character proposal token>" in deploy
     assert "qualification-record" in deploy
+    assert "Read the `next_steps` section in `qualification-record`" in deploy
+    assert "Run it again after each" in deploy
+    assert "every local evidence line is present" in deploy
+    assert "Keep `/change show <change_id>` from Telegram" in deploy
+    assert "the self-change proof" in deploy
     assert "/change propose" in self_change
     assert "/change show <change_id>" in self_change
     assert "Avoid recovery-spine changes" in self_change

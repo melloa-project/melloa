@@ -410,6 +410,13 @@ latest owner verifier receipt, and recent release history, run:
 sudo /usr/local/libexec/melloa/qualification-record
 ```
 
+Read the `next_steps` section at the bottom of that output. It is the local evidence checklist:
+backup, owner verification, restore drill, self-change-worker state, update evidence, and rollback
+evidence. Rerun `qualification-record` after each proof until every local evidence line is present.
+Keep the Telegram `/change show <change_id>` output separately as the self-change proof, because the
+deployed proposal digest and revision are conversation/app evidence rather than host wrapper
+receipts.
+
 A sufficient private record is:
 
 - the installed Melloa commit SHA from `git -C /srv/melloa/release-source rev-parse HEAD`;
