@@ -13,14 +13,29 @@ real goals by watching agreed signals, reflecting on them, and proposing useful 
 ## The loop
 
 1. The owner sets a goal with Melli in normal conversation.
-2. Deterministic connectors collect agreed facts: calendar events, email metadata, Strava or workout
-   exports, task completions, webhook payloads, files, or other owner-approved sources.
-3. Scheduled jobs aggregate state without calling a model for every event.
-4. A model runs at decision points: reflect, ask a question, propose a plan, draft a message, or
+2. The goal gets a small shared workspace that both owner and Melli can update: current intent,
+   constraints, relevant facts, open questions, proposed interventions, and observed outcomes.
+3. Deterministic connectors collect agreed facts: calendar events, email metadata, Strava or workout
+   exports, Apple Health or Workout exports, task completions, webhook payloads, files, or other
+   owner-approved sources.
+4. Scheduled jobs aggregate state without calling a model for every event.
+5. A model runs at decision points: reflect, ask a question, propose a plan, draft a message, or
    decide that silence is better.
-5. External effects stay bounded: owner approval, capability checks, cost limits, provenance, and
+6. External effects stay bounded: owner approval, capability checks, cost limits, provenance, and
    rollback or correction where possible.
-6. The outcome is written back as ordinary owner context so future conversations can use it.
+7. The outcome is written back as ordinary owner context so future conversations can use it.
+
+## Deterministic code, not model-owned authority
+
+Melli should eventually be able to propose the boring code that makes a goal loop useful: a webhook
+receiver, a scheduled aggregation job, a task-app update, a Firestore or other datastore write, or a
+small dashboard. That code still enters through self-change: retained diff, exact owner review,
+commit, deploy, verification, and rollback evidence.
+
+Once deployed, the deterministic code runs under narrow capability. It may write normalized facts,
+aggregate state, or enqueue a model judgment point. It must not treat an incoming email, webhook
+payload, calendar entry, website, or model response as permission to broaden access or perform a new
+external effect.
 
 ## Example shape
 
@@ -29,7 +44,11 @@ A fitness or health goal should not start as "give the model my whole life and l
 The safe shape is narrower:
 
 - a Strava connector or owner-approved workout import writes normalized activity facts;
+- an Apple Health or Workout export path can add owner-approved health facts without needing a
+  permanent mobile-device bridge on day one;
 - a calendar connector writes relevant schedule facts;
+- a shared goal record keeps the current target, constraints, recent evidence, and Melli's proposed
+  next intervention visible to the owner;
 - a scheduled reflection job compares the last few days against the goal;
 - Melli messages the owner only when there is a useful question, pattern, or proposed change;
 - if a task app or dashboard is useful, self-change can propose it, owner approval can deploy it,

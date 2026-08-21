@@ -66,12 +66,15 @@ These hypotheses are deliberately ordered by owner value and may change when evi
 Do not implement these as six horizontal subsystems. Each step must arrive as a coherent owner
 experience with a compelling before/after story.
 
-The intended proactive shape is goal-first and event-bounded: the owner sets a goal with Melli;
-deterministic connectors ingest agreed facts from sources such as calendar, email metadata,
-workouts, task completions, webhooks, or files; scheduled jobs aggregate state; model calls happen
-at judgment points; and external effects remain narrow, inspectable, and owner-authorized. This is
-not ambient autonomy. It should follow the first recoverable Telegram/self-change server proof, not
-replace it.
+The intended proactive shape is goal-first and event-bounded: the owner sets a goal with Melli; a
+small shared goal workspace records current intent, constraints, evidence, questions, interventions,
+and outcomes; deterministic connectors ingest agreed facts from sources such as calendar, email
+metadata, Strava, Apple Health or Workout exports, task completions, webhooks, or files; scheduled
+jobs aggregate state; model calls happen at judgment points; and external effects remain narrow,
+inspectable, and owner-authorized. Melli may propose connector, webhook, scheduler, datastore, or
+dashboard code through the bounded self-change path, but deployed code runs under deterministic
+capability and provenance checks. This is not ambient autonomy. It should follow the first
+recoverable Telegram/self-change server proof, not replace it.
 
 ## Product evidence
 

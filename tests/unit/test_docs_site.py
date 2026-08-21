@@ -202,6 +202,26 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "independent Guardian remaining outside" in harnesses
 
 
+def test_public_site_describes_proactive_goal_loop_bounds() -> None:
+    proactive = (DOCS_SITE / "src/content/docs/proactive-goals.mdx").read_text(
+        encoding="utf-8"
+    )
+    product_direction = (ROOT / "PRODUCT_DIRECTION.md").read_text(encoding="utf-8")
+
+    assert "small shared workspace" in proactive
+    assert "both owner and Melli can update" in proactive
+    assert "Apple Health or Workout exports" in proactive
+    assert "webhook" in proactive
+    assert "receiver" in proactive
+    assert "Firestore or other datastore write" in proactive
+    assert "enqueue a model judgment point" in proactive
+    assert "It must not treat an incoming email, webhook" in proactive
+    assert "shared goal record" in proactive
+    assert "Melli may propose connector, webhook, scheduler, datastore" in product_direction
+    assert "deterministic" in product_direction
+    assert "capability and provenance checks" in product_direction
+
+
 def test_public_site_uses_github_pages_safe_links() -> None:
     homepage = (DOCS_SITE / "src/content/docs/index.mdx").read_text(
         encoding="utf-8"
