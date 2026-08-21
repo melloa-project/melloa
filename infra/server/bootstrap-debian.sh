@@ -89,10 +89,11 @@ select_host_profile() {
   local VERSION_CODENAME=""
   local VERSION_ID=""
 
-  [[ "$os_release_file" == /* && -f "$os_release_file" && ! -L "$os_release_file" && \
-    -r "$os_release_file" ]] || fail "os-release file must be an absolute readable regular file"
+  [[ "$os_release_file" == /* && -f "$os_release_file" && -r "$os_release_file" ]] ||
+    fail "os-release file must be an absolute readable regular file"
 
-  # /etc/os-release is root-controlled host metadata and shell-compatible by contract.
+  # /etc/os-release is root-controlled host metadata and shell-compatible by contract. Debian may
+  # expose it as a symlink to /usr/lib/os-release.
   # shellcheck disable=SC1090
   source "$os_release_file"
 

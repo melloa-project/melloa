@@ -61,6 +61,7 @@ ID=debian
 VERSION_ID=13
 VERSION_CODENAME=trixie
 EOF
+ln --symbolic "$WORKDIR/debian.os-release" "$WORKDIR/debian-os-release-link"
 cat >"$WORKDIR/ubuntu.os-release" <<'EOF'
 ID=ubuntu
 VERSION_ID=24.04
@@ -76,6 +77,8 @@ UBUNTU_CODENAME=noble
 EOF
 
 [[ "$("$BOOTSTRAP" --print-host-profile "$WORKDIR/debian.os-release")" == \
+  $'debian-13-trixie\tDebian 13 (trixie)\tdebian\ttrixie' ]]
+[[ "$("$BOOTSTRAP" --print-host-profile "$WORKDIR/debian-os-release-link")" == \
   $'debian-13-trixie\tDebian 13 (trixie)\tdebian\ttrixie' ]]
 [[ "$("$BOOTSTRAP" --print-host-profile "$WORKDIR/ubuntu.os-release")" == \
   $'ubuntu-24.04-noble\tUbuntu 24.04 LTS (noble)\tubuntu\tnoble' ]]
