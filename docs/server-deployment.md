@@ -205,6 +205,12 @@ If the capable and economy targets resolve to the same base URL and model ID, se
 configuration. That is intentional: Melloa must not silently blur quality, cost, or disclosure
 boundaries between routes just because the route labels differ.
 
+When the OpenAI preset keeps the default GPT-5.6-family model IDs, setup prints official OpenAI
+standard short-context USD reference prices before asking for GBP values: `gpt-5.6-terra` is USD
+2.00 input / USD 12.00 output per 1M tokens, and `gpt-5.6-luna` is USD 0.20 input / USD 1.20 output
+per 1M tokens. Convert the relevant prices to GBP for the account, region, context length, and
+service tier you are actually using; setup does not fetch live exchange rates.
+
 ## Install and activate
 
 On the fresh server, clone Melloa and install the reviewed host prerequisites plus the pinned Codex

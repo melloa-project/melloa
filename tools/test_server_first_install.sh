@@ -149,6 +149,9 @@ grep --fixed-strings --quiet \
   "OpenAI preset defaults: capable uses gpt-5.6-terra; economy uses gpt-5.6-luna." \
   "$LOG"
 grep --fixed-strings --quiet \
+  "Use the current OpenAI pricing for capable-test-model, converted to GBP for this account and service tier." \
+  "$LOG"
+grep --fixed-strings --quiet \
   "Token limits and timeouts use setup defaults unless a staged environment override is supplied." \
   "$LOG"
 if grep --fixed-strings --quiet "model max input tokens" "$LOG"; then
@@ -227,6 +230,15 @@ grep --fixed-strings --quiet \
   "$DEFAULT_MODEL_LOG"
 grep --fixed-strings --quiet \
   "OpenAI preset defaults: capable uses gpt-5.6-terra; economy uses gpt-5.6-luna." \
+  "$DEFAULT_MODEL_LOG"
+grep --fixed-strings --quiet \
+  "Official OpenAI standard short-context reference for gpt-5.6-terra: USD 2.00 input / USD 12.00 output per 1M tokens before GBP conversion." \
+  "$DEFAULT_MODEL_LOG"
+grep --fixed-strings --quiet \
+  "Official OpenAI standard short-context reference for gpt-5.6-luna: USD 0.20 input / USD 1.20 output per 1M tokens before GBP conversion." \
+  "$DEFAULT_MODEL_LOG"
+grep --fixed-strings --quiet \
+  "Enter reviewed GBP values for your account, region, context length, and service tier; check developers.openai.com/api/docs/pricing if unsure." \
   "$DEFAULT_MODEL_LOG"
 
 MELLOA_SETUP_BACKUP_REPOSITORY=/mnt/melloa-off-device-backup \

@@ -169,6 +169,10 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "Do not send `/start` to the bot yet" in deploy
     assert "current input/output prices as GBP decimals" in deploy
     assert "The `openai` preset fills the OpenAI HTTPS base URL" in deploy
+    assert "Official USD reference before GBP conversion" in deploy
+    assert "USD 2.00 input / USD 12.00 output per 1M tokens" in deploy
+    assert "USD 0.20 input / USD 1.20 output per 1M tokens" in deploy
+    assert "Setup does not fetch live exchange rates" in deploy
     assert "gpt-5.6-luna" in deploy
     assert "gpt-5.6-terra` as the capable default" in deploy
     assert "(../runtime-loop/)" in deploy

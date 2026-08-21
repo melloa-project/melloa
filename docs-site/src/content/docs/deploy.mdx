@@ -117,6 +117,17 @@ For the simplest hosted model setup, choose `openai` for both routes:
 The `openai` preset fills the OpenAI HTTPS base URL and Responses API style for you. You do not need
 to type those fields for the first path.
 
+When you keep the default OpenAI model IDs, setup prints the official OpenAI standard
+short-context USD reference prices before asking for GBP values:
+
+| Route | Default model | Official USD reference before GBP conversion |
+| --- | --- | --- |
+| `capable` | `gpt-5.6-terra` | USD 2.00 input / USD 12.00 output per 1M tokens |
+| `economy` | `gpt-5.6-luna` | USD 0.20 input / USD 1.20 output per 1M tokens |
+
+Convert the relevant prices to GBP for your account, region, context length, and service tier.
+Setup does not fetch live exchange rates.
+
 Use `external` only when another hosted provider or router gives you all of these facts: HTTPS
 OpenAI-compatible base URL, exact model ID, API style (`responses` or `chat_completions`), bearer
 token, and input/output prices converted to GBP. A cheaper online frontier-lab provider is fine

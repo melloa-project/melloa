@@ -410,6 +410,29 @@ openai_default_model_id() {
   esac
 }
 
+openai_default_pricing_hint() {
+  local route="$1"
+  case "$route" in
+    capable)
+      echo "Official OpenAI standard short-context reference for gpt-5.6-terra: USD 2.00 input / USD 12.00 output per 1M tokens before GBP conversion." >&2
+      ;;
+    economy)
+      echo "Official OpenAI standard short-context reference for gpt-5.6-luna: USD 0.20 input / USD 1.20 output per 1M tokens before GBP conversion." >&2
+      ;;
+    *) fail "unknown model route: $route" ;;
+  esac
+  echo "Enter reviewed GBP values for your account, region, context length, and service tier; check developers.openai.com/api/docs/pricing if unsure." >&2
+}
+
+route_cost_ceiling_example() {
+  local route="$1"
+  case "$route" in
+    capable) printf '%s' 0.05 ;;
+    economy) printf '%s' 0.01 ;;
+    *) fail "unknown model route: $route" ;;
+  esac
+}
+
 write_model_route() {
   local route="$1"
   local output="$2"
@@ -449,6 +472,11 @@ write_model_route() {
           "$(openai_default_model_id "$route")"
       )"
       validate_model_id "$model_id" "$route OpenAI model ID"
+      if [[ "$model_id" == "$(openai_default_model_id "$route")" ]]; then
+        openai_default_pricing_hint "$route"
+      else
+        echo "Use the current OpenAI pricing for $model_id, converted to GBP for this account and service tier." >&2
+      fi
       base_url="https://api.openai.com/v1"
       validate_model_base_url "$base_url" "$route OpenAI base URL" approved_provider
       api_style=responses
@@ -460,19 +488,19 @@ write_model_route() {
       token_prompt="$route OpenAI API key"
       estimated_max_cost_gbp="$(
         prompt_text "$(route_environment_name "$route" ESTIMATED_MAX_COST_GBP)" \
-          "$route maximum GBP cost per request"
+          "$route maximum GBP cost per request (example: $(route_cost_ceiling_example "$route"))"
       )"
       validate_decimal "$estimated_max_cost_gbp" "$route maximum GBP cost"
       input_cost_gbp_per_million_tokens="$(
         prompt_text "$(route_environment_name "$route" INPUT_COST_GBP_PER_MILLION_TOKENS)" \
-          "$route input GBP per million tokens"
+          "$route input GBP per million tokens after currency conversion"
       )"
       validate_decimal \
         "$input_cost_gbp_per_million_tokens" \
         "$route input GBP per million tokens"
       output_cost_gbp_per_million_tokens="$(
         prompt_text "$(route_environment_name "$route" OUTPUT_COST_GBP_PER_MILLION_TOKENS)" \
-          "$route output GBP per million tokens"
+          "$route output GBP per million tokens after currency conversion"
       )"
       validate_decimal \
         "$output_cost_gbp_per_million_tokens" \
@@ -516,19 +544,19 @@ write_model_route() {
       token_prompt="$route model bearer token"
       estimated_max_cost_gbp="$(
         prompt_text "$(route_environment_name "$route" ESTIMATED_MAX_COST_GBP)" \
-          "$route maximum GBP cost per request"
+          "$route maximum GBP cost per request (example: $(route_cost_ceiling_example "$route"))"
       )"
       validate_decimal "$estimated_max_cost_gbp" "$route maximum GBP cost"
       input_cost_gbp_per_million_tokens="$(
         prompt_text "$(route_environment_name "$route" INPUT_COST_GBP_PER_MILLION_TOKENS)" \
-          "$route input GBP per million tokens"
+          "$route input GBP per million tokens after currency conversion"
       )"
       validate_decimal \
         "$input_cost_gbp_per_million_tokens" \
         "$route input GBP per million tokens"
       output_cost_gbp_per_million_tokens="$(
         prompt_text "$(route_environment_name "$route" OUTPUT_COST_GBP_PER_MILLION_TOKENS)" \
-          "$route output GBP per million tokens"
+          "$route output GBP per million tokens after currency conversion"
       )"
       validate_decimal \
         "$output_cost_gbp_per_million_tokens" \
