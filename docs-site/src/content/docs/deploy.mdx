@@ -3,13 +3,13 @@ title: Deploy the server
 description: The first-owner server setup path for Melloa.
 ---
 
-This is the setup path to follow on the actual home server. It goes from a clean Debian machine to
-one persistent Telegram conversation with Melli.
+This is the setup path to follow on the actual home server. It goes from a clean Debian 13
+(`trixie`) amd64 machine booted with systemd to one persistent Telegram conversation with Melli.
 
 ## 1. Prepare the machine and clone Melloa
 
-Use a dedicated Debian host. Log in with a user that can run `sudo`, then install the two packages
-needed to fetch the reviewed source:
+Use a dedicated Debian 13 (`trixie`) amd64 host booted with systemd. Log in with a user that can run
+`sudo`, then install the two packages needed to fetch the reviewed source:
 
 ```bash
 sudo apt-get update

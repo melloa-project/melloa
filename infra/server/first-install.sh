@@ -48,6 +48,10 @@ Melloa first-owner setup input checklist
 Prepare these owner-controlled values before running:
   sudo infra/server/first-install.sh --source "$PWD"
 
+Supported host:
+  - Debian 13 (trixie) amd64 booted with systemd. Bootstrap checks this before installing
+    prerequisites.
+
 Public paths:
   - Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup.
   - Guardian handoff: public status.json and public.pem from:

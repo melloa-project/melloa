@@ -80,6 +80,9 @@ grep --fixed-strings --quiet \
   'sudo infra/server/first-install.sh --source "$PWD"' \
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet \
+  "Debian 13 (trixie) amd64 booted with systemd." \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
   "Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup." \
   "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "@BotFather" "$CHECKLIST_LOG"

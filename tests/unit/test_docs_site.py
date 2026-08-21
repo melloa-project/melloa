@@ -16,6 +16,7 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     )
 
     assert "Run Melloa on a home server" in homepage
+    assert "Debian 13 (`trixie`) amd64 server booted" in homepage
     assert "setup discovers your numeric owner ID during private pairing" in homepage
     assert "hosted OpenAI-compatible model routes" in homepage
     assert "You do not need a local GPU or local model to begin" in homepage
@@ -33,6 +34,7 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "One real dedicated-server run" in status_strip
     assert "Fork decision" in status_strip
     assert "First server path" in command_spine
+    assert "Debian 13 trixie amd64" in command_spine
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in command_spine
     assert 'stat --format=\'%d\' /mnt/melloa-off-device-backup' in command_spine
     assert (
@@ -70,6 +72,7 @@ def test_readme_opens_with_first_owner_server_path() -> None:
     opening = readme.split("## Current status", 1)[0]
 
     assert "## Start here: first-owner home server" in opening
+    assert "Debian 13 (`trixie`) amd64 systemd server" in opening
     assert "https://melloa-project.github.io/melloa/deploy/" in opening
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in opening
@@ -153,6 +156,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     normalized_runtime_loop = " ".join(runtime_loop.split())
 
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
+    assert "Debian 13 (`trixie`) amd64 host booted with systemd" in deploy
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
     assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy

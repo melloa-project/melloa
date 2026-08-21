@@ -14,7 +14,7 @@ If your goal is to run Melli on a dedicated home server, use the public setup pa
 
 The current first-server path is:
 
-- Debian server, not the owner's laptop;
+- Debian 13 (`trixie`) amd64 systemd server, not the owner's laptop;
 - Telegram bot chat as the normal owner interface;
 - two hosted OpenAI-compatible conversation routes: one capable route and one cheaper economy route;
 - no expected local model or GPU setup;
@@ -50,10 +50,11 @@ cd ../melloa
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
-Before running `first-install.sh`, have that off-device backup path mounted, a dedicated Telegram
-bot token, two hosted model route choices with reviewed pricing, a restic password retained away
-from the server, a GitHub token for this repository, and a Codex/OpenAI API key for the bounded
-planner worker. The public deploy page explains each input and the exact setup prompts.
+Before running `first-install.sh`, use a Debian 13 (`trixie`) amd64 server booted with systemd and
+have that off-device backup path mounted, a dedicated Telegram bot token, two hosted model route
+choices with reviewed pricing, a restic password retained away from the server, a GitHub token for
+this repository, and a Codex/OpenAI API key for the bounded planner worker. The public deploy page
+explains each input and the exact setup prompts.
 
 ## Evidence status
 
