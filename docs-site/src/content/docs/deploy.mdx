@@ -66,9 +66,14 @@ Run the bootstrap from the Melloa checkout:
 sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 ```
 
-That installs Docker, Compose, managed Python 3.13, Node.js, uv, managed Go, and the pinned Codex
-CLI toolchain used by the owner-approved self-change workers. Codex is for self-change planning; it
-is not Melli’s normal conversation model.
+That accepts host Node.js `>=22.18.0`, npm `>=10.9.3`, Python `>=3.13.3` within Python 3,
+uv `>=0.12.0`, Go `>=1.27.0`, and Docker Compose `>=2.27.0`. A missing or too-old tool gets a
+reviewed, checksum-verified fallback under `/opt/melloa/toolchain`; compatible newer host tools are
+left in place. Melloa also reuses an existing official Docker apt source rather than creating a
+conflicting `Signed-By` definition. The Codex CLI is the narrow exception: Melloa installs its
+private, integrity-pinned reviewed version for the owner-approved self-change worker because its
+sandbox controls are security-relevant. Codex is for self-change planning; it is not Melli’s normal
+conversation model.
 
 ## 4. Create the Guardian public handoff
 
@@ -190,7 +195,7 @@ from normal conversation routing:
 If you need a restic password generator:
 
 ```bash
-python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
 Store that output somewhere the server and backup repository cannot both lose.

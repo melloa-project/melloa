@@ -3,6 +3,8 @@ set -euo pipefail
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 SOURCE=/srv/melloa/release-source
 ORIGIN=https://github.com/melloa-project/melloa.git
 INITIALIZE_BACKUP=false

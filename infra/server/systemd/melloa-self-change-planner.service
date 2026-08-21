@@ -20,7 +20,7 @@ RestartSec=15s
 TimeoutStopSec=30s
 KillMode=control-group
 UMask=0077
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=/etc/melloa/self-change.env
 LoadCredential=planner-dsn:/etc/melloa/private/database-change-planner-dsn
 LoadCredential=codex-api-key:/etc/melloa/private/codex-api-key

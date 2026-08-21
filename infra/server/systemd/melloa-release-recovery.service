@@ -15,7 +15,7 @@ ExecStart=/srv/melloa/release-source/tools/server_release.sh recover --env-file 
 RemainAfterExit=yes
 UMask=0077
 Environment=HOME=/var/lib/melloa/applier-home
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 UnsetEnvironment=CODEX_HOME OPENAI_API_KEY
 CapabilityBoundingSet=
 NoNewPrivileges=yes

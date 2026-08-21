@@ -4,6 +4,17 @@ set -euo pipefail
 umask 077
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+readonly TOOLCHAIN_HELPERS="$ROOT/infra/server/toolchain.sh"
+[[ -f "$TOOLCHAIN_HELPERS" && ! -L "$TOOLCHAIN_HELPERS" ]] || {
+  echo "Server preflight failed: toolchain helpers are unavailable" >&2
+  exit 1
+}
+# shellcheck disable=SC1090
+source "$TOOLCHAIN_HELPERS"
+readonly MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain
+readonly MELLOA_TOOLCHAIN_BIN="$MELLOA_TOOLCHAIN_DIR/bin"
+readonly MELLOA_RUNTIME_PATH="$(melloa_runtime_path "$MELLOA_TOOLCHAIN_BIN")"
+export PATH="$MELLOA_RUNTIME_PATH"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"
 INSTALLED=false
@@ -76,12 +87,6 @@ apply_ca_file() {
   export GIT_SSL_CAINFO="$path"
   export NODE_EXTRA_CA_CERTS="$path"
   export SSL_CERT_FILE="$path"
-}
-
-version_at_least() {
-  local actual="$1"
-  local required="$2"
-  [[ "$(printf '%s\n%s\n' "$required" "$actual" | sort -V | head -n 1)" == "$required" ]]
 }
 
 require_private_file() {
@@ -188,44 +193,59 @@ readonly TOOLCHAIN_LOCK="$SOURCE/infra/server/toolchain.lock"
 # shellcheck disable=SC1090
 source "$TOOLCHAIN_LOCK"
 
+readonly MELLOA_DOCKER_COMPOSE_MIN_VERSION MELLOA_PYTHON_MIN_VERSION MELLOA_PYTHON_VERSION
+readonly MELLOA_NODE_MIN_VERSION MELLOA_NODE_VERSION MELLOA_NPM_MIN_VERSION
+readonly MELLOA_GO_MIN_VERSION MELLOA_UV_MIN_VERSION MELLOA_CODEX_CLI_VERSION
+
 for command in \
   awk basename bash bwrap chown docker find findmnt getent git grep groupadd head id install \
-  flock go jq make mktemp node npm python3.13 rm rsync runuser sed sha256sum sort stat sync \
-  systemctl systemd-analyze tar timeout uname useradd uv wc; do
+  flock jq make mktemp readlink rm rsync runuser sed sha256sum sort stat sync systemctl \
+  systemd-analyze tar timeout uname useradd wc; do
   require_command "$command"
+done
+for command in node npm python3 uv go gofmt; do
+  melloa_tool_link_is_usable "$MELLOA_TOOLCHAIN_BIN" "$command" ||
+    fail "Melloa-selected $command is unavailable; rerun bootstrap without --check"
 done
 
 readonly SYSTEMD_VERSION="$(systemd-analyze --version | awk 'NR == 1 {print $2}')"
 [[ "$SYSTEMD_VERSION" =~ ^[0-9]+$ ]] || fail "systemd version could not be determined"
 ((SYSTEMD_VERSION >= 249)) || fail "systemd 249 or newer is required"
 
-readonly UV_VERSION="$(uv --version | awk 'NR == 1 {print $2}')"
-[[ "$UV_VERSION" == "$MELLOA_UV_VERSION" ]] ||
-  fail "uv $MELLOA_UV_VERSION is required"
-readonly PYTHON_VERSION="$(python3.13 -c 'import platform; print(platform.python_version())')"
-[[ "$PYTHON_VERSION" == "$MELLOA_PYTHON_VERSION" ]] ||
-  fail "Python $MELLOA_PYTHON_VERSION is required"
-readonly GO_VERSION="$(go env GOVERSION | sed 's/^go//')"
-[[ "$GO_VERSION" == "$MELLOA_GO_VERSION" ]] ||
-  fail "Go $MELLOA_GO_VERSION is required"
-readonly NODE_VERSION="$(node --version | sed 's/^v//; s/+.*//')"
-[[ "$NODE_VERSION" == "$MELLOA_NODE_VERSION" ]] ||
-  fail "Node.js $MELLOA_NODE_VERSION is required"
-readonly COMPOSE_VERSION="$(docker compose version --short | sed 's/^v//')"
-version_at_least "$COMPOSE_VERSION" 2.27.0 || fail "Docker Compose 2.27 or newer is required"
+readonly UV_VERSION="$("$MELLOA_TOOLCHAIN_BIN/uv" --version 2>/dev/null | awk 'NR == 1 {print $2}')"
+melloa_version_at_least "$UV_VERSION" "$MELLOA_UV_MIN_VERSION" ||
+  fail "uv $MELLOA_UV_MIN_VERSION or newer is required"
+readonly PYTHON_VERSION="$("$MELLOA_TOOLCHAIN_BIN/python3" -c 'import platform; print(platform.python_version())' 2>/dev/null || true)"
+melloa_python_version_is_supported "$PYTHON_VERSION" "$MELLOA_PYTHON_MIN_VERSION" ||
+  fail "Python $MELLOA_PYTHON_MIN_VERSION or newer within Python 3 is required"
+readonly GO_VERSION="$("$MELLOA_TOOLCHAIN_BIN/go" env GOVERSION 2>/dev/null | sed 's/^go//')"
+melloa_version_at_least "$GO_VERSION" "$MELLOA_GO_MIN_VERSION" ||
+  fail "Go $MELLOA_GO_MIN_VERSION or newer is required"
+readonly NODE_VERSION="$("$MELLOA_TOOLCHAIN_BIN/node" --version 2>/dev/null || true)"
+melloa_version_at_least "$NODE_VERSION" "$MELLOA_NODE_MIN_VERSION" ||
+  fail "Node.js $MELLOA_NODE_MIN_VERSION or newer is required"
+readonly NPM_VERSION="$("$MELLOA_TOOLCHAIN_BIN/npm" --version 2>/dev/null || true)"
+melloa_version_at_least "$NPM_VERSION" "$MELLOA_NPM_MIN_VERSION" ||
+  fail "npm $MELLOA_NPM_MIN_VERSION or newer is required"
+readonly COMPOSE_VERSION="$(docker compose version --short 2>/dev/null | sed 's/^v//')"
+melloa_version_at_least "$COMPOSE_VERSION" "$MELLOA_DOCKER_COMPOSE_MIN_VERSION" ||
+  fail "Docker Compose $MELLOA_DOCKER_COMPOSE_MIN_VERSION or newer is required"
 
 verify_codex_cli() {
+  local codex_executable
   local codex_exec_help
   local codex_help
   local codex_version
   local option
-  [[ -x /usr/local/bin/codex ]] || fail "Codex CLI must be installed at /usr/local/bin/codex"
-  codex_version="$(/usr/local/bin/codex --version | awk 'NR == 1 {print $2}')"
+  codex_executable="$MELLOA_TOOLCHAIN_DIR/codex/bin/codex"
+  [[ -x "$codex_executable" ]] ||
+    fail "Melloa's private Codex CLI is unavailable; rerun bootstrap with --self-change-tools"
+  codex_version="$("$codex_executable" --version | awk 'NR == 1 {print $2}')"
   [[ "$codex_version" == "$MELLOA_CODEX_CLI_VERSION" ]] ||
-    fail "Codex CLI $MELLOA_CODEX_CLI_VERSION is required"
+    fail "Melloa's private Codex CLI $MELLOA_CODEX_CLI_VERSION is required"
 
-  codex_help="$(/usr/local/bin/codex --help 2>&1)"
-  codex_exec_help="$(/usr/local/bin/codex exec --help 2>&1)"
+  codex_help="$("$codex_executable" --help 2>&1)"
+  codex_exec_help="$("$codex_executable" exec --help 2>&1)"
   for option in --sandbox --ask-for-approval --oss --local-provider; do
     grep --fixed-strings --quiet -- "$option" <<<"$codex_help" ||
       fail "Codex CLI does not support required option: $option"

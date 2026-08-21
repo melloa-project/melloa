@@ -4,6 +4,8 @@ set +x
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 SOURCE=/srv/melloa/release-source
 DESTINATION_ROOT=/
 TIMEOUT_SECONDS=300
@@ -380,9 +382,9 @@ readonly SNAPSHOT="$(
 echo "Latest encrypted backup succeeded: ${SNAPSHOT:0:12}."
 
 if [[ -z "$PHRASE" ]]; then
-  require_command python3.13
+  require_command python3
   PHRASE="$(
-    python3.13 -c 'import secrets; print("Hello Melli, please reply to setup verification melloa_verify_" + secrets.token_urlsafe(12))'
+    python3 -c 'import secrets; print("Hello Melli, please reply to setup verification melloa_verify_" + secrets.token_urlsafe(12))'
   )"
 fi
 [[ -n "$PHRASE" && ${#PHRASE} -le 160 && "$PHRASE" != *$'\n'* && \

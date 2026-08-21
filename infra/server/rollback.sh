@@ -4,6 +4,8 @@ set +x
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 SOURCE=/srv/melloa/release-source
 SKIP_VERIFICATION=false
 VERIFY_BIN="${MELLOA_ROLLBACK_VERIFY_BIN:-/usr/local/libexec/melloa/verify-owner-journey}"

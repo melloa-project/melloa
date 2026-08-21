@@ -3,6 +3,8 @@ set -euo pipefail
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"

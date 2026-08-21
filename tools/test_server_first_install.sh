@@ -220,7 +220,7 @@ grep --fixed-strings --quiet \
   "Enter a 32-128 character base64url-safe restic password that you keep outside this server and backup disk." \
   "$LOG"
 grep --fixed-strings --quiet \
-  "python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'" \
+  "python3 -c 'import secrets; print(secrets.token_urlsafe(48))'" \
   "$LOG"
 grep --fixed-strings --quiet "Bounded self-change setup:" "$LOG"
 grep --fixed-strings --quiet \

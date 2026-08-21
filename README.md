@@ -136,7 +136,7 @@ This section is for inspecting the current local baseline on a development machi
 dedicated-server path, does not connect Telegram, and should not be used as the owner deployment
 guide. Use [the server deployment guide](docs/server-deployment.md) for the Telegram/server path.
 
-Melloa requires Linux or macOS, Bash, Python 3.13+, uv 0.12.0, and Node.js 22+. Preparing the
+Melloa requires Linux or macOS, Bash, Python 3.13+, uv 0.12.0+, and Node.js 22+. Preparing the
 separate Guardian handoff additionally requires Go 1.24+ and the Guardian repository beside this
 one:
 

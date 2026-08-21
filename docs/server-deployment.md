@@ -19,7 +19,7 @@ The first deployment path is:
 2. mount off-device backup storage;
 3. clone Melloa and bootstrap host prerequisites;
 4. prepare Guardian's public-only handoff;
-5. install the pinned Codex CLI toolchain for the bounded self-change workers;
+5. install Melloa's private, integrity-pinned Codex CLI for the bounded self-change workers;
 6. run one guided setup command;
 7. pair a dedicated Telegram bot;
 8. enter two hosted OpenAI-compatible model routes:
@@ -193,7 +193,7 @@ place that is not the server and not the backup disk. If you need a command, run
 machine and store the exact output:
 
 ```bash
-python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
+python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
 The setup accepts only 32-128 base64url-safe characters for that password. If the server and backup
@@ -243,8 +243,8 @@ service tier you are actually using; setup does not fetch live exchange rates.
 
 ## Install and activate
 
-On the fresh server, clone Melloa and install the reviewed host prerequisites plus the pinned Codex
-CLI required by the self-change workers:
+On the fresh server, clone Melloa and verify the minimum host prerequisites plus Melloa's private
+Codex CLI required by the self-change workers:
 
 ```bash
 sudo apt-get update
@@ -254,10 +254,15 @@ cd melloa
 sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 ```
 
-The bootstrap installs and verifies Docker, Compose, managed Python 3.13, Node.js, uv, managed Go,
-and the reviewed Codex CLI. Go is needed only to create the public Guardian handoff used by this
-first deployment path. Codex CLI is needed only by the self-change planner; it is not mounted into
-the normal conversation worker and does not receive private chat history.
+The bootstrap accepts compatible host tools rather than freezing the whole server toolchain: Node.js
+`>=22.18.0`, npm `>=10.9.3`, Python `>=3.13.3` within Python 3, uv `>=0.12.0`, Go `>=1.27.0`, and
+Docker Compose `>=2.27.0`. If any required tool is missing or too old, Melloa installs its reviewed,
+checksum-verified fallback under `/opt/melloa/toolchain`; it never overwrites an unrelated
+`/usr/local/bin` tool. It also reuses an existing official Docker apt source so an already valid
+`Signed-By` definition does not conflict. Go is needed only to create the public Guardian handoff
+used by this first deployment path. Codex CLI is an intentional exception: the planner uses Melloa's
+private exact reviewed version because its CLI safety controls are part of the self-change boundary.
+It is not mounted into the normal conversation worker and does not receive private chat history.
 
 If you are doing a conversation-only bring-up and intentionally not exercising self-change yet, you
 can omit `--self-change-tools`; run the self-change proof before treating the server path as
@@ -549,7 +554,8 @@ rerunning first install or update.
 Common recoveries:
 
 - bootstrap rejects the host: use Debian 13, Ubuntu 24.04 LTS, or Pop!_OS 24.04 on amd64 with
-  systemd and remove conflicting Docker packages from the fresh-host path;
+  systemd; a valid newer host tool is accepted, while an existing Docker installation that is too
+  old must be upgraded deliberately before rerunning bootstrap;
 - Telegram pairing fails: stop any other long poller, confirm the dedicated bot token is valid, and
   retry; if setup reports the webhook still exists, remove it manually from the previous owner and
   rerun;

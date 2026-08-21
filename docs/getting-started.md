@@ -10,7 +10,7 @@ exercises the bounded self-change loop.
 ## Requirements
 
 - Linux or macOS with Bash
-- Python 3.13+ and uv 0.12.0
+- Python 3.13+ and uv 0.12.0+
 - Node.js 22+
 - `melloa` and `melloa-guardian` checked out as sibling directories
 

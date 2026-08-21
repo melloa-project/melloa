@@ -14,7 +14,7 @@ longitudinal conversations; fixtures establish mechanics only.
 ## Toolchain
 
 - Python 3.13+ with dependencies locked in `uv.lock`
-- uv 0.12.0
+- uv 0.12.0+
 - Node.js 22 with the committed npm lock
 - Docker for PostgreSQL integration and recovery checks
 - Go 1.24+ only when the owner prepares a handoff in the separate Guardian repository

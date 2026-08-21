@@ -4,6 +4,8 @@ set +x
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE="$ROOT"
 if [[ ! -f "$SOURCE/pyproject.toml" ]]; then
@@ -286,10 +288,7 @@ for command in awk basename chmod chown date find findmnt git id install jq mkte
   rm stat sync; do
   require_command "$command"
 done
-PYTHON_EXECUTABLE=python3.13
-if [[ "$DESTINATION_ROOT" != / ]]; then
-  PYTHON_EXECUTABLE=python3
-fi
+PYTHON_EXECUTABLE=python3
 require_command "$PYTHON_EXECUTABLE"
 
 [[ "$SOURCE" == /* && -d "$SOURCE/.git" && ! -L "$SOURCE" && ! -L "$SOURCE/.git" ]] ||

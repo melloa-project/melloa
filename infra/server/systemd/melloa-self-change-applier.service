@@ -21,7 +21,7 @@ TimeoutStopSec=30s
 KillMode=control-group
 UMask=0077
 Environment=HOME=/var/lib/melloa/applier-home
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=-/etc/melloa/release.env
 EnvironmentFile=/etc/melloa/self-change.env
 LoadCredential=applier-dsn:/etc/melloa/private/database-change-applier-dsn

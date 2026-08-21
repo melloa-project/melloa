@@ -41,9 +41,11 @@ incomplete restic snapshot created while a dump fails is removed before the fail
 
 Start from a fresh supported amd64 server with root access and an independently mounted backup
 volume. The bootstrap intentionally refuses other distributions or versions, unsupported
-architectures, containers outside its own disposable CI smoke test, conflicting distro Docker
-packages, and pre-existing commands it does not own. On a minimal image, install only the two tools
-needed to obtain the reviewed checkout, then run the checked-in bootstrap:
+architectures, and containers outside its own disposable CI smoke test. It does not take ownership
+of unrelated `/usr/local/bin` commands: compatible host tools are selected through
+`/opt/melloa/toolchain/bin`, while old or missing tools get a private Melloa fallback there. On a
+minimal image, install only the two tools needed to obtain the reviewed checkout, then run the
+checked-in bootstrap:
 
 ```bash
 sudo apt-get update
@@ -54,19 +56,25 @@ sudo infra/server/bootstrap-linux.sh --source "$PWD" --self-change-tools
 sudo infra/server/first-install.sh --source "$PWD"
 ```
 
-The reviewed versions and artifact hashes live in `toolchain.lock`. The bootstrap verifies Docker's
-repository signing-key fingerprint, installs Docker CE and Compose from Docker's Debian or Ubuntu
-repository selected by the host profile, installs checksum-pinned Node.js, uv, and Go artifacts, and
-installs managed Python 3.13 through the pinned uv tool. It starts and enables Docker, then runs the
-normal clean/current-main build preflight. With
-`--self-change-tools`, it also installs the integrity-pinned Codex CLI npm packages needed by the
-planner worker. Bootstrap does not configure secrets, initialize storage, or start Melloa. The guided
-`first-install.sh` step installs host assets, prompts for the owner-private values, generates the
-route JSON, pairs the Telegram bot, installs private configuration, initializes the encrypted backup
-repository when approved, activates Melloa, and runs a final owner-journey verifier. That verifier
-asks the owner to send one exact setup message in Telegram, then proves from Melloa's durable state
-that the message was accepted, answered, and delivered back through Telegram. Rerun the bootstrap's
-read-only host check with:
+`toolchain.lock` records both minimum support rules and the reviewed fallback artifacts. Current
+host requirements are Node.js `>=22.18.0`, npm `>=10.9.3`, Python `>=3.13.3` within Python 3,
+uv `>=0.12.0`, Go `>=1.27.0`, and Docker Compose `>=2.27.0`. Docker itself is accepted when its
+Compose plugin meets that minimum. Newer compatible host versions pass bootstrap and preflight; the
+reviewed artifacts are downloaded only when a required tool is missing or too old. Melloa verifies
+the checksum or registry integrity of every fallback artifact it downloads. It also reuses an
+existing official Docker apt source instead of adding a second conflicting `Signed-By` entry.
+
+There are two deliberate exact-version cases. The self-change Codex CLI is installed only under
+`/opt/melloa/toolchain/codex` at its reviewed, integrity-pinned version because its sandbox,
+approval, and ephemeral-execution options are part of the worker's security boundary. Runtime OCI
+images remain digest-pinned because they are Melloa release inputs, not host tools. Bootstrap does
+not configure secrets, initialize storage, or start Melloa. The guided `first-install.sh` step
+installs host assets, prompts for the owner-private values, generates the route JSON, pairs the
+Telegram bot, installs private configuration, initializes the encrypted backup repository when
+approved, activates Melloa, and runs a final owner-journey verifier. That verifier asks the owner to
+send one exact setup message in Telegram, then proves from Melloa's durable state that the message
+was accepted, answered, and delivered back through Telegram. Rerun the bootstrap's read-only host
+check with:
 
 ```bash
 sudo infra/server/bootstrap-linux.sh --source "$PWD" --check
@@ -86,8 +94,9 @@ real target still has to pass the live first-server evidence path before the REA
 changes. Pop!_OS support uses the Ubuntu 24.04 (`noble`) Docker repository and is covered by
 os-release profile tests plus the real-server evidence path.
 
-The pinned Codex CLI path uses a separate API key or an explicitly selected local provider. It does
-not claim that unattended service operation can rely on an interactive ChatGPT subscription login.
+The private, pinned Codex CLI path uses a separate API key or an explicitly selected local provider.
+It does not claim that unattended service operation can rely on an interactive ChatGPT subscription
+login.
 
 ## Guided first install inputs
 
@@ -232,10 +241,10 @@ are installed by the host-asset installer and verified before activation, but th
 needs to pass on the actual server after reboot.
 
 `install.sh` is the host-asset installer called by `first-install.sh`. It requires a clean current
-`main` checkout, the Node.js, uv, Python, and Go versions in `toolchain.lock`, Docker Compose
-2.27+, systemd 249+, and Bubblewrap. The installed preflight requires the pinned Codex CLI only
-when self-change workers are enabled, and then verifies the exact sandbox, approval, ephemeral,
-user-config, and local-provider controls used by the planner. The installer creates the dedicated
+`main` checkout, the minimum Node.js, npm, uv, Python 3, and Go versions in `toolchain.lock`, Docker
+Compose 2.27+, systemd 249+, and Bubblewrap. The installed preflight requires Melloa's private,
+exactly reviewed Codex CLI only when self-change workers are enabled, and then verifies the exact
+sandbox, approval, ephemeral, user-config, and local-provider controls used by the planner. The installer creates the dedicated
 `melloa-codex` identity, separate
 public planning and credential-bearing release clones, a fixed unprivileged `melloa-runtime`
 identity, immutable worker/verifier dependencies, and root-owned launchers and units. It

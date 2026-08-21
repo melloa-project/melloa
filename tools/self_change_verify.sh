@@ -6,6 +6,7 @@ umask 077
 readonly CHECKOUT="${1:-}"
 readonly PYTHON_ENV="${MELLOA_VERIFIER_PYTHON_ENV:-}"
 readonly NODE_MODULES="${MELLOA_VERIFIER_NODE_MODULES:-}"
+readonly TOOLCHAIN_DIR=/opt/melloa/toolchain
 
 fail() {
   echo "Self-change verification environment rejected" >&2
@@ -20,6 +21,7 @@ require_directory() {
 require_directory "$CHECKOUT"
 require_directory "$PYTHON_ENV"
 require_directory "$NODE_MODULES"
+require_directory "$TOOLCHAIN_DIR"
 [[ -f "$CHECKOUT/Makefile" && ! -L "$CHECKOUT/Makefile" ]] || fail
 [[ -d "$CHECKOUT/apps/web" && ! -L "$CHECKOUT/apps/web" ]] || fail
 command -v bwrap >/dev/null 2>&1 || fail
@@ -71,12 +73,13 @@ bwrap \
   --dir /opt \
   --dir /opt/melloa-verifier \
   --bind "$CHECKOUT" "$CHECKOUT" \
+  --ro-bind "$TOOLCHAIN_DIR" "$TOOLCHAIN_DIR" \
   --ro-bind "$PYTHON_ENV" "$SANDBOX_PYTHON_ENV" \
   --ro-bind "$PYTHON_ENV" "$VENV_TARGET" \
   --ro-bind "$NODE_MODULES" "$MODULES_TARGET" \
   --chdir "$CHECKOUT" \
   --setenv HOME /home/verifier \
-  --setenv PATH "$SANDBOX_PYTHON_ENV/bin:/usr/local/bin:/usr/bin:/bin" \
+  --setenv PATH "$SANDBOX_PYTHON_ENV/bin:/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
   --setenv PYTHONPATH "$CHECKOUT/src" \
   --setenv UV_CACHE_DIR /tmp/uv-cache \
   --setenv UV_NO_PROGRESS 1 \

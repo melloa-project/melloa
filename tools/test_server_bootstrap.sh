@@ -28,11 +28,15 @@ CURRENT_PHASE="validating bootstrap lock and script invariants"
 [[ "$MELLOA_SERVER_ARCHITECTURE" == amd64 ]]
 [[ "$MELLOA_DEBIAN_TEST_IMAGE" == debian:13-slim@sha256:* ]]
 [[ "$MELLOA_UBUNTU_TEST_IMAGE" == ubuntu:24.04@sha256:* ]]
+[[ "$MELLOA_DOCKER_COMPOSE_MIN_VERSION" == 2.27.0 ]]
+[[ "$MELLOA_PYTHON_MIN_VERSION" == 3.13.3 ]]
 [[ "$MELLOA_PYTHON_VERSION" =~ ^3\.13\.[0-9]+$ ]]
+[[ "$MELLOA_NODE_MIN_VERSION" == 22.18.0 ]]
 [[ "$MELLOA_NODE_SHA256" =~ ^[0-9a-f]{64}$ ]]
 [[ "$MELLOA_GO_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-[[ "$MELLOA_GO_MIN_VERSION" == 1.24 ]]
+[[ "$MELLOA_GO_MIN_VERSION" == "$MELLOA_GO_VERSION" ]]
 [[ "$MELLOA_GO_SHA256" =~ ^[0-9a-f]{64}$ ]]
+[[ "$MELLOA_UV_MIN_VERSION" == 0.12.0 ]]
 [[ "$MELLOA_UV_SHA256" =~ ^[0-9a-f]{64}$ ]]
 [[ "$MELLOA_CODEX_NPM_INTEGRITY" == sha512-* ]]
 [[ "$MELLOA_CODEX_LINUX_X64_NPM_INTEGRITY" == sha512-* ]]
@@ -46,6 +50,18 @@ grep --fixed-strings --quiet -- "supported hosts are" \
   "$BOOTSTRAP"
 grep --fixed-strings --quiet -- "UV_PYTHON_DOWNLOADS=manual" \
   "$BOOTSTRAP"
+grep --fixed-strings --quiet -- "MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain" \
+  "$BOOTSTRAP"
+grep --fixed-strings --quiet -- "melloa_version_at_least" \
+  "$BOOTSTRAP"
+grep --fixed-strings --quiet -- "find_supported_host_python" \
+  "$BOOTSTRAP"
+grep --fixed-strings --quiet -- "docker_apt_source_exists" \
+  "$BOOTSTRAP"
+grep --fixed-strings --quiet -- "Melloa's private Codex CLI" \
+  "$BOOTSTRAP"
+! grep --fixed-strings --quiet -- "/usr/local/bin/codex" "$BOOTSTRAP"
+! grep --fixed-strings --quiet -- "install_managed_link" "$BOOTSTRAP"
 grep --fixed-strings --quiet -- "go.dev/dl/\$GO_BASENAME.tar.gz" \
   "$BOOTSTRAP"
 grep --fixed-strings --quiet -- 'if [[ "$SELF_CHANGE_TOOLS" == true ]]; then' \

@@ -83,7 +83,10 @@ _PUBLIC_GIT_ENVIRONMENT: Final = {
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_TERMINAL_PROMPT": "0",
     "HOME": "/nonexistent",
-    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "PATH": (
+        "/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:"
+        "/usr/sbin:/usr/bin:/sbin:/bin"
+    ),
     "XDG_CONFIG_HOME": "/nonexistent",
 }
 
@@ -248,7 +251,12 @@ class CodexCliSourceChangePlanner:
         if self._local_provider is not None:
             command.extend(("--oss", "--local-provider", self._local_provider))
         command.append(prompt)
-        environment = {"PATH": "/usr/local/bin:/usr/bin:/bin"} | self._environment
+        environment = {
+            "PATH": (
+                "/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:"
+                "/usr/sbin:/usr/bin:/sbin:/bin"
+            )
+        } | self._environment
         try:
             completed = subprocess.run(  # noqa: S603
                 command,

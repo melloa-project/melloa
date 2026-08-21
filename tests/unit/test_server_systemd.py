@@ -179,6 +179,23 @@ def test_external_verifier_imports_the_candidate_without_syncing_dependencies() 
 
     assert '--setenv PYTHONPATH "$CHECKOUT/src"' in verifier
     assert "--setenv UV_NO_SYNC 1" in verifier
+    assert '--ro-bind "$TOOLCHAIN_DIR" "$TOOLCHAIN_DIR"' in verifier
+    assert "/opt/melloa/toolchain/bin" in verifier
+
+
+def test_server_runtime_uses_private_toolchain_paths() -> None:
+    bootstrap = (ROOT / "infra/server/bootstrap-debian.sh").read_text(encoding="utf-8")
+    preflight = (ROOT / "infra/server/preflight.sh").read_text(encoding="utf-8")
+    wrapper = (ROOT / "infra/server/codex-wrapper.sh").read_text(encoding="utf-8")
+
+    assert "MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain" in bootstrap
+    assert "MELLOA_TOOLCHAIN_DIR=/opt/melloa/toolchain" in preflight
+    assert "/usr/local/bin/codex" not in bootstrap
+    assert "/usr/local/bin/codex" not in preflight
+    assert "CODEX_EXECUTABLE=/opt/melloa/toolchain/codex/bin/codex" in wrapper
+    for path in sorted(SYSTEMD.glob("*.service")):
+        unit = path.read_text(encoding="utf-8")
+        assert "Environment=PATH=/opt/melloa/toolchain/bin:" in unit
 
 
 def test_server_installer_packages_only_tracked_worker_code_and_reconciles_checkouts() -> None:

@@ -71,7 +71,13 @@ class ExternalSandboxSelfChangeVerifier:
             completed = subprocess.run(  # noqa: S603
                 (str(self._executable), str(checkout)),
                 cwd=checkout,
-                env={"PATH": "/usr/local/bin:/usr/bin:/bin"} | self._environment,
+                env={
+                    "PATH": (
+                        "/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:"
+                        "/usr/sbin:/usr/bin:/sbin:/bin"
+                    )
+                }
+                | self._environment,
                 check=False,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -159,7 +165,12 @@ class ServerReleaseDeployment:
             or not os.access(script, os.X_OK)
         ):
             raise SelfChangeReleaseError("self_change.release_command_unavailable")
-        environment = {"PATH": "/usr/local/bin:/usr/bin:/bin"} | self._environment
+        environment = {
+            "PATH": (
+                "/opt/melloa/toolchain/bin:/usr/local/sbin:/usr/local/bin:"
+                "/usr/sbin:/usr/bin:/sbin:/bin"
+            )
+        } | self._environment
         command = (
             str(script),
             action[0],

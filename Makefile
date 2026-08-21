@@ -83,6 +83,7 @@ check-generated:
 		infra/server/self-change-enabled.sh \
 		infra/server/self-change-apply.sh \
 		infra/server/self-change-plan.sh \
+		infra/server/toolchain.sh \
 		infra/server/update.sh \
 		infra/server/verify-owner-journey.sh \
 		tools/server_release.sh \
@@ -98,6 +99,7 @@ check-generated:
 		tools/test_server_restore_drill.sh \
 		tools/test_server_update_rollback.sh \
 		tools/test_server_runtime.sh
+	bash tools/test_server_toolchain.sh
 	bash tools/test_server_configuration.sh
 	bash tools/test_server_first_install.sh
 	bash tools/test_server_installer.sh

@@ -4,6 +4,8 @@ set +x
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE="$ROOT"
 ORIGIN="https://github.com/melloa-project/melloa.git"
@@ -85,7 +87,7 @@ Hosted model routes:
 Private recovery:
   - Restic recovery password: 32-128 base64url-safe characters kept outside the server and backup
     disk. One generator:
-      python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
+      python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 
 Bounded self-change:
   - Enable self-change for the first server proof.
@@ -759,6 +761,7 @@ first_install_resume_command() {
 require_codex_self_change_tools() {
   local bootstrap_command
   local codex_exec_help
+  local codex_executable=/opt/melloa/toolchain/codex/bin/codex
   local codex_help
   local codex_version
   local option
@@ -771,15 +774,15 @@ require_codex_self_change_tools() {
     fail "bounded self-change workers require the reviewed toolchain lock; rerun $bootstrap_command before enabling them"
   # shellcheck disable=SC1090
   source "$toolchain_lock"
-  [[ -x /usr/local/bin/codex ]] ||
-    fail "bounded self-change workers require Codex CLI; rerun $bootstrap_command before enabling them"
-  codex_version="$(/usr/local/bin/codex --version | awk 'NR == 1 {print $2}')" ||
+  [[ -x "$codex_executable" ]] ||
+    fail "bounded self-change workers require Melloa's private Codex CLI; rerun $bootstrap_command before enabling them"
+  codex_version="$("$codex_executable" --version | awk 'NR == 1 {print $2}')" ||
     fail "bounded self-change workers require a working Codex CLI; rerun $bootstrap_command before enabling them"
   [[ "$codex_version" == "$MELLOA_CODEX_CLI_VERSION" ]] ||
     fail "bounded self-change workers require Codex CLI $MELLOA_CODEX_CLI_VERSION; rerun $bootstrap_command before enabling them"
-  codex_help="$(/usr/local/bin/codex --help 2>&1)" ||
+  codex_help="$("$codex_executable" --help 2>&1)" ||
     fail "bounded self-change workers require a working Codex CLI; rerun $bootstrap_command before enabling them"
-  codex_exec_help="$(/usr/local/bin/codex exec --help 2>&1)" ||
+  codex_exec_help="$("$codex_executable" exec --help 2>&1)" ||
     fail "bounded self-change workers require a working Codex CLI exec path; rerun $bootstrap_command before enabling them"
   for option in --sandbox --ask-for-approval --oss --local-provider; do
     grep --fixed-strings --quiet -- "$option" <<<"$codex_help" ||
@@ -1036,7 +1039,7 @@ cat >&2 <<'EOF'
 Backup recovery password:
   Enter a 32-128 character base64url-safe restic password that you keep outside this server and backup disk.
   If needed, generate one on a trusted machine with:
-    python3.13 -c 'import secrets; print(secrets.token_urlsafe(48))'
+    python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 EOF
 restic_password="$(
   prompt_secret MELLOA_SETUP_RESTIC_PASSWORD \

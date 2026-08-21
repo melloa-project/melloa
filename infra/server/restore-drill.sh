@@ -4,6 +4,8 @@ set +x
 
 umask 077
 
+export PATH=/opt/melloa/toolchain/bin:"${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+
 SOURCE=/srv/melloa/release-source
 ENV_FILE=/etc/melloa/server.env
 DRILL_SUBNET=172.30.39.0/28
