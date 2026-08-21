@@ -88,6 +88,12 @@ grep --fixed-strings --quiet "Default model IDs: capable gpt-5.6-terra; economy 
 grep --fixed-strings --quiet "Enable self-change for the first server proof." "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "does not require root, prompt for secrets" \
   <("$ROOT/infra/server/first-install.sh" --help 2>&1)
+grep --fixed-strings --quiet \
+  "/change propose Add a focused unit test for one existing owner-visible /change command message." \
+  "$ROOT/infra/server/first-install.sh"
+grep --fixed-strings --quiet \
+  "/change approve <change_id> <16-character proposal token>" \
+  "$ROOT/infra/server/first-install.sh"
 if grep --fixed-strings --quiet "Melloa first-owner setup will now collect private values." \
   "$CHECKLIST_LOG"; then
   echo "First-install input checklist started the installer" >&2

@@ -801,6 +801,12 @@ Next first-server proof steps:
   2. If self-change workers are enabled, prove one public-safe /change proposal, exact approval,
      commit, push, and deployed revision from Telegram. If they are disabled, this server is a
      conversation-only bring-up until self-change is enabled and exercised.
+     Suggested first proof:
+       /change propose Add a focused unit test for one existing owner-visible /change command message.
+       /change
+       /change diff <change_id>
+       /change approve <change_id> <16-character proposal token>
+       /change show <change_id>
   3. Reboot the server, then run: sudo /usr/local/libexec/melloa/verify-owner-journey
   4. Prove the actual backup path: sudo /usr/local/libexec/melloa/restore-drill
   5. Rerun active verification: sudo /usr/local/libexec/melloa/verify-owner-journey
