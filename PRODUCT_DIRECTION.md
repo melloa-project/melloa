@@ -66,6 +66,13 @@ These hypotheses are deliberately ordered by owner value and may change when evi
 Do not implement these as six horizontal subsystems. Each step must arrive as a coherent owner
 experience with a compelling before/after story.
 
+The intended proactive shape is goal-first and event-bounded: the owner sets a goal with Melli;
+deterministic connectors ingest agreed facts from sources such as calendar, email metadata,
+workouts, task completions, webhooks, or files; scheduled jobs aggregate state; model calls happen
+at judgment points; and external effects remain narrow, inspectable, and owner-authorized. This is
+not ambient autonomy. It should follow the first recoverable Telegram/self-change server proof, not
+replace it.
+
 ## Product evidence
 
 Automated tests remain important for deterministic behavior and hard boundaries. They do not prove

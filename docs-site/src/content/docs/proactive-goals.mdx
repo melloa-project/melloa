@@ -1,0 +1,57 @@
+---
+title: Proactive goal loops
+description: The next product layer after the first recoverable Telegram server path.
+---
+
+Proactive goal work is part of Melloa's intended direction. It is not part of the first install
+checklist because event hooks, external accounts, scheduled jobs, and datastore writes need the
+recoverable server spine first.
+
+The target is not a generic automation bot. The target is Melli helping the owner make progress on
+real goals by watching agreed signals, reflecting on them, and proposing useful next actions.
+
+## The loop
+
+1. The owner sets a goal with Melli in normal conversation.
+2. Deterministic connectors collect agreed facts: calendar events, email metadata, Strava or workout
+   exports, task completions, webhook payloads, files, or other owner-approved sources.
+3. Scheduled jobs aggregate state without calling a model for every event.
+4. A model runs at decision points: reflect, ask a question, propose a plan, draft a message, or
+   decide that silence is better.
+5. External effects stay bounded: owner approval, capability checks, cost limits, provenance, and
+   rollback or correction where possible.
+6. The outcome is written back as ordinary owner context so future conversations can use it.
+
+## Example shape
+
+A fitness or health goal should not start as "give the model my whole life and let it act."
+
+The safe shape is narrower:
+
+- a Strava connector or owner-approved workout import writes normalized activity facts;
+- a calendar connector writes relevant schedule facts;
+- a scheduled reflection job compares the last few days against the goal;
+- Melli messages the owner only when there is a useful question, pattern, or proposed change;
+- if a task app or dashboard is useful, self-change can propose it, owner approval can deploy it,
+  and deterministic code can update its datastore under a narrow capability.
+
+The same pattern applies to mail triage, todo follow-through, habit tracking, project progress, or
+personal admin. Ingestion and aggregation should be boring deterministic code. Model calls should
+be reserved for judgment, explanation, prioritization, and owner-facing proposals.
+
+## Why this waits for the first server proof
+
+Proactive loops multiply failure modes. They can spam the owner, leak private data, run up model
+cost, write bad external state, or keep acting after the owner has changed their mind.
+
+Before adding those loops, the base server must already prove:
+
+- exact-owner Telegram delivery;
+- hosted model routing with no silent cost or privacy fallback;
+- retained self-change diffs and exact approval;
+- commit, push, deploy, verification, rollback, and restore drill;
+- Guardian remaining independent;
+- private state and backups recoverable when Melloa is wrong.
+
+After that proof, Hermes-style cron, skills, provider switching, and messaging gateway patterns
+should be evaluated against one concrete goal loop instead of rebuilt blindly or dismissed.

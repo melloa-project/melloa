@@ -27,6 +27,7 @@ export default defineConfig({
             { label: "Deploy the server", slug: "deploy" },
             { label: "Runtime loop", slug: "runtime-loop" },
             { label: "Harness comparison", slug: "harnesses" },
+            { label: "Proactive goals", slug: "proactive-goals" },
             { label: "Self-change loop", slug: "self-change" },
             { label: "Operate it", slug: "operate" },
           ],

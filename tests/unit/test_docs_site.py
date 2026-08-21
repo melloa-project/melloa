@@ -23,6 +23,8 @@ def test_public_site_source_replaces_stale_preview_framing() -> None:
     assert "Melloa is not starting as a generic multi-agent harness" in homepage
     assert "Harness comparison" in homepage
     assert "Hermes is the most relevant reference for the later proactive layer" in homepage
+    assert "proactive goal loop" in homepage
+    assert "Goals become loops" in homepage
     assert "RuntimeLoop" in homepage
     assert "StatusStrip" in homepage
     assert "Self-change is core" in homepage
@@ -148,6 +150,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     harnesses = (DOCS_SITE / "src/content/docs/harnesses.mdx").read_text(
         encoding="utf-8"
     )
+    normalized_runtime_loop = " ".join(runtime_loop.split())
 
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
@@ -181,7 +184,7 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "Do not fork Hermes, OpenClaw, AgentTeams" in runtime_loop
     assert "AgentTeams/OpenClaw-style stacks" in runtime_loop
     assert "Hermes deserves special attention after this base loop" in runtime_loop
-    assert "event hooks and external datastore writes" in runtime_loop
+    assert "event hooks and external datastore writes" in normalized_runtime_loop
     assert "separate conversation adapter" in runtime_loop
     assert "no source checkout" in runtime_loop
     assert "do not fork OpenClaw, Hermes, AgentTeams, or GBrain" in harnesses
@@ -208,10 +211,31 @@ def test_public_site_uses_github_pages_safe_links() -> None:
     assert "edit/main/docs-site/" in config
     assert "link: ./deploy/" in homepage
     assert "link: ./self-change/" in homepage
+    assert "link: ./proactive-goals/" in homepage
     assert "(./deploy/)" in homepage
     assert "(./runtime-loop/)" in homepage
     assert "(./harnesses/)" in homepage
+    assert "(./proactive-goals/)" in homepage
     assert "(../self-change/)" in deploy
     assert "(../runtime-loop/)" in deploy
     assert "link: /deploy/" not in homepage
     assert "](/deploy/)" not in homepage
+
+
+def test_public_site_captures_proactive_goal_direction_without_expanding_install() -> None:
+    proactive = (DOCS_SITE / "src/content/docs/proactive-goals.mdx").read_text(
+        encoding="utf-8"
+    )
+    config = (DOCS_SITE / "astro.config.mjs").read_text(encoding="utf-8")
+    product_direction = (ROOT / "PRODUCT_DIRECTION.md").read_text(encoding="utf-8")
+
+    assert "Proactive goal work is part of Melloa's intended direction" in proactive
+    assert "Deterministic connectors collect agreed facts" in proactive
+    assert "calendar events, email metadata, Strava or workout" in proactive
+    assert "task completions, webhook payloads" in proactive
+    assert "Scheduled jobs aggregate state without calling a model for every event" in proactive
+    assert "owner approval, capability checks, cost limits, provenance" in proactive
+    assert "Hermes-style cron, skills, provider switching" in proactive
+    assert "Proactive goals" in config
+    assert "goal-first and event-bounded" in product_direction
+    assert "not ambient autonomy" in product_direction
