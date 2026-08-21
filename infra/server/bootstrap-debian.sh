@@ -12,6 +12,7 @@ SELF_CHANGE_TOOLS=false
 PRINT_HOST_PROFILE_OS_RELEASE=""
 DOWNLOAD_DIR=""
 CA_FILE=""
+BOOTSTRAP_PHASE="initialization"
 
 usage() {
   cat >&2 <<'EOF'
@@ -72,6 +73,14 @@ fail() {
   echo "Melloa server bootstrap failed: $1" >&2
   exit 1
 }
+
+report_unexpected_failure() {
+  local status=$?
+  printf 'Melloa server bootstrap failed during: %s\n' "$BOOTSTRAP_PHASE" >&2
+  printf '::error title=Melloa bootstrap failed::%s\n' "$BOOTSTRAP_PHASE" >&2
+  return "$status"
+}
+trap report_unexpected_failure ERR
 
 supported_hosts() {
   printf 'Debian 13 (trixie), Ubuntu 24.04 LTS (noble), or Pop!_OS 24.04 (noble)'
@@ -144,6 +153,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+BOOTSTRAP_PHASE="validating bootstrap arguments"
 [[ "$SOURCE" == /* && -d "$SOURCE" && ! -L "$SOURCE" ]] ||
   fail "source must be an absolute directory"
 [[ "$ORIGIN" == https://* && "$ORIGIN" != *'@'* && "$ORIGIN" != *'?'* && \
@@ -182,6 +192,7 @@ done
   fail "toolchain lock contains an invalid Go version"
 
 if [[ -n "$PRINT_HOST_PROFILE_OS_RELEASE" ]]; then
+  BOOTSTRAP_PHASE="resolving requested host profile"
   select_host_profile "$PRINT_HOST_PROFILE_OS_RELEASE"
   printf '%s\t%s\t%s\t%s\n' \
     "$HOST_PROFILE" "$HOST_LABEL" "$HOST_DOCKER_APT_OS" "$HOST_DOCKER_APT_CODENAME"
@@ -189,6 +200,7 @@ if [[ -n "$PRINT_HOST_PROFILE_OS_RELEASE" ]]; then
 fi
 
 ((EUID == 0)) || fail "bootstrap must run as root"
+BOOTSTRAP_PHASE="resolving current host profile"
 select_host_profile /etc/os-release
 readonly HOST_PROFILE HOST_LABEL HOST_DOCKER_APT_OS HOST_DOCKER_APT_CODENAME
 [[ "$(dpkg --print-architecture)" == "$MELLOA_SERVER_ARCHITECTURE" ]] ||
@@ -266,6 +278,7 @@ verify_toolchain() {
 }
 
 if [[ "$CHECK_ONLY" == true ]]; then
+  BOOTSTRAP_PHASE="verifying existing host toolchain"
   verify_toolchain
   systemctl is-active --quiet docker.service || fail "Docker is not active"
   systemctl is-enabled --quiet docker.service || fail "Docker is not enabled for reboot"
@@ -282,9 +295,11 @@ if [[ -n "$CA_FILE" ]]; then
   apt_options+=(-o "Acquire::https::CaInfo=$CA_FILE")
   npm_ca_option+=(--cafile="$CA_FILE")
 fi
+BOOTSTRAP_PHASE="installing base apt prerequisites"
 apt-get "${apt_options[@]}" update
 apt-get "${apt_options[@]}" install --yes --no-install-recommends ca-certificates curl gnupg
 
+BOOTSTRAP_PHASE="checking conflicting container packages"
 for conflicting_package in docker.io docker-compose docker-doc podman-docker containerd runc; do
   if [[ "$(dpkg-query --show --showformat='${db:Status-Abbrev}' \
     "$conflicting_package" 2>/dev/null || true)" == ii* ]]; then
@@ -294,6 +309,7 @@ done
 
 DOWNLOAD_DIR="$(mktemp -d /var/tmp/melloa-bootstrap.XXXXXX)"
 readonly DOCKER_KEY="$DOWNLOAD_DIR/docker.asc"
+BOOTSTRAP_PHASE="fetching Docker repository key"
 curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
   --output "$DOCKER_KEY" "https://download.docker.com/linux/$HOST_DOCKER_APT_OS/gpg"
 install -d -m 0700 "$DOWNLOAD_DIR/gnupg"
@@ -310,6 +326,7 @@ printf '%s\n' \
   >"$DOWNLOAD_DIR/melloa-docker.list"
 install -m 0644 "$DOWNLOAD_DIR/melloa-docker.list" /etc/apt/sources.list.d/melloa-docker.list
 
+BOOTSTRAP_PHASE="installing Docker and host packages"
 apt-get "${apt_options[@]}" update
 apt-get "${apt_options[@]}" install --yes --no-install-recommends \
   bash bubblewrap coreutils docker-buildx-plugin docker-ce docker-ce-cli \
@@ -320,6 +337,7 @@ readonly TOOLCHAIN_DIR=/opt/melloa/toolchain
 readonly NODE_BASENAME="node-v$MELLOA_NODE_VERSION-linux-x64"
 readonly NODE_DIR="$TOOLCHAIN_DIR/$NODE_BASENAME"
 install -d -m 0755 "$TOOLCHAIN_DIR"
+BOOTSTRAP_PHASE="installing managed Node.js"
 if [[ -e "$NODE_DIR" || -L "$NODE_DIR" ]]; then
   [[ -d "$NODE_DIR" && ! -L "$NODE_DIR" && -x "$NODE_DIR/bin/node" ]] ||
     fail "existing managed Node.js directory is unsafe"
@@ -356,12 +374,14 @@ done
 
 if [[ -e /usr/local/bin/uv || -L /usr/local/bin/uv || \
   -e /usr/local/bin/uvx || -L /usr/local/bin/uvx ]]; then
+  BOOTSTRAP_PHASE="verifying managed uv"
   [[ -f /usr/local/bin/uv && ! -L /usr/local/bin/uv && \
     -f /usr/local/bin/uvx && ! -L /usr/local/bin/uvx && \
     "$(/usr/local/bin/uv --version | awk 'NR == 1 {print $2}')" == \
       "$MELLOA_UV_VERSION" ]] ||
     fail "existing uv installation is not the reviewed Melloa tool"
 else
+  BOOTSTRAP_PHASE="installing managed uv"
   readonly UV_BASENAME=uv-x86_64-unknown-linux-gnu
   readonly UV_ARCHIVE="$DOWNLOAD_DIR/$UV_BASENAME.tar.gz"
   curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
@@ -378,6 +398,7 @@ fi
 readonly PYTHON_INSTALL_DIR="$TOOLCHAIN_DIR/python"
 readonly PYTHON_DIR="$PYTHON_INSTALL_DIR/cpython-3.13-linux-x86_64-gnu"
 install -d -m 0755 "$PYTHON_INSTALL_DIR"
+BOOTSTRAP_PHASE="installing managed Python"
 if [[ -e "$PYTHON_DIR" || -L "$PYTHON_DIR" ]]; then
   [[ -x "$PYTHON_DIR/bin/python3.13" ]] || fail "existing managed Python is unsafe"
   [[ "$("$PYTHON_DIR/bin/python3.13" -c 'import platform; print(platform.python_version())')" == \
@@ -392,6 +413,7 @@ install_managed_link "$PYTHON_DIR/bin/python3.13" /usr/local/bin/python3.13
 
 readonly GO_BASENAME="go$MELLOA_GO_VERSION.linux-amd64"
 readonly GO_DIR="$TOOLCHAIN_DIR/$GO_BASENAME"
+BOOTSTRAP_PHASE="installing managed Go"
 if [[ -e "$GO_DIR" || -L "$GO_DIR" ]]; then
   [[ -d "$GO_DIR" && ! -L "$GO_DIR" && -x "$GO_DIR/bin/go" && -x "$GO_DIR/bin/gofmt" ]] ||
     fail "existing managed Go directory is unsafe"
@@ -415,6 +437,7 @@ install_managed_link "$GO_DIR/bin/go" /usr/local/bin/go
 install_managed_link "$GO_DIR/bin/gofmt" /usr/local/bin/gofmt
 
 if [[ "$SELF_CHANGE_TOOLS" == true ]]; then
+  BOOTSTRAP_PHASE="installing Codex CLI"
   if [[ -e /usr/local/bin/codex || -L /usr/local/bin/codex ]]; then
     [[ -x /usr/local/bin/codex && \
       "$(/usr/local/bin/codex --version)" == "codex-cli $MELLOA_CODEX_CLI_VERSION" ]] ||
@@ -448,6 +471,7 @@ if [[ "$SELF_CHANGE_TOOLS" == true ]]; then
   fi
 fi
 
+BOOTSTRAP_PHASE="verifying installed host toolchain"
 verify_toolchain
 
 if [[ "$CONTAINER_SMOKE" == true ]]; then
@@ -459,6 +483,7 @@ systemctl enable --now containerd.service docker.service >/dev/null
 systemctl is-active --quiet docker.service || fail "Docker did not become active"
 systemctl is-enabled --quiet docker.service || fail "Docker is not enabled for reboot"
 docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable after installation"
+BOOTSTRAP_PHASE="running server preflight"
 "$SOURCE/infra/server/preflight.sh" --source "$SOURCE" --origin "$ORIGIN"
 
 echo "Melloa server prerequisites are installed and verified on $HOST_LABEL."
