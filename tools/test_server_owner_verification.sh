@@ -136,6 +136,9 @@ if [[ "$1" == compose ]]; then
     exit 0
   fi
   if [[ " $* " == *" exec "* && " $* " == *" psql "* ]]; then
+    if [[ "${MELLOA_VERIFY_NO_CONVERSATION:-false}" == true ]]; then
+      exit 0
+    fi
     count=0
     if [[ -f "$MELLOA_VERIFY_QUERY_COUNT" ]]; then
       count="$(<"$MELLOA_VERIFY_QUERY_COUNT")"
@@ -189,6 +192,32 @@ set -e
 grep --fixed-strings --quiet \
   "backup repository must be an explicit mount point" \
   "$WORKDIR/missing-mount-output.log"
+[[ ! -f "$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json" ]]
+
+set +e
+PATH="$FAKEBIN:$PATH" \
+MELLOA_VERIFY_BACKUP_REPOSITORY="$BACKUP_REPOSITORY" \
+MELLOA_VERIFY_FAKE_LOG="$LOG" \
+MELLOA_VERIFY_NO_CONVERSATION=true \
+MELLOA_VERIFY_QUERY_COUNT="$QUERY_COUNT" \
+MELLOA_VERIFY_ROOT="$TARGET" \
+  "$ROOT/infra/server/verify-owner-journey.sh" \
+    --source "$ROOT" \
+    --root "$TARGET" \
+    --phrase "$PHRASE" \
+    --timeout 1 \
+    --poll-seconds 1 \
+    >"$WORKDIR/no-conversation-output.log" 2>&1
+status=$?
+set -e
+[[ "$status" == 1 ]]
+grep --fixed-strings --quiet \
+  "No matching Telegram conversation was recorded." \
+  "$WORKDIR/no-conversation-output.log"
+grep --fixed-strings --quiet "$PHRASE" "$WORKDIR/no-conversation-output.log"
+grep --fixed-strings --quiet \
+  "logs --tail=120 melloa" \
+  "$WORKDIR/no-conversation-output.log"
 [[ ! -f "$TARGET/var/lib/melloa/runtime-state/owner-verification-status.json" ]]
 
 PATH="$FAKEBIN:$PATH" \

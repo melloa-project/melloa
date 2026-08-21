@@ -250,7 +250,8 @@ diagnose_timeout() {
     cat >&2 <<EOF
 No matching Telegram conversation was recorded.
 Recovery:
-  - confirm you sent the exact setup message to the dedicated bot's private chat;
+  - send this exact message to the dedicated bot's private chat:
+      $PHRASE
   - confirm the bot has no webhook and no other long poller;
   - run: sudo docker compose --project-directory "$SOURCE" --env-file "$ENV_FILE" --file "$SOURCE/compose.server.yaml" logs --tail=120 melloa
   - then rerun: sudo /usr/local/libexec/melloa/verify-owner-journey
@@ -267,9 +268,12 @@ Current delivery state:
   notice=${notice:-none}
   last_error=${error:-none}
 Recovery:
+  - if you need to retry, send this exact message to the dedicated bot's private chat:
+      $PHRASE
   - send /status in Telegram and check the model and backup lines;
   - if the model is unavailable, fix the model endpoint/token and rerun activation;
-  - if delivery failed, inspect the melloa container logs and rerun this verifier.
+  - if delivery failed, run: sudo docker compose --project-directory "$SOURCE" --env-file "$ENV_FILE" --file "$SOURCE/compose.server.yaml" logs --tail=120 melloa
+  - then rerun: sudo /usr/local/libexec/melloa/verify-owner-journey
 EOF
 }
 
