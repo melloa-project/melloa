@@ -5,16 +5,23 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly BOOTSTRAP="$ROOT/infra/server/bootstrap-debian.sh"
 readonly BOOTSTRAP_PUBLIC="$ROOT/infra/server/bootstrap-linux.sh"
 readonly WORKDIR="$(mktemp -d /tmp/melloa-bootstrap-test.XXXXXX)"
+CURRENT_PHASE="initial bootstrap smoke setup"
 # shellcheck disable=SC1091
 source "$ROOT/infra/server/toolchain.lock"
 
 cleanup() {
+  local status=$?
+  if [[ "$status" != 0 ]]; then
+    printf '::error title=Server bootstrap smoke failed::%s\n' "$CURRENT_PHASE" >&2
+  fi
   if [[ "$WORKDIR" == /tmp/melloa-bootstrap-test.* && -d "$WORKDIR" ]]; then
     rm -rf -- "$WORKDIR"
   fi
+  exit "$status"
 }
 trap cleanup EXIT HUP INT TERM
 
+CURRENT_PHASE="validating bootstrap lock and script invariants"
 [[ "$MELLOA_SUPPORTED_HOSTS" == *debian-13-trixie* ]]
 [[ "$MELLOA_SUPPORTED_HOSTS" == *ubuntu-24.04-noble* ]]
 [[ "$MELLOA_SUPPORTED_HOSTS" == *pop-24.04-noble* ]]
@@ -76,6 +83,7 @@ VERSION_CODENAME=noble
 UBUNTU_CODENAME=noble
 EOF
 
+CURRENT_PHASE="resolving supported host profiles from os-release fixtures"
 [[ "$("$BOOTSTRAP" --print-host-profile "$WORKDIR/debian.os-release")" == \
   $'debian-13-trixie\tDebian 13 (trixie)\tdebian\ttrixie' ]]
 [[ "$("$BOOTSTRAP" --print-host-profile "$WORKDIR/debian-os-release-link")" == \
@@ -109,6 +117,7 @@ fi
 pull_image() {
   local image="$1"
   local image_available=false
+  CURRENT_PHASE="pulling bootstrap smoke image $image"
   if docker image inspect "$image" >/dev/null 2>&1; then
     image_available=true
   else
@@ -130,6 +139,7 @@ pull_image() {
 run_container_smoke() {
   local image="$1"
   pull_image "$image"
+  CURRENT_PHASE="running bootstrap container smoke for $image"
   docker run --rm --platform linux/amd64 \
     "${proxy_environment[@]}" \
     --volume "$host_ca:/run/melloa-bootstrap-ca.pem:ro" \
