@@ -106,8 +106,10 @@ disk. Keep the restic password somewhere the server and backup repository cannot
 
 Choose the mount path before setup. The guided path defaults to
 `/mnt/melloa-off-device-backup`, but any plain absolute path is acceptable if it is an explicit
-mount on storage independent from `/`. The exact filesystem/device setup is host-specific; after
-mounting it, verify the property Melloa will enforce:
+mount on storage independent from `/`. Melloa will not format disks for you, and setup will not
+accept a plain directory on the server's root disk as a backup repository. The exact
+filesystem/device setup is host-specific; after mounting it, verify the property Melloa will
+enforce:
 
 ```bash
 sudo mkdir -p /mnt/melloa-off-device-backup
@@ -118,6 +120,17 @@ test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='
 If either check fails, fix the mount before running first install. Do not continue by creating an
 ordinary directory on the server disk; Melloa will refuse it because that would make a disk loss take
 both the live data and the backup repository.
+
+If `findmnt` prints nothing, inspect the already prepared disks and mount one deliberately:
+
+```bash
+lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS
+```
+
+For a disk or USB volume that is already formatted for this purpose, prefer a durable `/etc/fstab`
+mount by UUID, then run `sudo mount /mnt/melloa-off-device-backup` and repeat the checks above. For
+a NAS share, create the equivalent NFS or CIFS mount first, then repeat the same checks. Do not run
+`mkfs` from this guide; formatting is destructive and should be a separate owner decision.
 
 ## Values to have ready
 

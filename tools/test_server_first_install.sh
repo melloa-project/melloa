@@ -85,6 +85,15 @@ grep --fixed-strings --quiet \
 grep --fixed-strings --quiet \
   "Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup." \
   "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "findmnt --mountpoint /mnt/melloa-off-device-backup" \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "If findmnt prints nothing, configure and mount an already prepared disk, USB volume, or NAS" \
+  "$CHECKLIST_LOG"
+grep --fixed-strings --quiet \
+  "Do not use a plain directory on the server root disk, and do not format a disk" \
+  "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "@BotFather" "$CHECKLIST_LOG"
 grep --fixed-strings --quiet "Default model IDs: capable gpt-5.6-terra; economy gpt-5.6-luna." \
   "$CHECKLIST_LOG"

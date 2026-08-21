@@ -26,7 +26,10 @@ cd melloa
 ## 2. Mount backup storage
 
 Attach storage that is independent from the server root disk. The guided path defaults to
-`/mnt/melloa-off-device-backup`.
+`/mnt/melloa-off-device-backup`. Melloa will not format disks for you, and the setup path will not
+accept a plain directory on the server's root disk as a backup repository.
+
+If the storage is already mounted, these checks should pass:
 
 ```bash
 sudo mkdir -p /mnt/melloa-off-device-backup
@@ -36,6 +39,17 @@ test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='
 
 Both checks should succeed. If the second command fails, the backup path is just a directory on the
 server disk; mount real off-device storage before continuing.
+
+If `findmnt` prints nothing, inspect the available prepared disks and mount one deliberately:
+
+```bash
+lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS
+```
+
+For a disk or USB volume that is already formatted for this purpose, prefer a durable `/etc/fstab`
+mount by UUID, then run `sudo mount /mnt/melloa-off-device-backup` and repeat the checks above. For
+a NAS share, create the equivalent NFS or CIFS mount first, then repeat the same checks. Do not run
+`mkfs` from this guide; formatting is destructive and should be a separate owner decision.
 
 ## 3. Bootstrap host prerequisites
 

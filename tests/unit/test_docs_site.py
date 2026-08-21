@@ -105,6 +105,9 @@ def test_repository_deployment_guide_is_actionable_not_warning_first() -> None:
     assert "gpt-5.6-luna" in guide
     assert "separate reviewed hardening pass" in normalized_guide
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in opening
+    assert "Melloa will not format disks for you" in guide
+    assert "lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS" in guide
+    assert "Do not run\n`mkfs` from this guide" in guide
     assert "infra/server/first-install.sh --print-input-checklist" in guide
     assert "Self-change proof" in guide
     assert "Read the `next_steps` section" in guide
@@ -167,6 +170,9 @@ def test_public_site_has_actionable_deployment_and_self_change_pages() -> None:
     assert "sudo apt-get install --yes --no-install-recommends ca-certificates git" in deploy
     assert "Debian 13 (`trixie`) amd64 host booted with systemd" in deploy
     assert "findmnt --mountpoint /mnt/melloa-off-device-backup" in deploy
+    assert "Melloa will not format disks for you" in deploy
+    assert "lsblk -o NAME,FSTYPE,UUID,SIZE,MOUNTPOINTS" in deploy
+    assert "Do not run\n`mkfs` from this guide" in deploy
     assert 'sudo infra/server/bootstrap-debian.sh --source "$PWD" --self-change-tools' in deploy
     assert "git clone https://github.com/melloa-project/melloa-guardian.git" in deploy
     assert "make preview-state" in deploy

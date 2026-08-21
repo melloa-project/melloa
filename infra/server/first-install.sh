@@ -54,6 +54,13 @@ Supported host:
 
 Public paths:
   - Backup repository: a mounted off-device directory, normally /mnt/melloa-off-device-backup.
+    Verify it before setup:
+      sudo mkdir -p /mnt/melloa-off-device-backup
+      findmnt --mountpoint /mnt/melloa-off-device-backup
+      test "$(stat --format='%d' /mnt/melloa-off-device-backup)" != "$(stat --format='%d' /)"
+    If findmnt prints nothing, configure and mount an already prepared disk, USB volume, or NAS
+    share first. Do not use a plain directory on the server root disk, and do not format a disk
+    unless you have deliberately chosen to erase it.
   - Guardian handoff: public status.json and public.pem from:
       git clone https://github.com/melloa-project/melloa-guardian.git
       cd melloa-guardian && make preview-state
